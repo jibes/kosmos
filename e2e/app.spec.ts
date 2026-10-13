@@ -508,8 +508,14 @@ test.describe('map', () => {
 
     await locate.click();
     await expect(locate).toHaveAttribute('data-follow', 'position');
-    await face(0);
-    await expect(page.locator('.me.facing')).toHaveCount(1);
+    // The compass starts listening after an async permission step; a phone sends readings
+    // continuously, so keep sending until the first one lands.
+    await expect
+      .poll(async () => {
+        await face(0);
+        return page.locator('.me.facing').count();
+      })
+      .toBe(1);
     await idle(page);
     // Fixes arriving during the fly-in once cut it short at globe zoom.
     expect(await page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThanOrEqual(14.9);
