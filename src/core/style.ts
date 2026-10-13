@@ -35,6 +35,8 @@ export const LABEL_LAYERS = [
 ] as const;
 
 /** GeoJSON source the app fills with routes; features carry `alt: true` for alternatives. */
+/** The OpenMapTiles vector source. */
+export const MAP_SOURCE = 'omt';
 export const ROUTE_SOURCE = 'route';
 export const ROUTE_ALT_LAYER = 'route-alt';
 
@@ -137,7 +139,7 @@ function base(p: Palette): LayerSpecification[] {
     {
       id: 'landcover',
       type: 'fill',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'landcover',
       filter: ['match', cls, ['wood', 'grass', 'ice', 'sand', 'wetland'], true, false],
       paint: {
@@ -151,7 +153,7 @@ function base(p: Palette): LayerSpecification[] {
     {
       id: 'landuse',
       type: 'fill',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'landuse',
       paint: {
         'fill-color': byClass(
@@ -182,14 +184,14 @@ function base(p: Palette): LayerSpecification[] {
     {
       id: 'park',
       type: 'fill',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'park',
       paint: { 'fill-color': p.park, 'fill-opacity': lerp(6, 0.25, 12, 0.7) },
     },
     {
       id: 'aeroway',
       type: 'fill',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'aeroway',
       minzoom: 11,
       filter: ['==', ['geometry-type'], 'Polygon'],
@@ -198,7 +200,7 @@ function base(p: Palette): LayerSpecification[] {
     {
       id: 'runway',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'aeroway',
       minzoom: 11,
       filter: ['all', isLine, ['match', cls, ['runway', 'taxiway'], true, false]],
@@ -218,14 +220,14 @@ function base(p: Palette): LayerSpecification[] {
     {
       id: 'water',
       type: 'fill',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'water',
       paint: { 'fill-color': p.water },
     },
     {
       id: 'waterway',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'waterway',
       minzoom: 8,
       filter: notTunnel,
@@ -260,7 +262,7 @@ function roads(p: Palette): LayerSpecification[] {
     {
       id: 'path',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'transportation',
       minzoom: 14,
       filter: ['all', isLine, ['match', cls, ['path', 'track'], true, false]],
@@ -273,7 +275,7 @@ function roads(p: Palette): LayerSpecification[] {
     {
       id: 'rail',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'transportation',
       minzoom: 10,
       filter: ['all', isLine, notTunnel, ['match', cls, ['rail', 'transit'], true, false]],
@@ -282,7 +284,7 @@ function roads(p: Palette): LayerSpecification[] {
     {
       id: 'ferry',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'transportation',
       minzoom: 9,
       filter: ['all', isLine, ['==', cls, 'ferry']],
@@ -291,7 +293,7 @@ function roads(p: Palette): LayerSpecification[] {
     {
       id: 'road-casing',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'transportation',
       minzoom: 10,
       filter: roadFilter,
@@ -305,7 +307,7 @@ function roads(p: Palette): LayerSpecification[] {
     {
       id: 'road',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'transportation',
       filter: roadFilter,
       layout: { 'line-cap': 'round', 'line-join': 'round', 'line-sort-key': sortKey },
@@ -318,7 +320,7 @@ function roads(p: Palette): LayerSpecification[] {
     {
       id: 'building',
       type: 'fill-extrusion',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'building',
       minzoom: 14,
       paint: {
@@ -340,7 +342,7 @@ function roads(p: Palette): LayerSpecification[] {
     {
       id: 'boundary-state',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'boundary',
       minzoom: 3,
       filter: ['all', ['==', ['get', 'admin_level'], 4], ['!=', ['get', 'maritime'], 1]],
@@ -354,7 +356,7 @@ function roads(p: Palette): LayerSpecification[] {
     {
       id: 'boundary-country',
       type: 'line',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'boundary',
       filter: ['all', ['==', ['get', 'admin_level'], 2], ['!=', ['get', 'maritime'], 1]],
       layout: { 'line-join': 'round', 'line-cap': 'round' },
@@ -425,7 +427,7 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
   ): LayerSpecification => ({
     id,
     type: 'symbol',
-    source: 'omt',
+    source: MAP_SOURCE,
     'source-layer': 'place',
     minzoom,
     maxzoom,
@@ -454,7 +456,7 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
     {
       id: 'label-water-line',
       type: 'symbol',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'waterway',
       minzoom: 12,
       filter: ['all', hasName, isLine],
@@ -471,7 +473,7 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
     {
       id: 'label-road',
       type: 'symbol',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'transportation_name',
       minzoom: 13,
       filter: ['all', hasName, isLine],
@@ -489,7 +491,7 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
     {
       id: 'label-housenumber',
       type: 'symbol',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'housenumber',
       minzoom: 17.5,
       layout: {
@@ -502,7 +504,7 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
     {
       id: 'label-poi',
       type: 'symbol',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'poi',
       minzoom: 15,
       filter: ['all', hasName, isPoint],
@@ -519,7 +521,7 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
     {
       id: 'label-peak',
       type: 'symbol',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'mountain_peak',
       minzoom: 11,
       filter: hasName,
@@ -535,7 +537,7 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
     {
       id: 'label-water',
       type: 'symbol',
-      source: 'omt',
+      source: MAP_SOURCE,
       'source-layer': 'water_name',
       filter: ['all', hasName, isPoint],
       layout: {
@@ -593,7 +595,7 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
     version: 8,
     name: `kOSMos ${theme}`,
     sources: {
-      omt: {
+      [MAP_SOURCE]: {
         type: 'vector',
         url: TILES_URL,
         attribution:

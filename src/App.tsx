@@ -22,6 +22,7 @@ import { useCompass } from './ui/useCompass';
 import { useMap } from './ui/useMap';
 import { useNav } from './ui/useNav';
 import { useRoute, type Trip } from './ui/useRoute';
+import { useNavTheme } from './ui/useNavTheme';
 import { useTheme } from './ui/useTheme';
 import { systemVoice } from './ui/voice';
 import { keepAwake } from './ui/wakeLock';
@@ -74,7 +75,13 @@ async function fetchPlaces(url: string): Promise<Place[]> {
 }
 
 export function App() {
-  const theme = useTheme();
+  const systemTheme = useTheme();
+  const [navigating, setNavigating] = useState(false);
+  const { dark: navDark, update: updateNavTheme } = useNavTheme(navigating);
+  const theme = navDark ? 'dark' : systemTheme;
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useMap(mapEl, theme, LABEL_LANG);
   const { fix, status, start, subscribe, background } = useLocation();
@@ -92,7 +99,6 @@ export function App() {
   useEffect(() => {
     pickingRef.current = picking;
   }, [picking]);
-  const [navigating, setNavigating] = useState(false);
   const [navFollow, setNavFollow] = useState(true);
   const [muted, setMuted] = useState(storedMuted);
   const [rerouteFrom, setRerouteFrom] = useState<Route | null>(null);
@@ -297,7 +303,9 @@ export function App() {
       flyOnFix.current = false;
       map.flyTo({ center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: 1800 });
     } else if (followRef.current === 'position') {
-      map.easeTo({ center: [fix.lng, fix.lat], duration: 800 });
+      // Never cut short the fly-in after tapping locate: easing only the centre would stop it
+      // at globe zoom. The next fix catches up.
+      if (!map.isMoving()) map.easeTo({ center: [fix.lng, fix.lat], duration: 800 });
     } else if (followRef.current === 'compass') {
       // The compass turns the map every frame; an ease here would fight it, so the centre jumps.
       if (!map.isMoving()) map.jumpTo({ center: [fix.lng, fix.lat] });
@@ -427,9 +435,10 @@ export function App() {
       lastNavSpeed.current = nav.speed;
       me.current?.heading(s ? travelHeading(s.bearing, compass.current(), nav.speed) : null);
       lastSnap.current = s;
+      if (s && map) updateNavTheme(map, s, nav.time);
       if (navFollowRef.current) followCamera(nav, 1000);
     },
-    [followCamera, compass],
+    [followCamera, compass, map, updateNavTheme],
   );
   const reroute = useCallback(() => {
     setRerouteFrom(route.routes[chosen] ?? null);

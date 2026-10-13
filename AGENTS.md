@@ -10,7 +10,7 @@ List deviations from it here, each with a reason.
 
 ## Product rules (MECE)
 
-Five jobs, one control each: **view** (the map), **find** (search), **locate** (location button), **inspect** (tap a label / long-press → place card with share + route; the route card is part of inspect), **go** (Start on the route card → turn-by-turn). A new feature must fit one of them or argue for a sixth. No settings screen: theme follows the system, language follows the browser.
+Five jobs, one control each: **view** (the map), **find** (search), **locate** (location button), **inspect** (tap a label / long-press → place card with share + route; the route card is part of inspect), **go** (Start on the route card → turn-by-turn). A new feature must fit one of them or argue for a sixth. No settings screen: theme follows the system (navigation only adds dark after sunset and in tunnels), language follows the browser.
 
 ## Architecture
 
@@ -19,6 +19,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 - Map labels use self-hosted Inter through the style's `font-faces`, registered under the glyph server's font names (`FONT` in `core/style.ts`) so other scripts fall back to the same weight.
 - MapLibre's worker is bundled with `?url` and set via `setWorkerUrl` (`ui/useMap.ts`); without it the worker 404s after bundling.
 - Compass: `core/compass.ts` (pure: heading from orientation events, circular smoothing, course vs compass by speed) and `ui/useCompass.ts` (streams headings to subscribers, not React state). The location button cycles off → follow → compass (`Follow` in `ui/Controls.tsx`).
+- Navigation theme: `core/daylight.ts` (pure: sun elevation, tunnel match against `brunnel=tunnel` lines) and `ui/useNavTheme.ts`, which reads tunnels from the tiles already loaded (Valhalla's native response has no tunnel flag). The override sets `data-theme` on `<html>`; `styles.css` repeats the dark tokens under it.
 - Guidance is `core/nav.ts`: pure, fed fixes and time, covered by replay tests. The UI only subscribes it to location (`useLocation().subscribe`) and renders `NavState`.
 - Keep each file under 800 lines; split before adding to it.
 

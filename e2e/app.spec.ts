@@ -259,6 +259,44 @@ test.describe('map', () => {
     await expect(page.locator('.card.route')).toBeVisible();
   });
 
+  test('goes dark in a tunnel while navigating', async ({ page, context }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const to = SEARCH_HIT;
+    const go = (p: { lng: number; lat: number }) =>
+      context.setGeolocation({ latitude: p.lat, longitude: p.lng, accuracy: 5 });
+    const west = (x: number) => go({ lng: CENTER.lng + x / 67800, lat: to.lat });
+    const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+    // Midday in Berlin, whenever the test runs; the clock keeps ticking from there.
+    await page.evaluate(() => {
+      const noon = new Date().setUTCHours(11, 0, 0, 0);
+      const offset = noon - Date.now();
+      const now = Date.now.bind(Date);
+      Date.now = () => now() + offset;
+    });
+    await context.grantPermissions(['geolocation']);
+    await go(from);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await page.getByRole('button', { name: 'Start' }).click();
+    for (const f of [0.5, 1]) {
+      await go({ lng: from.lng, lat: from.lat + (to.lat - from.lat) * f });
+      await page.waitForTimeout(250);
+    }
+    await west(500);
+    await expect.poll(theme).toBe('light');
+    await west(150);
+    await expect.poll(theme).toBe('dark');
+    expect(await page.evaluate(() => window.kosmos!.getStyle().name)).toBe('kOSMos dark');
+    await west(-450);
+    await expect.poll(theme, { timeout: 8000 }).toBe('light');
+    await page.getByRole('button', { name: 'End' }).click();
+    await expect.poll(theme).toBe('light');
+  });
+
   test('Enter jumps to the first result, even before results load', async ({ page }) => {
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');
@@ -334,6 +372,12 @@ test.describe('map', () => {
     await face(0);
     await expect(page.locator('.me.facing')).toHaveCount(1);
     await idle(page);
+    // Fixes arriving during the fly-in once cut it short at globe zoom.
+    expect(await page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThanOrEqual(14.9);
+    // The ring grows into its size with a transition.
+    await expect
+      .poll(() => page.locator('.me-ring').evaluate((e) => e.getBoundingClientRect().width))
+      .toBeGreaterThan(40);
 
     // The dot sits on the location and the beam starts at the dot, however large the
     // accuracy ring (a grid layout once pushed the dot off by the ring's radius).

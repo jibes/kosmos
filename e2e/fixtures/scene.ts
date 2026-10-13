@@ -307,6 +307,8 @@ function city(): Layers {
   road([m(-200, 600), m(-200, 900), m(-400, 900)], 'service');
   road([m(400, 800), m(800, 1100), m(1200, 900)], 'path');
   road([m(-2500, 120), m(2500, 160)], 'rail', undefined, { brunnel: 'bridge' });
+  // Under the navigation test's last leg, which runs west along y = -330.
+  road([m(300, -330), m(-300, -330)], 'primary', undefined, { brunnel: 'tunnel' });
 
   for (let bx = -2400; bx < 2400; bx += 220) {
     for (let by = -2400; by < 2400; by += 180) {
