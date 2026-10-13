@@ -55,7 +55,7 @@ Android: `npm run android:sync`, then open `android/` in Android Studio or run `
 ## Release
 
 - **Web:** every push to `main` deploys to GitHub Pages.
-- **Android:** bump `version` in `package.json` and push to `main`. The Android workflow builds, signs, checks the signer against the fingerprint above and publishes `v<version>` with the APK. versionCode = major·10⁷ + minor·10⁵ + patch·10³.
+- **Android:** bump `version` in `package.json` and push to `main`. The Android workflow builds, signs, smoke-tests the APK on an emulator, checks the signer against the fingerprint above and publishes `v<version>` with the APK. versionCode = major·10⁷ + minor·10⁵ + patch·10³.
 - Signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them CI builds a debug-signed APK artifact and publishes nothing.
 
 ## Stack
