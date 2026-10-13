@@ -21,6 +21,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Build and e2e must agree on the base path, or Playwright opens a 404.
+      VITE_BASE: ${{ inputs.base || './' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,8 +42,6 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          VITE_BASE: ${{ inputs.base || './' }}
 
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e

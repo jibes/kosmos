@@ -33,7 +33,7 @@
     "@capacitor/cli": "^8.5.3",
     "@eslint/js": "^10.0.1",
     "@maplibre/maplibre-gl-style-spec": "^26.4.4",
-    "@playwright/test": "1.56.1",
+    "@playwright/test": "^1.64.0",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
