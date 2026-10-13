@@ -45,11 +45,14 @@ export function useCompass() {
       heading.current = smoothHeading(heading.current, h);
       for (const fn of listeners.current) fn(heading.current);
     };
-    // Chromium's absolute event is north-anchored; plain deviceorientation is in Safari.
-    const type =
-      'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
-    window.addEventListener(type, onEvent);
-    stop.current = () => window.removeEventListener(type, onEvent);
+    // Chromium sends north-anchored readings as deviceorientationabsolute, Safari and some
+    // browsers as deviceorientation (absolute or with webkitCompassHeading). Listen to both;
+    // headingOf drops relative readings, so a wrong north never gets in.
+    const types = ['deviceorientationabsolute', 'deviceorientation'];
+    for (const type of types) window.addEventListener(type, onEvent);
+    stop.current = () => {
+      for (const type of types) window.removeEventListener(type, onEvent);
+    };
   }, []);
 
   useEffect(() => () => stop.current?.(), []);

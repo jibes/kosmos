@@ -302,15 +302,13 @@ test.describe('map', () => {
     /** Points the "phone" east (heading 90°): absolute alpha runs counter-clockwise. */
     const face = (heading: number) =>
       page.evaluate((alpha) => {
+        // Browsers differ in which event carries the absolute heading; send both.
         for (let i = 0; i < 40; i++) {
-          window.dispatchEvent(
-            new DeviceOrientationEvent('deviceorientationabsolute', {
-              alpha,
-              beta: 0,
-              gamma: 0,
-              absolute: true,
-            }),
-          );
+          for (const type of ['deviceorientationabsolute', 'deviceorientation']) {
+            window.dispatchEvent(
+              new DeviceOrientationEvent(type, { alpha, beta: 0, gamma: 0, absolute: true }),
+            );
+          }
         }
       }, 360 - heading);
     const locate = page.locator('.controls > button').first();
