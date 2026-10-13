@@ -47,6 +47,14 @@ export const en = {
   alternatives: 'Routes',
   retry: 'Retry',
   start: 'Start',
+  end: 'End',
+  mute: 'Mute voice',
+  unmute: 'Unmute voice',
+  recenter: 'Re-centre',
+  arrived: 'You have arrived',
+  rerouting: 'Finding a new route…',
+  keepOpen: 'Keep kOSMos open and the screen on for directions',
+  remaining: 'remaining',
   hint: 'Long-press anywhere to drop a pin',
 };
 

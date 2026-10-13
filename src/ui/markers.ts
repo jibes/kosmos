@@ -21,7 +21,11 @@ export function userMarker(map: maplibregl.Map) {
   el.className = 'me';
   el.innerHTML = '<span class="me-ring"></span><span class="me-dot"></span>';
   const ring = el.firstElementChild as HTMLElement;
-  const marker = new maplibregl.Marker({ element: el, pitchAlignment: 'map' });
+  const marker = new maplibregl.Marker({
+    element: el,
+    pitchAlignment: 'map',
+    rotationAlignment: 'map',
+  });
   let accuracy = 0;
   let pos: LngLat | null = null;
 
@@ -40,6 +44,11 @@ export function userMarker(map: maplibregl.Map) {
       marker.setLngLat([fix.lng, fix.lat]);
       if (!marker.getElement().isConnected) marker.addTo(map);
       resize();
+    },
+    /** Turns the dot into an arrow along `deg` while navigating; `null` turns it back. */
+    heading(deg: number | null) {
+      el.classList.toggle('nav', deg !== null);
+      marker.setRotation(deg ?? 0);
     },
     remove() {
       map.off('zoom', resize);

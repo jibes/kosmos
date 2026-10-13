@@ -10,7 +10,7 @@ List deviations from it here, each with a reason.
 
 ## Product rules (MECE)
 
-Four jobs, one control each: **view** (the map), **find** (search), **locate** (location button), **inspect** (tap a label / long-press → place card with share + route; the route card is part of inspect). A new feature must fit one of them or argue for a fifth. No settings screen: theme follows the system, language follows the browser.
+Five jobs, one control each: **view** (the map), **find** (search), **locate** (location button), **inspect** (tap a label / long-press → place card with share + route; the route card is part of inspect), **go** (Start on the route card → turn-by-turn). A new feature must fit one of them or argue for a sixth. No settings screen: theme follows the system, language follows the browser.
 
 ## Architecture
 
@@ -18,13 +18,14 @@ Four jobs, one control each: **view** (the map), **find** (search), **locate** (
 - `src/ui/` holds components and map glue (`useMap`, markers, gestures) and may import from `core/`, never the other way round.
 - Map labels use self-hosted Inter through the style's `font-faces`, registered under the glyph server's font names (`FONT` in `core/style.ts`) so other scripts fall back to the same weight.
 - MapLibre's worker is bundled with `?url` and set via `setWorkerUrl` (`ui/useMap.ts`); without it the worker 404s after bundling.
+- Guidance is `core/nav.ts`: pure, fed fixes and time, covered by replay tests. The UI only subscribes it to location (`useLocation().subscribe`) and renders `NavState`.
 - Keep each file under 800 lines; split before adding to it.
 
 ## Invariants
 
 - Storage keys follow `kosmos.<name>.v<N>` (`kosmos.view.v1`). Never rename an existing key: bump the version and migrate.
 - Network calls go only to OpenFreeMap, Photon and the FOSSGIS Valhalla router (README → Privacy, CSP in `index.html`).
-- The router is a volunteer service under fair use: one request per trip or travel-mode change, re-requested only when the start moves more than 150 m (`ui/useRoute.ts`). Never poll it.
+- The router is a volunteer service under fair use: one request per trip or travel-mode change, re-requested only when the start moves more than 150 m (`ui/useRoute.ts`), and while navigating only on a confirmed off-route, at most every 30 s (`ui/useNav.ts`). Never poll it.
 - No user-facing string is hard-coded. Add it to `src/i18n/en.ts` and `de.ts`.
 - Android app ID `io.github.jibes.kosmos` and the release key are permanent; changing either breaks updates for installed users.
 

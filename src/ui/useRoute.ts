@@ -31,8 +31,18 @@ const NO_ROUTES: Route[] = [];
 const tripKey = (trip: Trip) =>
   `${trip.mode}|${trip.to.lng},${trip.to.lat}|${trip.from ? `${trip.from.lng},${trip.from.lat}` : 'me'}`;
 
+/** A failed reroute must not take the route away from someone who is driving it. */
+const keepWhileNavigating = (prev: Result | null, next: Result, pinned: boolean) =>
+  pinned && !next.routes.length && prev?.key === next.key && prev.routes.length ? prev : next;
+
 /** Asks the router once per trip; following the user's location never polls it. */
-export function useRoute(trip: Trip | null, here: LngLat | null, lang: string) {
+export function useRoute(
+  trip: Trip | null,
+  here: LngLat | null,
+  lang: string,
+  /** While navigating, only an explicit reroute may ask again, never mere movement. */
+  pinned = false,
+) {
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
   const last = useRef<{ key: string; from: LngLat; attempt: number } | null>(null);
@@ -52,7 +62,7 @@ export function useRoute(trip: Trip | null, here: LngLat | null, lang: string) {
       prev &&
       prev.key === key &&
       prev.attempt === attempt &&
-      (trip.from || distance(prev.from, from) < MOVE_TOLERANCE_M)
+      (trip.from || pinned || distance(prev.from, from) < MOVE_TOLERANCE_M)
     ) {
       return;
     }
@@ -64,12 +74,15 @@ export function useRoute(trip: Trip | null, here: LngLat | null, lang: string) {
       .then(async (res) => {
         const routes = res.ok ? parseValhalla(await res.json()) : [];
         const error = res.ok ? 'none' : classifyError(res.status);
-        setResult({ key, routes, error });
+        setResult((prev) => keepWhileNavigating(prev, { key, routes, error }, pinned));
       })
       .catch(() => {
-        if (!ctrl.signal.aborted) setResult({ key, routes: [], error: 'failed' });
+        if (ctrl.signal.aborted) return;
+        setResult((prev) =>
+          keepWhileNavigating(prev, { key, routes: [], error: 'failed' }, pinned),
+        );
       });
-  }, [trip, here, key, lang, attempt]);
+  }, [trip, here, key, lang, attempt, pinned]);
 
   let status: RouteStatus = 'loading';
   if (trip && result?.key === key) {

@@ -88,6 +88,10 @@ button {
   touch-action: manipulation;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -906,6 +910,146 @@ button {
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
 }
 
+/* ---------- Navigation ---------- */
+
+.nav-banner {
+  position: absolute;
+  top: calc(var(--gutter) + var(--safe-top));
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right));
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: var(--shadow);
+  animation: drop-in 0.32s var(--ease);
+}
+
+.nav-banner[data-state='rerouting'] {
+  background: var(--surface-solid);
+  color: var(--text);
+}
+
+.nav-banner svg {
+  flex: none;
+}
+
+.nav-banner div {
+  min-width: 0;
+}
+
+.nav-banner strong {
+  display: block;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-banner p {
+  margin: 2px 0 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.nav-bar {
+  position: absolute;
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--gutter) + var(--safe-bottom));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 20px;
+  border-radius: var(--radius);
+  animation: rise 0.36s var(--ease);
+}
+
+.nav-eta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-eta strong {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-eta span {
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-btn.big {
+  width: 48px;
+  height: 48px;
+  color: var(--text);
+}
+
+.icon-btn[aria-pressed='true'] {
+  color: var(--muted);
+}
+
+.nav-end {
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 14px;
+  background: #e5484d;
+  color: #fff;
+  font-weight: 600;
+}
+
+.recenter {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 90px);
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  color: var(--accent);
+  font-weight: 600;
+  animation: rise 0.28s var(--ease);
+}
+
+.ui[data-nav] .credit {
+  top: auto;
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 84px);
+}
+
+/* The user's dot becomes an arrow along the route. */
+.me.nav .me-ring,
+.me.nav .me-dot::after {
+  display: none;
+}
+
+.me.nav .me-dot {
+  width: 30px;
+  height: 34px;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: polygon(50% 0, 100% 100%, 50% 76%, 0 100%);
+}
+
+/* clip-path would cut a shadow on the arrow itself, so the marker casts it. */
+.me.nav {
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.35));
+}
+
 /* ---------- Motion ---------- */
 
 @keyframes rise {
@@ -969,5 +1113,11 @@ button {
     left: auto;
     bottom: var(--gutter);
     right: var(--gutter);
+  }
+
+  .nav-banner,
+  .nav-bar {
+    right: auto;
+    width: 420px;
   }
 }

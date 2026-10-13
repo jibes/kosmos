@@ -134,7 +134,7 @@ test.describe('map', () => {
 
     await card.locator('.steps summary').click();
     await expect(card.locator('.steps li')).toHaveCount(3);
-    await expect(card.locator('.steps')).toContainText('Turn left onto Unter den Linden.');
+    await expect(card.locator('.steps')).toContainText('Turn right onto Unter den Linden.');
 
     await card.getByRole('radio', { name: 'Walk' }).click();
     await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
@@ -152,6 +152,59 @@ test.describe('map', () => {
     await card.getByRole('button', { name: /close/i }).click();
     await expect(card).toHaveCount(0);
     await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+  });
+
+  test('navigates turn by turn with spoken prompts', async ({ page, context }, info) => {
+    await page.evaluate(() => {
+      const spoken: string[] = [];
+      (window as unknown as { spoken: string[] }).spoken = spoken;
+      Object.defineProperty(window, 'speechSynthesis', {
+        value: { speak: (u: SpeechSynthesisUtterance) => spoken.push(u.text), cancel: () => {} },
+      });
+    });
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const to = SEARCH_HIT;
+    const corner = { lng: from.lng, lat: to.lat };
+    const go = (p: { lng: number; lat: number }) =>
+      context.setGeolocation({ latitude: p.lat, longitude: p.lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    await page.getByRole('button', { name: 'Start' }).click();
+
+    const banner = page.locator('.nav-banner');
+    await expect(banner).toContainText('Head south on Friedrichstraße.');
+    await expect(page.locator('.panel')).toBeHidden();
+    const spoken = () => page.evaluate(() => (window as unknown as { spoken: string[] }).spoken);
+    await expect.poll(spoken).toContain('Head south on Friedrichstraße.');
+
+    // Drive south along the first leg towards the turn.
+    for (const f of [0.2, 0.5, 0.8, 0.97]) {
+      await go({ lng: from.lng, lat: from.lat + (corner.lat - from.lat) * f });
+      await page.waitForTimeout(250);
+    }
+    await expect(banner).toContainText('Turn right onto Unter den Linden.');
+    await expect(banner.locator('strong')).toHaveText(/m$/);
+    await expect.poll(spoken).toContain('Turn right onto Unter den Linden.');
+    await expect(page.locator('.me.nav')).toHaveCount(1);
+    await idle(page);
+    await shot(page, info, 'navigating');
+
+    for (const f of [0.3, 0.7, 1]) {
+      await go({ lng: corner.lng + (to.lng - corner.lng) * f, lat: to.lat });
+      await page.waitForTimeout(250);
+    }
+    await expect(banner).toContainText('You have arrived');
+
+    await page.getByRole('button', { name: 'End' }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(page.locator('.card.route')).toBeVisible();
   });
 
   test('drops a pin and looks up the address', async ({ page }) => {

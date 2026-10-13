@@ -49,5 +49,13 @@ export const de = {
   alternatives: 'Routen',
   retry: 'Erneut',
   start: 'Los',
+  end: 'Beenden',
+  mute: 'Sprache aus',
+  unmute: 'Sprache an',
+  recenter: 'Zentrieren',
+  arrived: 'Du bist angekommen',
+  rerouting: 'Neue Route wird gesucht…',
+  keepOpen: 'Lass kOSMos offen und den Bildschirm an für Ansagen',
+  remaining: 'verbleibend',
   hint: 'Lange tippen, um eine Markierung zu setzen',
 } satisfies Catalogue;

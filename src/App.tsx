@@ -1,8 +1,9 @@
 import type * as maplibregl from 'maplibre-gl';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { distance, type LngLat } from './core/geo';
 import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
-import type { Mode } from './core/route';
+import { navZoom, offRouteLimit, type NavState } from './core/nav';
+import type { Mode, Route } from './core/route';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER, ROUTE_SOURCE } from './core/style';
 import { lang, t } from './i18n';
 import { About } from './ui/About';
@@ -10,14 +11,18 @@ import { Controls } from './ui/Controls';
 import { onLongPress } from './ui/gestures';
 import { pinMarker, startMarker, userMarker } from './ui/markers';
 import { isNative } from './ui/native';
+import { NavView } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
 import { RouteCard } from './ui/RouteCard';
 import { SearchBar } from './ui/SearchBar';
 import { UpdateToast } from './ui/UpdateToast';
 import { useLocation } from './ui/useLocation';
 import { useMap } from './ui/useMap';
+import { useNav } from './ui/useNav';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useTheme } from './ui/useTheme';
+import { webVoice } from './ui/voice';
+import { keepAwake } from './ui/wakeLock';
 
 /** Map labels follow the browser language even where the UI falls back to English. */
 const LABEL_LANG = (typeof navigator === 'undefined' ? 'en' : navigator.language)
@@ -35,6 +40,21 @@ const padding = () =>
   wide()
     ? { top: 48, bottom: 48, left: 440, right: 48 }
     : { top: 96, bottom: 300, left: 32, right: 32 };
+/** While navigating, the user sits low on screen so more of the road ahead shows. */
+const navPadding = () =>
+  wide()
+    ? { top: 260, bottom: 60, left: 0, right: 0 }
+    : { top: Math.round(innerHeight * 0.42), bottom: 110, left: 0, right: 0 };
+
+const MUTED_KEY = 'kosmos.muted.v1';
+const storedMuted = () => {
+  try {
+    return localStorage.getItem(MUTED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
 /** Routes leave room for the taller route card. */
 const routePadding = () =>
   wide()
@@ -51,7 +71,7 @@ export function App() {
   const theme = useTheme();
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useMap(mapEl, theme, LABEL_LANG);
-  const { fix, status, start } = useLocation();
+  const { fix, status, start, subscribe } = useLocation();
   const [following, setFollowing] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
@@ -59,7 +79,18 @@ export function App() {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [active, setActive] = useState(0);
   const [pickingStart, setPickingStart] = useState(false);
-  const route = useRoute(trip, fix, lang);
+  const [navigating, setNavigating] = useState(false);
+  const [navFollow, setNavFollow] = useState(true);
+  const [muted, setMuted] = useState(storedMuted);
+  const [rerouteFrom, setRerouteFrom] = useState<Route | null>(null);
+  const route = useRoute(trip, fix, lang, navigating);
+  const voice = useMemo(() => webVoice(lang), []);
+  const navRef = useRef(false);
+  const navFollowRef = useRef(true);
+  useEffect(() => {
+    navRef.current = navigating;
+    navFollowRef.current = navFollow;
+  }, [navigating, navFollow]);
   const tripRef = useRef(trip);
   useEffect(() => {
     tripRef.current = trip;
@@ -107,6 +138,7 @@ export function App() {
   }, [selection, start]);
 
   const closeRoute = useCallback(() => {
+    setNavigating(false);
     setTrip(null);
     setPickingStart(false);
   }, []);
@@ -228,7 +260,10 @@ export function App() {
     if (!map) return;
     const m = userMarker(map);
     me.current = m;
-    const stopFollowing = () => setFollowing(false);
+    const stopFollowing = () => {
+      setFollowing(false);
+      if (navRef.current) setNavFollow(false);
+    };
     map.on('dragstart', stopFollowing);
     return () => {
       m.remove();
@@ -237,7 +272,7 @@ export function App() {
   }, [map]);
 
   useEffect(() => {
-    if (!map || !fix) return;
+    if (!map || !fix || navRef.current) return;
     me.current?.update(fix);
     if (flyOnFix.current) {
       flyOnFix.current = false;
@@ -253,7 +288,11 @@ export function App() {
   useEffect(() => {
     const src = map?.getSource(ROUTE_SOURCE) as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
-    const order = shown.map((_, i) => i).sort((a, b) => (a === chosen ? 1 : b === chosen ? -1 : 0));
+    const order = navigating
+      ? shown.length
+        ? [chosen]
+        : []
+      : shown.map((_, i) => i).sort((a, b) => (a === chosen ? 1 : b === chosen ? -1 : 0));
     src.setData({
       type: 'FeatureCollection',
       features: order.map((i) => ({
@@ -262,11 +301,11 @@ export function App() {
         geometry: { type: 'LineString', coordinates: shown[i].coords },
       })),
     });
-  }, [map, shown, chosen]);
+  }, [map, shown, chosen, navigating]);
 
   const fitted = useRef('');
   useEffect(() => {
-    if (!map || route.status !== 'ready' || fitted.current === route.key) return;
+    if (!map || navigating || route.status !== 'ready' || fitted.current === route.key) return;
     fitted.current = route.key;
     const [w, s, e, n] = shown.reduce(
       (b, r) => [
@@ -278,7 +317,7 @@ export function App() {
       [180, 90, -180, -90],
     );
     map.fitBounds([w, s, e, n], { padding: routePadding(), maxZoom: 17, duration: 1200 });
-  }, [map, route.status, route.key, shown]);
+  }, [map, navigating, route.status, route.key, shown]);
   useEffect(() => {
     if (!trip) fitted.current = '';
   }, [trip]);
@@ -294,6 +333,79 @@ export function App() {
     startPin.current ??= startMarker();
     startPin.current.setLngLat([from.lng, from.lat]).addTo(map);
   }, [map, from]);
+
+  // Navigation: guidance on the device, camera behind the user, the router asked only to reroute.
+  const lastSnap = useRef<NavState['snap']>(null);
+  const followCamera = useCallback(
+    (nav: NavState, duration: number) => {
+      if (!map || !nav.snap) return;
+      map.easeTo({
+        center: nav.snap.point,
+        bearing: nav.snap.bearing,
+        pitch: 55,
+        zoom: navZoom(nav.speed),
+        padding: navPadding(),
+        duration,
+        easing: (x) => x,
+      });
+    },
+    [map],
+  );
+  const onStep = useCallback(
+    (nav: NavState, f: { lng: number; lat: number; accuracy: number }) => {
+      const s = nav.snap;
+      const onLine = s && s.offset < offRouteLimit(f.accuracy);
+      me.current?.update(onLine ? { lng: s.point[0], lat: s.point[1], accuracy: f.accuracy } : f);
+      me.current?.heading(s ? s.bearing : null);
+      lastSnap.current = s;
+      if (navFollowRef.current) followCamera(nav, 1000);
+    },
+    [followCamera],
+  );
+  const reroute = useCallback(() => {
+    setRerouteFrom(route.routes[chosen] ?? null);
+    setActive(0);
+    route.retry();
+  }, [route, chosen]);
+  const { nav } = useNav({
+    route: navigating ? shown[chosen] : undefined,
+    mode: trip?.mode ?? 'car',
+    active: navigating,
+    subscribe,
+    voice,
+    muted,
+    onStep,
+    onReroute: reroute,
+  });
+
+  const startNav = () => {
+    if (!trip) return;
+    start();
+    if (trip.from) setTrip({ ...trip, from: null });
+    setNavigating(true);
+    setNavFollow(true);
+    if (!isNative) showToast(t.keepOpen);
+    map?.easeTo({ pitch: 55, zoom: Math.max(map.getZoom(), 16), duration: 800 });
+  };
+  const endNav = useCallback(() => {
+    setNavigating(false);
+    setRerouteFrom(null);
+    voice.stop();
+    me.current?.heading(null);
+    map?.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+  }, [map, voice]);
+  const toggleMute = () => {
+    setMuted((v) => {
+      try {
+        localStorage.setItem(MUTED_KEY, v ? '0' : '1');
+      } catch {
+        // Not remembered; still toggles for this session.
+      }
+      if (!v) voice.stop();
+      return !v;
+    });
+  };
+  useEffect(() => (navigating ? keepAwake() : undefined), [navigating]);
 
   const locate = () => {
     if (status === 'denied') {
@@ -312,18 +424,35 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.target instanceof HTMLInputElement) return;
-      if (tripRef.current) closeRoute();
+      if (navRef.current) endNav();
+      else if (tripRef.current) closeRoute();
       else clear();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [clear, closeRoute]);
+  }, [clear, closeRoute, endNav]);
 
   return (
     <>
       <div ref={mapEl} className="map" />
-      <main className="ui">
-        <div className="panel">
+      <main className="ui" data-nav={navigating || undefined}>
+        {navigating && shown[chosen] && (
+          <NavView
+            route={shown[chosen]}
+            nav={nav}
+            lang={lang}
+            muted={muted}
+            following={navFollow}
+            rerouting={rerouteFrom !== null && rerouteFrom === shown[chosen]}
+            onMute={toggleMute}
+            onRecenter={() => {
+              setNavFollow(true);
+              followCamera({ ...nav, snap: lastSnap.current }, 600);
+            }}
+            onEnd={endNav}
+          />
+        )}
+        <div className="panel" hidden={navigating}>
           {trip && !pickingStart && (
             <RouteCard
               to={trip.to}
@@ -342,6 +471,7 @@ export function App() {
               }}
               onRetry={route.retry}
               onClose={closeRoute}
+              onStart={startNav}
             />
           )}
           {selection && !trip && (
@@ -367,7 +497,9 @@ export function App() {
             />
           )}
         </div>
-        <Controls map={map} status={status} following={following} onLocate={locate} />
+        {!navigating && (
+          <Controls map={map} status={status} following={following} onLocate={locate} />
+        )}
         <button type="button" className="credit" onClick={() => setAbout(true)}>
           © OpenStreetMap
         </button>
