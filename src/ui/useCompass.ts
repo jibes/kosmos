@@ -22,14 +22,11 @@ export function useCompass() {
     if (stop.current || typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) {
       return;
     }
+    // iOS (and newer Chromium) gate sensors behind requestPermission. A refusal only means no
+    // events will arrive, so listen regardless rather than giving up on browsers that answer
+    // "denied" without asking.
     const D = window.DeviceOrientationEvent as unknown as IOSOrientationEvent;
-    if (D.requestPermission) {
-      try {
-        if ((await D.requestPermission()) !== 'granted') return;
-      } catch {
-        return;
-      }
-    }
+    if (D.requestPermission) await D.requestPermission().catch(() => 'denied');
     const onEvent = (e: Event) => {
       const o = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
       const h = headingOf(

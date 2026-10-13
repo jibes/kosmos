@@ -297,7 +297,7 @@ test.describe('map', () => {
     page,
     context,
   }) => {
-    await context.grantPermissions(['geolocation']);
+    await context.grantPermissions(['geolocation', 'accelerometer', 'gyroscope', 'magnetometer']);
     await context.setGeolocation({ latitude: CENTER.lat, longitude: CENTER.lng, accuracy: 10 });
     /** Points the "phone" east (heading 90°): absolute alpha runs counter-clockwise. */
     const face = (heading: number) =>
@@ -312,6 +312,17 @@ test.describe('map', () => {
         }
       }, 360 - heading);
     const locate = page.locator('.controls > button').first();
+    // What this browser offers, for the log when this test fails on a new Chromium.
+    console.log(
+      'orientation support',
+      await page.evaluate(() => ({
+        event: 'DeviceOrientationEvent' in window,
+        absolute: 'ondeviceorientationabsolute' in window,
+        requestPermission: typeof (
+          DeviceOrientationEvent as unknown as { requestPermission?: unknown }
+        ).requestPermission,
+      })),
+    );
 
     await locate.click();
     await expect(locate).toHaveAttribute('data-follow', 'position');
