@@ -13,12 +13,16 @@ adb install -r -g "$APK"
 adb logcat -c
 adb shell am start -W -n "$PKG/.MainActivity"
 
-# Give the WebView time to load the app and the first tiles.
-sleep 25
+# Wait for the map to report it has loaded (console line forwarded by Capacitor), at most 60 s,
+# then a little longer for the first tiles to draw.
+for _ in $(seq 1 30); do
+  adb logcat -d | grep -q "kosmos:ready" && break
+  sleep 2
+done
+sleep 8
 
 adb exec-out screencap -p > "$OUT/screen.png"
 adb logcat -d > "$OUT/logcat.txt"
-adb shell uiautomator dump /sdcard/ui.xml >/dev/null && adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null
 
 fail=0
 if ! adb shell pidof "$PKG" >/dev/null; then
@@ -34,8 +38,10 @@ if grep -E " E Capacitor/Console" "$OUT/logcat.txt"; then
   echo "::error::the web app logged errors"
   fail=1
 fi
-if ! grep -q "OpenStreetMap" "$OUT/ui.xml"; then
-  echo "::error::the interface did not appear (no OpenStreetMap credit in the view tree)"
+# The WebView's content is not in the accessibility tree without a screen reader, so the map's
+# own "loaded" line is the proof that the interface came up.
+if ! grep -q "kosmos:ready" "$OUT/logcat.txt"; then
+  echo "::error::the map never reported it had loaded (no kosmos:ready in logcat)"
   fail=1
 fi
 exit "$fail"

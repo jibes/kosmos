@@ -64,6 +64,8 @@ export function useMap(
       }
     };
     m.on('moveend', save);
+    // The Android CI smoke test waits for this line in logcat.
+    m.once('load', () => console.info('kosmos:ready'));
     // Exposed for end-to-end tests and the curious.
     (window as unknown as { kosmos?: maplibregl.Map }).kosmos = m;
     setMap(m);
