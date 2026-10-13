@@ -47,6 +47,26 @@ test.beforeEach(({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
 });
 
+/** Waits until both points are on screen and not hidden under the panel. */
+async function routeInView(page: Page, a: [number, number], b: [number, number]) {
+  await page.waitForFunction(
+    ([a, b]) => {
+      const m = window.kosmos!;
+      if (m.isMoving()) return false;
+      const card = document.querySelector('.panel')!.getBoundingClientRect();
+      return [a, b].every(([lng, lat]) => {
+        const p = m.project([lng, lat]);
+        const inMap = p.x >= 0 && p.x <= innerWidth && p.y >= 0 && p.y <= innerHeight;
+        const underCard =
+          p.x >= card.left && p.x <= card.right && p.y >= card.top && p.y <= card.bottom;
+        return inMap && !underCard;
+      });
+    },
+    [a, b],
+    { timeout: 15_000, polling: 250 },
+  );
+}
+
 async function jump(
   page: Page,
   view: { lng: number; lat: number; zoom: number; pitch?: number; bearing?: number },
@@ -136,7 +156,14 @@ test.describe('map', () => {
     await expect(card.locator('.steps li')).toHaveCount(3);
     await expect(card.locator('.steps')).toContainText('Turn right onto Unter den Linden.');
 
+    // Changing the travel mode re-centres on the new route, even after panning away.
+    await page.evaluate(() => window.kosmos!.jumpTo({ center: [0, 0], zoom: 5 }));
     await card.getByRole('radio', { name: 'Walk' }).click();
+    await routeInView(
+      page,
+      [CENTER.lng + 0.01, CENTER.lat + 0.01],
+      [SEARCH_HIT.lng, SEARCH_HIT.lat],
+    );
     await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
     await expect.poll(() => routeRequests.at(-1)?.costing).toBe('pedestrian');
 
@@ -151,25 +178,7 @@ test.describe('map', () => {
     // The whole new route is in view once it is calculated.
     await idle(page);
     // The camera fits the whole new route clear of the card (slow on emulated phones).
-    await page.waitForFunction(
-      ([a, b]) => {
-        const m = window.kosmos!;
-        if (m.isMoving()) return false;
-        const card = document.querySelector('.panel')!.getBoundingClientRect();
-        return [a, b].every(([lng, lat]) => {
-          const p = m.project([lng, lat]);
-          const inMap = p.x >= 0 && p.x <= innerWidth && p.y >= 0 && p.y <= innerHeight;
-          const underCard =
-            p.x >= card.left && p.x <= card.right && p.y >= card.top && p.y <= card.bottom;
-          return inMap && !underCard;
-        });
-      },
-      [
-        [13.0, 52.4],
-        [SEARCH_HIT.lng, SEARCH_HIT.lat],
-      ] as [number, number][],
-      { timeout: 15_000, polling: 250 },
-    );
+    await routeInView(page, [13.0, 52.4], [SEARCH_HIT.lng, SEARCH_HIT.lat]);
 
     // Changing the start can be abandoned.
     await card.locator('.end-btn').first().click();

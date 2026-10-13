@@ -46,6 +46,8 @@ const navPadding = () =>
     ? { top: 260, bottom: 60, left: 0, right: 0 }
     : { top: Math.round(innerHeight * 0.42), bottom: 110, left: 0, right: 0 };
 
+const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
+
 const MUTED_KEY = 'kosmos.muted.v1';
 const storedMuted = () => {
   try {
@@ -329,6 +331,10 @@ export function App() {
       ],
       [180, 90, -180, -90],
     );
+    // MapLibre adds the camera's standing padding (left by an earlier flyTo or by navigation) to
+    // the fit's own; together they can exceed the screen and the fit is silently dropped.
+    map.stop();
+    map.setPadding(NO_PADDING);
     map.fitBounds([w, s, e, n], { padding: routePadding(), maxZoom: 17, duration: 1200 });
   }, [map, navigating, route.status, route.key, shown]);
   useEffect(() => {
@@ -405,7 +411,7 @@ export function App() {
     setRerouteFrom(null);
     voice.stop();
     me.current?.heading(null);
-    map?.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+    map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: 800 });
   }, [map, voice]);
   const toggleMute = () => {
     setMuted((v) => {
