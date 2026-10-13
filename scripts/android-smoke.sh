@@ -34,7 +34,9 @@ if grep -E "FATAL EXCEPTION|AndroidRuntime.*$PKG" "$OUT/logcat.txt"; then
   fail=1
 fi
 # Capacitor forwards console.error from the WebView as error-level "Capacitor/Console" lines.
-if grep -E " E Capacitor/Console" "$OUT/logcat.txt"; then
+# Known noise: Capacitor's SystemBars injects the safe-area CSS before the page exists, fails,
+# and succeeds once the page is visible (SystemBars.java onPageCommitVisible) — not an app error.
+if grep -E " E Capacitor/Console" "$OUT/logcat.txt" | grep -v "Error injecting safe area CSS"; then
   echo "::error::the web app logged errors"
   fail=1
 fi
