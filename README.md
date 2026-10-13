@@ -1,0 +1,63 @@
+# kOSMos
+
+A quiet, fast map of the world, made from OpenStreetMap.
+
+One map, one search field, one location button. Everything else is the map.
+
+<p align="center"><img src="public/icons/512.png" width="96" alt="kOSMos icon"></p>
+
+## What it does
+
+Designed from first principles: a map viewer answers four questions, and kOSMos answers each in exactly one way.
+
+| Question                | Answer                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| What is the world like? | A vector map, light or dark with the system, a globe when zoomed out, 3D buildings when tilted   |
+| Where is X?             | Search (as you type, biased to what you are looking at)                                          |
+| Where am I?             | The location button; tap again to follow                                                         |
+| What is here?           | Tap a label, or long-press (right-click) anywhere: name, address, coordinates, share, directions |
+
+The view is kept between sessions and in the URL (`#map=zoom/lat/lng/bearing/pitch`), so any view is a link.
+
+## Install
+
+- **Web:** <https://jibes.github.io/kosmos/>, installable as a PWA; the app shell works offline, and areas you have viewed stay cached.
+- **Android:** [Releases](https://github.com/jibes/kosmos/releases), or with [Obtainium](https://obtainium.imranr.dev/): add `https://github.com/jibes/kosmos`.
+
+SHA-256 (release certificate): 00:82:00:1C:3F:66:FD:D2:C1:4F:80:85:2F:4A:D2:96:95:A4:91:E5:51:98:5D:DB:7C:99:A5:5F:77:B5:E8:5F
+
+## Privacy
+
+No account, no analytics, no tracking. Your location never leaves the device. The app talks to exactly two services:
+
+| Service                                      | For                                     | Sends                                             |
+| -------------------------------------------- | --------------------------------------- | ------------------------------------------------- |
+| [OpenFreeMap](https://openfreemap.org)       | Map tiles, glyphs for non-Latin scripts | Tile coordinates of what you view                 |
+| [Photon](https://photon.komoot.io) by komoot | Search, address lookup                  | Search text, map centre; the point you long-press |
+
+## Run locally
+
+```sh
+npm ci
+npm run dev        # http://localhost:5173
+npm run check      # typecheck, lint, format, unit tests
+npm run build && npm run e2e
+```
+
+E2E tests run against a synthetic world (`e2e/fixtures/`): generated vector tiles and canned search answers, so they need no network. `SHOTS=<dir> npm run e2e` also writes the screenshots for design review.
+
+Android: `npm run android:sync`, then open `android/` in Android Studio or run `./gradlew assembleDebug` there.
+
+## Release
+
+- **Web:** every push to `main` deploys to GitHub Pages.
+- **Android:** bump `version` in `package.json` and push to `main`. The Android workflow builds, signs, checks the signer against the fingerprint above and publishes `v<version>` with the APK. versionCode = major·10⁷ + minor·10⁵ + patch·10³.
+- Signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them CI builds a debug-signed APK artifact and publishes nothing.
+
+## Stack
+
+TypeScript, React 19, Vite, MapLibre GL JS 6, vite-plugin-pwa, Capacitor 8. Map style written from scratch for the OpenMapTiles schema (`src/core/style.ts`), labels set in self-hosted Inter.
+
+## Licence
+
+[GPL-3.0-or-later](LICENSE). Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), ODbL. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

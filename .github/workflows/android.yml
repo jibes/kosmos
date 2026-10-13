@@ -1,0 +1,111 @@
+name: Android
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # gh release create
+    steps:
+      # The runner ships JDK 21 and the Android SDK; no setup actions needed.
+      - run: echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+
+      - name: Build web and sync into the shell
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          npm run build
+          npx cap sync android
+
+      - name: Signing key
+        id: key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set; signing with the debug key. No release will be published."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble release APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Name and verify
+        id: apk
+        run: |
+          version=$(node -p "require('./package.json').version")
+          out="kosmos-v$version.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$out"
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$apksigner" verify --print-certs "$out" | tee signer.txt
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "file=$out" >> "$GITHUB_OUTPUT"
+
+      - name: Check the release signer
+        if: steps.key.outputs.signed == 'true'
+        run: |
+          expected=$(sed -n 's/^SHA-256 (release certificate): //p' README.md | tr -d ': ' | tr 'A-F' 'a-f')
+          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signer.txt)
+          echo "expected $expected"; echo "actual   $actual"
+          [ -n "$expected" ] && [ "$expected" = "$actual" ]
+
+      # TODO pin to SHA (Dependabot keeps it current), as in apps-data templates
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.apk.outputs.file }}
+          path: ${{ steps.apk.outputs.file }}
+          retention-days: 14
+
+      # A version bump on main publishes itself: release when v<version> has no tag yet.
+      - name: Release
+        if: steps.key.outputs.signed == 'true' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.apk.outputs.version }}
+          FILE: ${{ steps.apk.outputs.file }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "v$VERSION is already released."
+            exit 0
+          fi
+          gh release create "v$VERSION" "$FILE" \
+            --target "$GITHUB_SHA" \
+            --title "kOSMos $VERSION" \
+            --generate-notes \
+            --notes "Install or update with Obtainium: add https://github.com/${{ github.repository }}"

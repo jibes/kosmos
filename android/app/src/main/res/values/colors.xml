@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_ink">#0B0D12</color>
+    <!-- Matches the map's land colour, so launch flows into the first frame. -->
+    <color name="launch">#F5F3EF</color>
+</resources>
