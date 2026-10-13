@@ -63,5 +63,9 @@ export const de = {
   expand: 'Details zeigen',
   searchEnd: 'Ziel suchen',
   cancel: 'Abbrechen',
+  followCompass: 'Karte mit Kompass drehen',
+  northUp: 'Norden oben',
+  noCompass: 'Kein Kompass auf diesem Gerät',
+  speedUnit: 'km/h',
   hint: 'Lange tippen, um eine Markierung zu setzen',
 } satisfies Catalogue;

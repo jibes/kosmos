@@ -19,7 +19,8 @@ export function startMarker(): maplibregl.Marker {
 export function userMarker(map: maplibregl.Map) {
   const el = document.createElement('div');
   el.className = 'me';
-  el.innerHTML = '<span class="me-ring"></span><span class="me-dot"></span>';
+  el.innerHTML =
+    '<span class="me-ring"></span><span class="me-beam"></span><span class="me-dot"></span>';
   const ring = el.firstElementChild as HTMLElement;
   const marker = new maplibregl.Marker({
     element: el,
@@ -28,6 +29,8 @@ export function userMarker(map: maplibregl.Map) {
   });
   let accuracy = 0;
   let pos: LngLat | null = null;
+  let navigating = false;
+  let facingDeg: number | null = null;
 
   const resize = () => {
     if (!pos) return;
@@ -47,8 +50,15 @@ export function userMarker(map: maplibregl.Map) {
     },
     /** Turns the dot into an arrow along `deg` while navigating; `null` turns it back. */
     heading(deg: number | null) {
-      el.classList.toggle('nav', deg !== null);
-      marker.setRotation(deg ?? 0);
+      navigating = deg !== null;
+      el.classList.toggle('nav', navigating);
+      marker.setRotation(deg ?? facingDeg ?? 0);
+    },
+    /** The compass beam: where the phone points, like a torch; `null` hides it. */
+    facing(deg: number | null) {
+      facingDeg = deg;
+      el.classList.toggle('facing', deg !== null);
+      if (!navigating) marker.setRotation(deg ?? 0);
     },
     remove() {
       map.off('zoom', resize);

@@ -18,6 +18,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 - `src/ui/` holds components and map glue (`useMap`, markers, gestures) and may import from `core/`, never the other way round.
 - Map labels use self-hosted Inter through the style's `font-faces`, registered under the glyph server's font names (`FONT` in `core/style.ts`) so other scripts fall back to the same weight.
 - MapLibre's worker is bundled with `?url` and set via `setWorkerUrl` (`ui/useMap.ts`); without it the worker 404s after bundling.
+- Compass: `core/compass.ts` (pure: heading from orientation events, circular smoothing, course vs compass by speed) and `ui/useCompass.ts` (streams headings to subscribers, not React state). The location button cycles off → follow → compass (`Follow` in `ui/Controls.tsx`).
 - Guidance is `core/nav.ts`: pure, fed fixes and time, covered by replay tests. The UI only subscribes it to location (`useLocation().subscribe`) and renders `NavState`.
 - Keep each file under 800 lines; split before adding to it.
 

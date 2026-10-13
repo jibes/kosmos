@@ -61,6 +61,10 @@ export const en = {
   expand: 'Show details',
   searchEnd: 'Search destination',
   cancel: 'Cancel',
+  followCompass: 'Turn map with compass',
+  northUp: 'North up',
+  noCompass: 'No compass on this device',
+  speedUnit: 'km/h',
   hint: 'Long-press anywhere to drop a pin',
 };
 

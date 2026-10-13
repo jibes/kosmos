@@ -36,6 +36,14 @@ export const LocateIcon = ({ filled }: { filled?: boolean }) => (
   </Svg>
 );
 
+/** Compass-follow mode: the arrow inside a ring, like a held compass. */
+export const CompassModeIcon = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 5.5 15.5 16 12 13.8 8.5 16 12 5.5Z" fill="currentColor" />
+  </Svg>
+);
+
 export const NoLocationIcon = () => (
   <Svg>
     <path d="M20 4 13.6 18.6M11.4 13.2 4 11l9.5-4.2M3 3l18 18" />

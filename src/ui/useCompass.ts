@@ -1,0 +1,70 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { headingOf, smoothHeading } from '../core/compass';
+
+type Listener = (heading: number) => void;
+
+interface IOSOrientationEvent {
+  requestPermission?: () => Promise<'granted' | 'denied'>;
+}
+
+/**
+ * The device compass, smoothed. Headings stream to subscribers (60 Hz is too fast for React
+ * state); `available` flips once, when the first north-anchored reading arrives.
+ */
+export function useCompass() {
+  const heading = useRef<number | null>(null);
+  const listeners = useRef(new Set<Listener>());
+  const [available, setAvailable] = useState(false);
+  const stop = useRef<(() => void) | null>(null);
+
+  /** Call from a tap: iOS only grants orientation access inside a user gesture. */
+  const start = useCallback(async () => {
+    if (stop.current || typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) {
+      return;
+    }
+    const D = window.DeviceOrientationEvent as unknown as IOSOrientationEvent;
+    if (D.requestPermission) {
+      try {
+        if ((await D.requestPermission()) !== 'granted') return;
+      } catch {
+        return;
+      }
+    }
+    const onEvent = (e: Event) => {
+      const o = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
+      const h = headingOf(
+        {
+          alpha: o.alpha,
+          absolute: o.absolute || e.type === 'deviceorientationabsolute',
+          webkitCompassHeading: o.webkitCompassHeading,
+        },
+        screen.orientation?.angle ?? 0,
+      );
+      if (h == null) return;
+      if (heading.current == null) setAvailable(true);
+      heading.current = smoothHeading(heading.current, h);
+      for (const fn of listeners.current) fn(heading.current);
+    };
+    // Chromium's absolute event is north-anchored; plain deviceorientation is in Safari.
+    const type =
+      'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
+    window.addEventListener(type, onEvent);
+    stop.current = () => window.removeEventListener(type, onEvent);
+  }, []);
+
+  useEffect(() => () => stop.current?.(), []);
+
+  const subscribe = useCallback((fn: Listener) => {
+    listeners.current.add(fn);
+    return () => {
+      listeners.current.delete(fn);
+    };
+  }, []);
+
+  const current = useCallback(() => heading.current, []);
+
+  return useMemo(
+    () => ({ start, subscribe, current, available }),
+    [start, subscribe, current, available],
+  );
+}

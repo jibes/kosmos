@@ -236,6 +236,7 @@ test.describe('map', () => {
       await page.waitForTimeout(250);
     }
     await expect(banner).toContainText('Turn right onto Unter den Linden.');
+    await expect(page.locator('.speed strong')).toHaveText(/^\d+$/);
     await expect(banner.locator('strong')).toHaveText(/m$/);
     await expect.poll(spoken).toContain('Turn right onto Unter den Linden.');
     await expect(page.locator('.me.nav')).toHaveCount(1);
@@ -290,6 +291,44 @@ test.describe('map', () => {
       .locator('.controls > button')
       .evaluateAll((els) => els.map((e) => e.classList.contains('compass')));
     expect(order).toEqual([false, true]);
+  });
+
+  test('follows the compass on the second tap of the location button', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat, longitude: CENTER.lng, accuracy: 10 });
+    /** Points the "phone" east (heading 90°): absolute alpha runs counter-clockwise. */
+    const face = (heading: number) =>
+      page.evaluate((alpha) => {
+        for (let i = 0; i < 40; i++) {
+          window.dispatchEvent(
+            new DeviceOrientationEvent('deviceorientationabsolute', {
+              alpha,
+              beta: 0,
+              gamma: 0,
+              absolute: true,
+            }),
+          );
+        }
+      }, 360 - heading);
+    const locate = page.locator('.controls > button').first();
+
+    await locate.click();
+    await expect(locate).toHaveAttribute('data-follow', 'position');
+    await face(90);
+    await expect(page.locator('.me.facing')).toHaveCount(1);
+
+    await locate.click();
+    await expect(locate).toHaveAttribute('data-follow', 'compass');
+    await face(90);
+    await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getBearing()))).toBe(90);
+
+    // The orientation button returns to north-up but keeps following.
+    await page.getByRole('button', { name: /north|Norden/ }).click();
+    await expect(locate).toHaveAttribute('data-follow', 'position');
+    await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getBearing()))).toBe(0);
   });
 
   test('drops a pin and looks up the address', async ({ page }) => {

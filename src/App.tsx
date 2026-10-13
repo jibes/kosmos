@@ -2,12 +2,13 @@ import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { distance, type LngLat } from './core/geo';
 import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
+import { COMPASS_BELOW_MS, travelHeading } from './core/compass';
 import { navZoom, offRouteLimit, type NavState } from './core/nav';
 import type { Mode, Route } from './core/route';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER, ROUTE_SOURCE } from './core/style';
 import { lang, t } from './i18n';
 import { About } from './ui/About';
-import { Controls } from './ui/Controls';
+import { Controls, type Follow } from './ui/Controls';
 import { onLongPress } from './ui/gestures';
 import { pinMarker, startMarker, userMarker } from './ui/markers';
 import { isNative } from './ui/native';
@@ -17,6 +18,7 @@ import { RouteCard } from './ui/RouteCard';
 import { SearchBar } from './ui/SearchBar';
 import { UpdateToast } from './ui/UpdateToast';
 import { useLocation } from './ui/useLocation';
+import { useCompass } from './ui/useCompass';
 import { useMap } from './ui/useMap';
 import { useNav } from './ui/useNav';
 import { useRoute, type Trip } from './ui/useRoute';
@@ -76,7 +78,9 @@ export function App() {
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useMap(mapEl, theme, LABEL_LANG);
   const { fix, status, start, subscribe, background } = useLocation();
-  const [following, setFollowing] = useState(false);
+  /** Off, follow the position north-up, or follow and turn the map with the compass. */
+  const [follow, setFollow] = useState<Follow>('off');
+  const compass = useCompass();
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -107,10 +111,10 @@ export function App() {
   const pending = useRef(0);
   const flyOnFix = useRef(false);
   const lastHold = useRef(0);
-  const followRef = useRef(following);
+  const followRef = useRef(follow);
   useEffect(() => {
-    followRef.current = following;
-  }, [following]);
+    followRef.current = follow;
+  }, [follow]);
 
   const showToast = useCallback((msg: string) => setToast(msg), []);
   useEffect(() => {
@@ -142,7 +146,7 @@ export function App() {
     if (!selection) return;
     start();
     setActive(0);
-    setFollowing(false);
+    setFollow('off');
     setTrip({ to: selection.place, from: null, mode: 'car' });
   }, [selection, start]);
 
@@ -250,7 +254,7 @@ export function App() {
         }
         return;
       }
-      setFollowing(false);
+      setFollow('off');
       select(place);
       const [w, s, e, n] = place.bbox ?? [0, 0, 0, 0];
       if (place.bbox && (e - w > 0.002 || n - s > 0.002)) {
@@ -276,7 +280,7 @@ export function App() {
     const m = userMarker(map);
     me.current = m;
     const stopFollowing = () => {
-      setFollowing(false);
+      setFollow('off');
       if (navRef.current) setNavFollow(false);
     };
     map.on('dragstart', stopFollowing);
@@ -292,10 +296,55 @@ export function App() {
     if (flyOnFix.current) {
       flyOnFix.current = false;
       map.flyTo({ center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: 1800 });
-    } else if (followRef.current) {
+    } else if (followRef.current === 'position') {
       map.easeTo({ center: [fix.lng, fix.lat], duration: 800 });
+    } else if (followRef.current === 'compass') {
+      // The compass turns the map every frame; an ease here would fight it, so the centre jumps.
+      if (!map.isMoving()) map.jumpTo({ center: [fix.lng, fix.lat] });
     }
-  }, [map, fix]);
+  }, [map, fix, compass]);
+
+  // Compass: the beam on the dot always; in compass mode the map turns with the phone.
+  const lastNavSpeed = useRef(0);
+  useEffect(() => {
+    if (!map) return;
+    let frame = 0;
+    let latest = 0;
+    const off = compass.subscribe((h) => {
+      latest = h;
+      if (navRef.current) {
+        // Slow or standing: GPS course is noise, so the arrow shows where the phone faces.
+        if (lastNavSpeed.current < COMPASS_BELOW_MS) me.current?.heading(h);
+        return;
+      }
+      me.current?.facing(h);
+      if (followRef.current !== 'compass' || frame) return;
+      const turn = () => {
+        if (followRef.current !== 'compass') {
+          frame = 0;
+          return;
+        }
+        // Another camera move (e.g. the fly-in after tapping locate) runs: try again next frame.
+        if (map.isMoving()) {
+          frame = requestAnimationFrame(turn);
+          return;
+        }
+        frame = 0;
+        map.setBearing(latest);
+      };
+      frame = requestAnimationFrame(turn);
+    });
+    // Turning the map by hand leaves compass mode but keeps following the position.
+    const onRotate = (e: { originalEvent?: Event }) => {
+      if (e.originalEvent && followRef.current === 'compass') setFollow('position');
+    };
+    map.on('rotatestart', onRotate);
+    return () => {
+      off();
+      cancelAnimationFrame(frame);
+      map.off('rotatestart', onRotate);
+    };
+  }, [map, compass]);
 
   // Route: alternatives under the chosen one; refit only when the trip itself changes.
   const shown = route.routes;
@@ -360,7 +409,7 @@ export function App() {
       if (!map || !nav.snap) return;
       map.easeTo({
         center: nav.snap.point,
-        bearing: nav.snap.bearing,
+        bearing: travelHeading(nav.snap.bearing, compass.current(), nav.speed) ?? nav.snap.bearing,
         pitch: 55,
         zoom: navZoom(nav.speed),
         padding: navPadding(),
@@ -368,18 +417,19 @@ export function App() {
         easing: (x) => x,
       });
     },
-    [map],
+    [map, compass],
   );
   const onStep = useCallback(
     (nav: NavState, f: { lng: number; lat: number; accuracy: number }) => {
       const s = nav.snap;
       const onLine = s && s.offset < offRouteLimit(f.accuracy);
       me.current?.update(onLine ? { lng: s.point[0], lat: s.point[1], accuracy: f.accuracy } : f);
-      me.current?.heading(s ? s.bearing : null);
+      lastNavSpeed.current = nav.speed;
+      me.current?.heading(s ? travelHeading(s.bearing, compass.current(), nav.speed) : null);
       lastSnap.current = s;
       if (navFollowRef.current) followCamera(nav, 1000);
     },
-    [followCamera],
+    [followCamera, compass],
   );
   const reroute = useCallback(() => {
     setRerouteFrom(route.routes[chosen] ?? null);
@@ -400,6 +450,7 @@ export function App() {
   const startNav = () => {
     if (!trip) return;
     start();
+    void compass.start();
     if (trip.from) setTrip({ ...trip, from: null });
     setNavigating(true);
     setNavFollow(true);
@@ -440,7 +491,19 @@ export function App() {
       return;
     }
     start();
-    setFollowing(true);
+    void compass.start();
+    if (follow === 'position') {
+      // Second tap: let the map turn with the phone, like a held paper map.
+      if (compass.available) setFollow('compass');
+      else showToast(t.noCompass);
+      return;
+    }
+    if (follow === 'compass') {
+      setFollow('position');
+      map?.easeTo({ bearing: 0, duration: 500 });
+      return;
+    }
+    setFollow('position');
     if (fix && map) {
       map.flyTo({ center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: 1400 });
     } else {
@@ -529,7 +592,16 @@ export function App() {
           )}
         </div>
         {!navigating && (
-          <Controls map={map} status={status} following={following} onLocate={locate} />
+          <Controls
+            map={map}
+            status={status}
+            follow={follow}
+            onLocate={locate}
+            onNorth={() => {
+              if (follow === 'compass') setFollow('position');
+              map?.easeTo({ bearing: 0, pitch: 0, duration: 500 });
+            }}
+          />
         )}
         <button type="button" className="credit" onClick={() => setAbout(true)}>
           © OpenStreetMap

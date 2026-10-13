@@ -531,8 +531,39 @@ button {
   pointer-events: none;
 }
 
+.me {
+  position: relative;
+}
+
 .me > * {
   grid-area: 1 / 1;
+}
+
+/* The compass beam: a soft cone from the dot towards where the phone points. */
+.me-beam {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 76px;
+  height: 64px;
+  translate: -50% 0;
+  clip-path: polygon(50% 100%, 8% 0, 92% 0);
+  background: radial-gradient(
+    120% 100% at 50% 100%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 18%, transparent) 55%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+
+.me.facing .me-beam {
+  opacity: 1;
+}
+
+.me.nav .me-beam {
+  display: none;
 }
 
 .me-dot {
@@ -1003,6 +1034,33 @@ button {
   font-weight: 600;
 }
 
+.speed {
+  position: absolute;
+  left: calc(var(--gutter) + var(--safe-left));
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 92px);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  line-height: 1;
+  animation: rise 0.3s var(--ease);
+}
+
+.speed strong {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.speed small {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
 .recenter {
   position: absolute;
   left: 50%;
@@ -1021,7 +1079,9 @@ button {
 
 .ui[data-nav] .credit {
   top: auto;
-  bottom: calc(var(--gutter) + var(--safe-bottom) + 84px);
+  left: auto;
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 92px);
 }
 
 /* The user's dot becomes an arrow along the route. */

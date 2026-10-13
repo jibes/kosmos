@@ -1,17 +1,21 @@
 import type * as maplibregl from 'maplibre-gl';
 import { useEffect, useState } from 'react';
 import { t } from '../i18n';
-import { LocateIcon, NeedleIcon, NoLocationIcon } from './icons';
+import { CompassModeIcon, LocateIcon, NeedleIcon, NoLocationIcon } from './icons';
 import type { LocationStatus } from './useLocation';
+
+/** Off; follow the position north-up; follow and turn the map with the compass. */
+export type Follow = 'off' | 'position' | 'compass';
 
 interface Props {
   map: maplibregl.Map | null;
   status: LocationStatus;
-  following: boolean;
+  follow: Follow;
   onLocate: () => void;
+  onNorth: () => void;
 }
 
-export function Controls({ map, status, following, onLocate }: Props) {
+export function Controls({ map, status, follow, onLocate, onNorth }: Props) {
   const [camera, setCamera] = useState({ bearing: 0, pitch: 0 });
 
   useEffect(() => {
@@ -33,7 +37,12 @@ export function Controls({ map, status, following, onLocate }: Props) {
       ? t.locationDenied
       : status === 'unavailable'
         ? t.locationUnavailable
-        : t.locate;
+        : follow === 'position'
+          ? t.followCompass
+          : follow === 'compass'
+            ? t.northUp
+            : t.locate;
+  const following = follow !== 'off';
 
   return (
     <div className="controls">
@@ -45,9 +54,16 @@ export function Controls({ map, status, following, onLocate }: Props) {
         aria-pressed={following}
         data-state={status}
         data-following={following || undefined}
+        data-follow={follow}
         onClick={onLocate}
       >
-        {blocked ? <NoLocationIcon /> : <LocateIcon filled={following} />}
+        {blocked ? (
+          <NoLocationIcon />
+        ) : follow === 'compass' ? (
+          <CompassModeIcon />
+        ) : (
+          <LocateIcon filled={following} />
+        )}
       </button>
       <button
         type="button"
@@ -55,7 +71,7 @@ export function Controls({ map, status, following, onLocate }: Props) {
         data-hidden={!tilted || undefined}
         aria-label={t.resetNorth}
         tabIndex={tilted ? 0 : -1}
-        onClick={() => map?.easeTo({ bearing: 0, pitch: 0, duration: 500 })}
+        onClick={onNorth}
       >
         <span
           style={{

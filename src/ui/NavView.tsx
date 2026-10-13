@@ -77,6 +77,13 @@ export function NavView({ route, nav, lang, muted, following, rerouting, ...on }
         </button>
       )}
 
+      {started && !nav.arrived && (
+        <div className="speed surface" aria-label={`${Math.round(nav.speed * 3.6)} ${t.speedUnit}`}>
+          <strong>{Math.round(nav.speed * 3.6)}</strong>
+          <small>{t.speedUnit}</small>
+        </div>
+      )}
+
       <section className="nav-bar surface">
         <div className="nav-eta">
           <strong>{formatClock(new Date(now + eta * 1000), lang)}</strong>
