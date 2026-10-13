@@ -21,7 +21,7 @@ import { useMap } from './ui/useMap';
 import { useNav } from './ui/useNav';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useTheme } from './ui/useTheme';
-import { webVoice } from './ui/voice';
+import { systemVoice } from './ui/voice';
 import { keepAwake } from './ui/wakeLock';
 
 /** Map labels follow the browser language even where the UI falls back to English. */
@@ -71,7 +71,7 @@ export function App() {
   const theme = useTheme();
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useMap(mapEl, theme, LABEL_LANG);
-  const { fix, status, start, subscribe } = useLocation();
+  const { fix, status, start, subscribe, background } = useLocation();
   const [following, setFollowing] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
@@ -84,7 +84,7 @@ export function App() {
   const [muted, setMuted] = useState(storedMuted);
   const [rerouteFrom, setRerouteFrom] = useState<Route | null>(null);
   const route = useRoute(trip, fix, lang, navigating);
-  const voice = useMemo(() => webVoice(lang), []);
+  const voice = useMemo(() => systemVoice(navigator.language || lang), []);
   const navRef = useRef(false);
   const navFollowRef = useRef(true);
   useEffect(() => {
@@ -405,7 +405,15 @@ export function App() {
       return !v;
     });
   };
-  useEffect(() => (navigating ? keepAwake() : undefined), [navigating]);
+  useEffect(() => {
+    if (!navigating) return;
+    background(true);
+    const release = keepAwake();
+    return () => {
+      release();
+      background(false);
+    };
+  }, [navigating, background]);
 
   const locate = () => {
     if (status === 'denied') {

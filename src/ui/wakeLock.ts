@@ -1,5 +1,12 @@
+import { KeepAwake } from '@capacitor-community/keep-awake';
+import { isNative } from './native';
+
 /** Keeps the screen on while navigating; re-acquired when the page becomes visible again. */
 export function keepAwake(): () => void {
+  if (isNative) {
+    void KeepAwake.keepAwake().catch(() => undefined);
+    return () => void KeepAwake.allowSleep().catch(() => undefined);
+  }
   let lock: WakeLockSentinel | null = null;
   let active = true;
   const acquire = async () => {

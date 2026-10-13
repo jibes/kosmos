@@ -57,5 +57,7 @@ export const de = {
   rerouting: 'Neue Route wird gesucht…',
   keepOpen: 'Lass kOSMos offen und den Bildschirm an für Ansagen',
   remaining: 'verbleibend',
+  navNotifTitle: 'kOSMos navigiert',
+  navNotifText: 'Ansagen laufen auch bei ausgeschaltetem Bildschirm weiter. Beenden in der App.',
   hint: 'Lange tippen, um eine Markierung zu setzen',
 } satisfies Catalogue;

@@ -33,6 +33,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 
 - `android/` is a committed Capacitor project; `npx cap sync android` copies `dist/` in (ignored by git).
 - Icons are vector adaptive icons in `res/drawable` + `res/mipmap-anydpi`; web PNGs come from `npm run icons` (set `CHROMIUM_PATH` in cloud sessions).
+- Navigation on Android: `useLocation().background(true)` moves location to the background-geolocation plugin's foreground service; speech uses the system engine (`ui/voice.ts`), keep-awake the native plugin (`ui/wakeLock.ts`). The web build falls back to Web Speech and Screen Wake Lock.
 - Release: bump `package.json` version on main → `android.yml` publishes `v<version>` if that tag does not exist.
 
 ## Deviations

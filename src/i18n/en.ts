@@ -55,6 +55,8 @@ export const en = {
   rerouting: 'Finding a new route…',
   keepOpen: 'Keep kOSMos open and the screen on for directions',
   remaining: 'remaining',
+  navNotifTitle: 'kOSMos is guiding you',
+  navNotifText: 'Directions continue with the screen off. End navigation in the app.',
   hint: 'Long-press anywhere to drop a pin',
 };
 

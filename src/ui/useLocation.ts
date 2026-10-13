@@ -1,4 +1,8 @@
+import type { BackgroundGeolocationPlugin } from '@capacitor-community/background-geolocation';
+import { registerPlugin } from '@capacitor/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '../i18n';
+import { isNative } from './native';
 import type { LngLat } from '../core/geo';
 
 export interface Fix extends LngLat {
@@ -11,6 +15,10 @@ export interface Fix extends LngLat {
   /** ms since epoch. */
   time: number;
 }
+
+const BackgroundGeolocation = isNative
+  ? registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation')
+  : null;
 
 export type LocationStatus = 'off' | 'seeking' | 'on' | 'denied' | 'unavailable';
 
@@ -66,7 +74,62 @@ export function useLocation() {
     );
   }, [stop]);
 
-  useEffect(() => stop, [stop]);
+  /**
+   * Android only: hand location to a foreground service with a notification, so guidance keeps
+   * going with the screen off or another app in front. The browser cannot do this.
+   */
+  const bgWatcher = useRef<Promise<string> | null>(null);
+  const background = useCallback(
+    (on: boolean) => {
+      if (!BackgroundGeolocation) return;
+      if (on && !bgWatcher.current) {
+        stop();
+        bgWatcher.current = BackgroundGeolocation.addWatcher(
+          {
+            backgroundTitle: t.navNotifTitle,
+            backgroundMessage: t.navNotifText,
+            requestPermissions: true,
+            stale: false,
+            distanceFilter: 0,
+          },
+          (loc, err) => {
+            if (err || !loc) {
+              if (err?.code === 'NOT_AUTHORIZED') setStatus('denied');
+              return;
+            }
+            const next: Fix = {
+              lng: loc.longitude,
+              lat: loc.latitude,
+              accuracy: loc.accuracy,
+              speed: loc.speed,
+              heading: loc.bearing,
+              time: loc.time ?? Date.now(),
+            };
+            setFix(next);
+            setStatus('on');
+            for (const fn of listeners.current) fn(next);
+          },
+        );
+      } else if (!on && bgWatcher.current) {
+        const id = bgWatcher.current;
+        bgWatcher.current = null;
+        void id.then((watcherId) => BackgroundGeolocation.removeWatcher({ id: watcherId }));
+        start();
+      }
+    },
+    [start, stop],
+  );
 
-  return { fix, status, start, subscribe };
+  useEffect(
+    () => () => {
+      stop();
+      const id = bgWatcher.current;
+      if (id && BackgroundGeolocation) {
+        void id.then((watcherId) => BackgroundGeolocation.removeWatcher({ id: watcherId }));
+      }
+    },
+    [stop],
+  );
+
+  return { fix, status, start, subscribe, background };
 }

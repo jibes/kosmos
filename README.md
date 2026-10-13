@@ -35,6 +35,10 @@ No account, no analytics, no tracking. Your location leaves the device only as t
 | [OpenFreeMap](https://openfreemap.org)       | Map tiles, glyphs for non-Latin scripts | Tile coordinates of what you view                 |
 | [Photon](https://photon.komoot.io) by komoot | Search, address lookup                  | Search text, map centre; the point you long-press |
 
+## Android permissions
+
+Location (while navigating it runs in a foreground service with a notification, so directions continue with the screen off), notifications (for that notification), keep screen on, internet. Nothing runs in the background outside navigation.
+
 ## Run locally
 
 ```sh

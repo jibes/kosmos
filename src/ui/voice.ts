@@ -1,4 +1,7 @@
-/** Spoken guidance. Web Speech in browsers; the Android app swaps in a native engine. */
+import { QueueStrategy, TextToSpeech } from '@capacitor-community/text-to-speech';
+import { isNative } from './native';
+
+/** Spoken guidance. Web Speech in browsers; the system engine (Google's voices) on Android. */
 export interface Voice {
   speak(text: string): void;
   stop(): void;
@@ -23,3 +26,19 @@ export function webVoice(lang: string): Voice {
     },
   };
 }
+
+/** Android's own speech engine: natural voices, offline, and it keeps talking in the background. */
+export function nativeVoice(lang: string): Voice {
+  return {
+    speak(text) {
+      void TextToSpeech.speak({ text, lang, rate: 1, queueStrategy: QueueStrategy.Flush }).catch(
+        () => undefined,
+      );
+    },
+    stop() {
+      void TextToSpeech.stop().catch(() => undefined);
+    },
+  };
+}
+
+export const systemVoice = (lang: string): Voice => (isNative ? nativeVoice(lang) : webVoice(lang));
