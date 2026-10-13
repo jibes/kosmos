@@ -1,4 +1,3 @@
-import { CapacitorHttp } from '@capacitor/core';
 import { useEffect, useRef, useState } from 'react';
 import { distance, type LngLat } from '../core/geo';
 import {
@@ -10,8 +9,8 @@ import {
   type TravelMode,
 } from '../core/route';
 import type { Place } from '../core/search';
-import { parseMotis, TRANSIT_URL, transitUrl } from '../core/transit';
-import { isNative } from './native';
+import { parseMotis, transitUrl } from '../core/transit';
+import { getJson } from './http';
 import type { RouteStatus } from './RouteCard';
 
 export interface Trip {
@@ -39,18 +38,6 @@ const tripKey = (trip: Trip) =>
 /** A failed reroute must not take the route away from someone who is driving it. */
 const keepWhileNavigating = (prev: Result | null, next: Result, pinned: boolean) =>
   pinned && !next.routes.length && prev?.key === next.key && prev.routes.length ? prev : next;
-
-/** Transitous asks apps to name themselves; a browser cannot set User-Agent, the app can. */
-const USER_AGENT = `kOSMos/${__BUILD__.version} (+https://github.com/jibes/kosmos)`;
-
-async function getJson(url: string, signal: AbortSignal) {
-  if (isNative && url.startsWith(TRANSIT_URL)) {
-    const res = await CapacitorHttp.get({ url, headers: { 'User-Agent': USER_AGENT } });
-    return { ok: res.status >= 200 && res.status < 300, status: res.status, json: res.data };
-  }
-  const res = await fetch(url, { signal });
-  return { ok: res.ok, status: res.status, json: res.ok ? await res.json() : null };
-}
 
 /** Asks the router once per trip; following the user's location never polls it. */
 export function useRoute(

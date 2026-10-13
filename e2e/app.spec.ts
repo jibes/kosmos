@@ -1,7 +1,14 @@
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { isNight } from '../src/core/daylight';
 import { CENTER } from './fixtures/scene';
-import { SEARCH_HIT, offlineWorld, routeRequests, transitRequests } from './fixtures/offline-world';
+import {
+  SEARCH_HIT,
+  offlineWorld,
+  routeRequests,
+  stopTimesRequests,
+  transitRequests,
+} from './fixtures/offline-world';
 
 declare global {
   interface Window {
@@ -295,35 +302,51 @@ test.describe('map', () => {
     await card.getByRole('button', { name: 'Start' }).click();
 
     // The first connection: walk minutes 3–8, U6 8–20 with stops at 12 and 16, walk 20–25.
+    // A departure check finds it three minutes late: 11–23, stops at 15 and 19.
     const banner = page.locator('.nav-banner');
+    const checks = stopTimesRequests.length;
     await expect(banner).toContainText('Walk to Stadtmitte');
     await expect(banner).toContainText('U6 leaves');
+    // The walk's next turn leads, with the metres to it.
+    await expect(banner.locator('p')).toHaveText('Dorotheenstraße');
     await expect.poll(spoken).toContain('Walk to Stadtmitte.');
+    // After sunset the map goes dark on public transport too.
+    const night = await page
+      .evaluate(() => Date.now())
+      .then((now) => isNight(from.lat, from.lng, now));
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe(night ? 'dark' : 'light');
 
     await minutes(6);
     await go(from.lng, stopLat);
     await expect(banner.locator('.line')).toHaveText('U6');
     await expect(banner).toContainText('→ Alt-Tegel');
+    await expect
+      .poll(spoken)
+      .toContainEqual(expect.stringMatching(/^Take the U6 towards Alt-Tegel/));
+    // Within ten minutes of departure: one check, which brings the live platform.
+    await expect(banner).toContainText('Platform 3', { timeout: 10_000 });
+    expect(stopTimesRequests.length).toBe(checks + 1);
+    expect(stopTimesRequests.at(-1)!.get('stopId')).toBe('de:stadtmitte');
     // The map follows the dot to the stop and keeps it on screen.
     await idle(page);
     const dot = await page.locator('.me').boundingBox();
     const view = page.viewportSize()!;
     expect(dot!.y).toBeGreaterThan(0);
     expect(dot!.y).toBeLessThan(view.height);
-    await expect
-      .poll(spoken)
-      .toContainEqual(expect.stringMatching(/^Take the U6 towards Alt-Tegel/));
 
-    // Underground: no fixes, the timetable counts the stops.
-    await minutes(13);
+    // Underground: no fixes, the (live) timetable counts the stops.
+    await minutes(16);
     await expect(banner).toContainText('2 stops', { timeout: 10_000 });
     await expect(banner).toContainText('Get off at Unter den Linden');
     await shot(page, info, 'riding');
-    await minutes(17);
+    await minutes(20);
     await expect(banner).toContainText('Next stop', { timeout: 10_000 });
     await expect.poll(spoken).toContain('Get off at the next stop, Unter den Linden.');
+    expect(stopTimesRequests.length).toBe(checks + 1);
 
-    await minutes(21);
+    await minutes(24);
     await go(to.lng, stopLat);
     await expect(banner).toContainText('Walk to Brandenburger Tor');
     await go(to.lng, to.lat);

@@ -123,16 +123,21 @@ function fakePlan(a: Pt, b: Pt, depart: number) {
       legs: [
         leg('WALK', place('START', a), place('Stadtmitte', s1), t0, t0 + 5, [a, s1], {
           distance: 380,
+          steps: [
+            { relativeDirection: 'DEPART', distance: 200, streetName: 'Friedrichstraße' },
+            { relativeDirection: 'LEFT', distance: 300, streetName: 'Dorotheenstraße' },
+          ],
         }),
         leg(
           'SUBWAY',
-          place('Stadtmitte', s1, { track: '2' }),
+          place('Stadtmitte', s1, { track: '2', stopId: 'de:stadtmitte' }),
           place('Unter den Linden', s2),
           t0 + 5,
           t0 + 17,
           [s1, s2],
           {
             displayName: 'U6',
+            tripId: `u6-${t0}`,
             headsign: 'Alt-Tegel',
             routeColor: '8C6DAB',
             intermediateStops: [1, 2].map((k) =>
@@ -164,6 +169,12 @@ function fakePlan(a: Pt, b: Pt, depart: number) {
     ],
   };
 }
+
+/** Departure time of the last plan served, to answer departure checks consistently. */
+let planDepart = 0;
+
+/** Every Transitous departure check the app made. */
+export const stopTimesRequests: URLSearchParams[] = [];
 
 /** Every Transitous plan request the app made. */
 export const transitRequests: URLSearchParams[] = [];
@@ -226,16 +237,29 @@ export async function offlineWorld(context: BrowserContext) {
     transitRequests.push(q);
     const pt = (v: string | null) => (v ?? '0,0').split(',').map(Number).reverse() as Pt;
     const time = q.get('time');
+    planDepart = time ? Date.parse(time) : Date.now();
     return route.fulfill({
       contentType: 'application/json',
       headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify(
-        fakePlan(
-          pt(q.get('fromPlace')),
-          pt(q.get('toPlace')),
-          time ? Date.parse(time) : Date.now(),
-        ),
-      ),
+      body: JSON.stringify(fakePlan(pt(q.get('fromPlace')), pt(q.get('toPlace')), planDepart)),
+    });
+  });
+  // The first U6 (planned at minute 8) runs three minutes late and moved to platform 3.
+  await context.route(/api\.transitous\.org\/api\/v5\/stoptimes/, (route) => {
+    stopTimesRequests.push(new URL(route.request().url()).searchParams);
+    const at = (min: number) => new Date(planDepart + min * 60_000).toISOString();
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        stopTimes: [
+          {
+            tripId: 'u6-3',
+            realTime: true,
+            place: { name: 'Stadtmitte', departure: at(11), scheduledDeparture: at(8), track: '3' },
+          },
+        ],
+      }),
     });
   });
   await context.route(/photon\.komoot\.io\/reverse/, (route) => {

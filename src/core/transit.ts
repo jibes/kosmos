@@ -1,5 +1,5 @@
 import { distance, type LngLat } from './geo';
-import { decodePolyline, type Route } from './route';
+import { decodePolyline, type Route, type Turn } from './route';
 
 /**
  * Public transport from Transitous: a community-run MOTIS instance with timetables from across
@@ -13,6 +13,16 @@ export interface Stop {
   lng: number;
   lat: number;
   track?: string;
+  /** The timetable's stop id, for asking about departures there. */
+  id?: string;
+}
+
+/** A turn on a walk: where it is along the walk and onto which street. */
+export interface WalkStep {
+  turn: Turn;
+  street?: string;
+  /** Metres from the start of the walk. */
+  at: number;
 }
 
 export interface TransitLeg {
@@ -41,6 +51,10 @@ export interface TransitLeg {
   distance: number;
   coords: [number, number][];
   cancelled: boolean;
+  /** Walks: the turns along the way (empty when the planner sent none). */
+  steps: WalkStep[];
+  /** Rides: the timetable's trip id, which identifies this vehicle at the boarding stop. */
+  trip?: string;
 }
 
 export interface Transit {
@@ -105,6 +119,9 @@ interface MPlace {
   lat?: number;
   lon?: number;
   track?: string;
+  stopId?: string;
+  departure?: string;
+  scheduledDeparture?: string;
 }
 interface MLeg {
   mode?: string;
@@ -122,6 +139,8 @@ interface MLeg {
   distance?: number;
   legGeometry?: { points?: string; precision?: number };
   cancelled?: boolean;
+  tripId?: string;
+  steps?: { relativeDirection?: string; distance?: number; streetName?: string }[];
 }
 interface MItinerary {
   startTime?: string;
@@ -136,7 +155,34 @@ const stop = (p: MPlace | undefined): Stop => ({
   lng: p?.lon ?? 0,
   lat: p?.lat ?? 0,
   ...(p?.track ? { track: p.track } : {}),
+  ...(p?.stopId ? { id: p.stopId } : {}),
 });
+
+/** MOTIS step directions as the arrows kOSMos draws; stairs and lifts read as straight on. */
+const TURNS: Record<string, Turn> = {
+  DEPART: 'depart',
+  HARD_LEFT: 'sharp-left',
+  LEFT: 'left',
+  SLIGHTLY_LEFT: 'slight-left',
+  SLIGHTLY_RIGHT: 'slight-right',
+  RIGHT: 'right',
+  HARD_RIGHT: 'sharp-right',
+  CIRCLE_CLOCKWISE: 'roundabout',
+  CIRCLE_COUNTERCLOCKWISE: 'roundabout',
+  UTURN_LEFT: 'uturn',
+  UTURN_RIGHT: 'uturn',
+};
+
+function walkSteps(raw: MLeg['steps']): WalkStep[] {
+  const out: WalkStep[] = [];
+  let at = 0;
+  for (const st of raw ?? []) {
+    const turn = TURNS[st.relativeDirection ?? ''] ?? 'straight';
+    out.push({ turn, ...(st.streetName ? { street: st.streetName } : {}), at });
+    at += st.distance ?? 0;
+  }
+  return out;
+}
 
 const length = (coords: [number, number][]) => {
   let m = 0;
@@ -183,6 +229,8 @@ function toLeg(l: MLeg): TransitLeg | null {
     distance: l.distance ?? length(coords),
     coords,
     cancelled: !!l.cancelled,
+    steps: ride ? [] : walkSteps(l.steps),
+    ...(ride && l.tripId ? { trip: l.tripId } : {}),
   };
 }
 
@@ -221,4 +269,62 @@ export function parseMotis(json: unknown): Route[] {
   return [...(r?.itineraries ?? []), ...(r?.direct ?? [])]
     .map(toRoute)
     .filter((x): x is Route => !!x);
+}
+
+/** Check the boarding departure (delay, platform, cancellation) once, in the last ten minutes. */
+export const DEPARTURE_CHECK_MS = 10 * 60_000;
+
+/** Departures at a ride's boarding stop around its time; one request answers for one ride. */
+export function stopTimesUrl(leg: TransitLeg, lang: string): string | null {
+  if (!leg.ride || !leg.trip || !leg.from.id) return null;
+  const p = new URLSearchParams({
+    stopId: leg.from.id,
+    time: new Date(leg.start - leg.delay * 60_000 - 5 * 60_000).toISOString(),
+    n: '12',
+    language: lang,
+  });
+  return `${TRANSIT_URL}/api/v5/stoptimes?${p}`;
+}
+
+/**
+ * The connection with ride `i` moved to its live departure: start, end and stops shift by the
+ * same amount, platform and cancellation come from the stop. `null` when the trip is not there.
+ */
+export function withDeparture(transit: Transit, i: number, json: unknown): Transit | null {
+  const leg = transit.legs[i];
+  const times = (
+    json as {
+      stopTimes?: {
+        tripId?: string;
+        place?: MPlace;
+        cancelled?: boolean;
+        tripCancelled?: boolean;
+      }[];
+    } | null
+  )?.stopTimes;
+  const hit = times?.find((st) => st.tripId === leg?.trip);
+  const departure = Date.parse(hit?.place?.departure ?? '');
+  if (!leg || !hit || !Number.isFinite(departure)) return null;
+  const shift = departure - leg.start;
+  const scheduled = Date.parse(hit.place?.scheduledDeparture ?? '');
+  const moved: TransitLeg = {
+    ...leg,
+    start: departure,
+    end: leg.end + shift,
+    via: leg.via.map((v) => (v.arrival === undefined ? v : { ...v, arrival: v.arrival + shift })),
+    delay: Number.isFinite(scheduled) ? Math.round((departure - scheduled) / 60_000) : leg.delay,
+    from: { ...leg.from, ...(hit.place?.track ? { track: hit.place.track } : {}) },
+    cancelled: !!(hit.cancelled || hit.tripCancelled),
+  };
+  // The walk after the ride moves with it; the next ride keeps its own time.
+  let walking = true;
+  const legs = transit.legs.map((l, k) => {
+    if (k === i) return moved;
+    if (k < i || !walking || l.ride) {
+      if (k > i) walking = false;
+      return l;
+    }
+    return { ...l, start: l.start + shift, end: l.end + shift };
+  });
+  return { ...transit, legs, end: legs[legs.length - 1].end };
 }

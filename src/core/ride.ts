@@ -1,5 +1,5 @@
 import type { LngLat } from './geo';
-import type { Stop, Transit, TransitLeg } from './transit';
+import type { Stop, Transit, TransitLeg, WalkStep } from './transit';
 
 /**
  * Following a public transport connection on the device: walk to the stop, wait, ride, get off,
@@ -35,6 +35,8 @@ export interface RideState {
   stopsLeft: number;
   /** Walking: metres left on this walk. */
   toGo: number;
+  /** Walking with a position: the next turn and the metres to it. */
+  turn: (WalkStep & { in: number }) | null;
   /** The vehicle this walk leads to has left without the rider. */
   missed: boolean;
   fix: Fix | null;
@@ -96,17 +98,23 @@ function evaluate(tr: Transit, prev: RideState, seen: Fix | null, time: number):
   const fix = seen && time - seen.time < FRESH_MS ? seen : null;
   let leg = prev.leg;
   while (leg < legs.length && legDone(legs, leg, fix, time)) leg++;
-  const base = { ...prev, leg, fix: seen, time, missed: false };
+  const base = { ...prev, leg, fix: seen, time, missed: false, turn: null };
   if (leg >= legs.length) return { ...base, phase: 'arrived', stopsLeft: 0, toGo: 0 };
 
   const l = legs[leg];
   if (!l.ride) {
     const on = fix && project(l.coords, fix);
-    const toGo = on && on.offset < NEAR_LINE_M ? Math.max(0, on.total - on.along) : l.distance;
+    const near = on && on.offset < NEAR_LINE_M ? on : null;
+    const toGo = near ? Math.max(0, near.total - near.along) : l.distance;
+    // The next real turn ahead; "depart" and "straight on" are not worth saying.
+    const step = near
+      ? l.steps.find((s) => s.at > near.along + 5 && s.turn !== 'straight' && s.turn !== 'depart')
+      : undefined;
+    const turn = step ? { ...step, in: step.at - near!.along } : null;
     const next = legs[leg + 1];
     const missed =
       !!next?.ride && !!fix && time > next.start + 30_000 && metres(fix, l.to) > MISSED_M;
-    return { ...base, phase: 'walk', toGo, stopsLeft: 0, missed };
+    return { ...base, phase: 'walk', toGo, stopsLeft: 0, missed, turn };
   }
 
   const stops = stopsOf(l);
@@ -130,6 +138,7 @@ export function initialRide(tr: Transit, time: number, fix: Fix | null = null): 
     phase: 'walk',
     stopsLeft: 0,
     toGo: 0,
+    turn: null,
     missed: false,
     fix: null,
     time,

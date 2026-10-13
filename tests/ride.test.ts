@@ -47,7 +47,14 @@ const transit: Transit = parseMotis({
       duration: 24 * 60,
       transfers: 0,
       legs: [
-        leg('WALK', start, s1, 0, 6, { distance: 400 }),
+        leg('WALK', start, s1, 0, 6, {
+          distance: 400,
+          steps: [
+            { relativeDirection: 'DEPART', distance: 250, streetName: 'Friedrichstraße' },
+            { relativeDirection: 'CONTINUE', distance: 100 },
+            { relativeDirection: 'RIGHT', distance: 50, streetName: 'Bahnhofsvorplatz' },
+          ],
+        }),
         leg('SUBWAY', s1, s2, 8, 20, {
           displayName: 'U6',
           headsign: 'Alt-Tegel',
@@ -147,5 +154,13 @@ describe('ride', () => {
     ]);
     expect(st).toMatchObject({ leg: 0, phase: 'walk', missed: true });
     expect(said).toEqual(['0:walk']);
+  });
+
+  it('shows the next real turn of a walk, with the metres to it', () => {
+    const { st } = replay([{ fix: at(m(0, 100), min(1)), time: min(1) }]);
+    expect(st.turn).toMatchObject({ turn: 'right', street: 'Bahnhofsvorplatz' });
+    expect(st.turn!.in).toBeCloseTo(250, -1);
+    const lost = replay([{ fix: at(m(500, 100), min(1)), time: min(1) }]).st;
+    expect(lost.turn).toBeNull();
   });
 });

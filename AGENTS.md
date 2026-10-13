@@ -22,6 +22,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 - Lanes: `core/lanes.ts` (pure: Valhalla `turn_lanes` per maneuver, shown only when some lanes lead the right way and some do not; size by distance and speed). Comes with the same route request.
 - Navigation theme: `core/daylight.ts` (pure: sun elevation, tunnel match against `brunnel=tunnel` lines) and `ui/useNavTheme.ts`, which reads tunnels from the tiles already loaded (Valhalla's native response has no tunnel flag). The override sets `data-theme` on `<html>`; `styles.css` repeats the dark tokens under it.
 - Public transport guidance is `core/ride.ts` (pure, replay-tested like `nav.ts`): walk → wait → ride → arrived from fixes and time; GPS when a fix is fresh, the timetable's arrival times underground. `ui/useRide.ts` also ticks every 3 s so it moves on without fixes; `ui/RideView.tsx` renders it. A missed departure offers a new connection (one request, user-initiated).
+- Route drawing, the fit and the start marker are `ui/useRouteLayer.ts`, so `App.tsx` stays the wiring.
 - Guidance is `core/nav.ts`: pure, fed fixes and time, covered by replay tests. The UI only subscribes it to location (`useLocation().subscribe`) and renders `NavState`.
 - Keep each file under 800 lines; split before adding to it.
 
@@ -29,7 +30,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 
 - Storage keys follow `kosmos.<name>.v<N>` (`kosmos.view.v1`). Never rename an existing key: bump the version and migrate.
 - Network calls go only to OpenFreeMap, Photon, the FOSSGIS Valhalla router and Transitous (README → Privacy, CSP in `index.html`).
-- Transitous (`core/transit.ts`) is volunteer-run too: one plan request per trip, travel-mode or departure change (the time field settles 800 ms first), never polled. The Android app names itself with a User-Agent via `CapacitorHttp`; browsers send their Referer. `Mode` (road: Valhalla, turn-by-turn in `core/nav.ts`) vs `TravelMode` (adds `transit`: guided by `core/ride.ts`).
+- Transitous (`core/transit.ts`) is volunteer-run too: one plan request per trip, travel-mode or departure change (the time field settles 800 ms first); while guiding, at most one `stoptimes` check per ride, in the last 10 min before boarding and not within 3 min of planning (`ui/useRide.ts`). Never polled. Requests go through `ui/http.ts`. The Android app names itself with a User-Agent via `CapacitorHttp`; browsers send their Referer. `Mode` (road: Valhalla, turn-by-turn in `core/nav.ts`) vs `TravelMode` (adds `transit`: guided by `core/ride.ts`).
 - The router is a volunteer service under fair use: one request per trip or travel-mode change, re-requested only when the start moves more than 150 m (`ui/useRoute.ts`), and while navigating only on a confirmed off-route, at most every 30 s (`ui/useNav.ts`). Never poll it.
 - No user-facing string is hard-coded. Add it to `src/i18n/en.ts` and `de.ts`.
 - Android app ID `io.github.jibes.kosmos` and the release key are permanent; changing either breaks updates for installed users.
@@ -45,7 +46,6 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 ## Deviations
 
 - `android.yml` uses the runner's preinstalled JDK 21 and Android SDK instead of setup actions, and boots the emulator with the SDK's own tools instead of `android-emulator-runner` (fewer third-party actions to pin).
-- `upload-artifact` stays on a tag, as in the apps-data templates (TODO pin).
 - Fonts and tiles for scripts beyond Latin come from OpenFreeMap's glyph server at runtime; self-hosting all of Noto would add tens of MB.
 
 ## Done checklist (before every push)

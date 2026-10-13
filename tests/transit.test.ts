@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { encodePolyline } from '../src/core/route';
-import { clockValue, departureAt, parseMotis, textOn, transitUrl } from '../src/core/transit';
+import {
+  clockValue,
+  departureAt,
+  parseMotis,
+  stopTimesUrl,
+  textOn,
+  transitUrl,
+  withDeparture,
+} from '../src/core/transit';
 
 const at = (hh: number, mm: number, day = 13) => new Date(2026, 9, day, hh, mm).getTime();
 
@@ -57,10 +65,15 @@ describe('parseMotis', () => {
             scheduledStartTime: '2026-10-13T12:00:00Z',
             distance: 420,
             legGeometry: { points: encodePolyline([a, b]), precision: 6 },
+            steps: [
+              { relativeDirection: 'DEPART', distance: 120, streetName: 'Leipziger Straße' },
+              { relativeDirection: 'LEFT', distance: 300, streetName: 'Friedrichstraße' },
+            ],
           },
           {
             mode: 'SUBWAY',
-            from: { name: 'Stadtmitte', lat: b[1], lon: b[0], track: '2' },
+            from: { name: 'Stadtmitte', lat: b[1], lon: b[0], track: '2', stopId: 'de:stadtmitte' },
+            tripId: 'u2-1207',
             to: { name: 'Alexanderplatz', lat: c[1], lon: c[0] },
             startTime: '2026-10-13T12:08:00Z',
             endTime: '2026-10-13T12:20:00Z',
@@ -145,5 +158,91 @@ describe('parseMotis', () => {
     expect(parseMotis(null)).toEqual([]);
     expect(parseMotis({ itineraries: [{ legs: [{ mode: 'BUS' }] }] })).toEqual([]);
     expect(parseMotis({ error: 'oops' })).toEqual([]);
+  });
+
+  it('reads the turns of a walk and the ids of a ride', () => {
+    const [walk, ride] = parseMotis(json)[0].transit!.legs;
+    expect(walk.steps).toEqual([
+      { turn: 'depart', street: 'Leipziger Straße', at: 0 },
+      { turn: 'left', street: 'Friedrichstraße', at: 120 },
+    ]);
+    expect(ride.steps).toEqual([]);
+    expect(ride.trip).toBe('u2-1207');
+    expect(ride.from.id).toBe('de:stadtmitte');
+  });
+});
+
+describe('departure check', () => {
+  const transit = () => parseMotis(JSON.parse(JSON.stringify(sample)))[0].transit!;
+  const sample = {
+    itineraries: [
+      {
+        startTime: '2026-10-13T12:00:00Z',
+        endTime: '2026-10-13T12:30:00Z',
+        legs: [
+          {
+            mode: 'BUS',
+            from: { name: 'A', lat: 52.5, lon: 13.4, stopId: 'a' },
+            to: { name: 'B', lat: 52.5, lon: 13.5 },
+            startTime: '2026-10-13T12:00:00Z',
+            endTime: '2026-10-13T12:20:00Z',
+            scheduledStartTime: '2026-10-13T12:00:00Z',
+            tripId: 't1',
+            intermediateStops: [
+              { name: 'M', lat: 52.5, lon: 13.45, arrival: '2026-10-13T12:10:00Z' },
+            ],
+          },
+          {
+            mode: 'WALK',
+            from: { name: 'B', lat: 52.5, lon: 13.5 },
+            to: { name: 'END', lat: 52.51, lon: 13.5 },
+            startTime: '2026-10-13T12:20:00Z',
+            endTime: '2026-10-13T12:30:00Z',
+          },
+        ],
+      },
+    ],
+  };
+
+  it('asks the boarding stop for departures around the scheduled time', () => {
+    const url = new URL(stopTimesUrl(transit().legs[0], 'de')!);
+    expect(url.pathname).toBe('/api/v5/stoptimes');
+    expect(url.searchParams.get('stopId')).toBe('a');
+    expect(url.searchParams.get('time')).toBe('2026-10-13T11:55:00.000Z');
+    expect(stopTimesUrl(transit().legs[1], 'de')).toBeNull();
+  });
+
+  it('moves the ride and the walk after it to the live departure', () => {
+    const live = withDeparture(transit(), 0, {
+      stopTimes: [
+        { tripId: 'other', place: { departure: '2026-10-13T12:01:00Z' } },
+        {
+          tripId: 't1',
+          place: {
+            departure: '2026-10-13T12:04:00Z',
+            scheduledDeparture: '2026-10-13T12:00:00Z',
+            track: '7',
+          },
+        },
+      ],
+    })!;
+    const [ride, walk] = live.legs;
+    expect(ride).toMatchObject({ delay: 4, from: { track: '7' }, cancelled: false });
+    expect(ride.start).toBe(Date.parse('2026-10-13T12:04:00Z'));
+    expect(ride.end).toBe(Date.parse('2026-10-13T12:24:00Z'));
+    expect(ride.via[0].arrival).toBe(Date.parse('2026-10-13T12:14:00Z'));
+    expect(walk.end).toBe(Date.parse('2026-10-13T12:34:00Z'));
+    expect(live.end).toBe(walk.end);
+  });
+
+  it('reports a cancellation and ignores an answer without the trip', () => {
+    const cancelled = withDeparture(transit(), 0, {
+      stopTimes: [
+        { tripId: 't1', tripCancelled: true, place: { departure: '2026-10-13T12:00:00Z' } },
+      ],
+    });
+    expect(cancelled?.legs[0].cancelled).toBe(true);
+    expect(withDeparture(transit(), 0, { stopTimes: [] })).toBeNull();
+    expect(withDeparture(transit(), 0, null)).toBeNull();
   });
 });

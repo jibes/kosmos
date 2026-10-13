@@ -5,12 +5,12 @@ import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
 import { COMPASS_BELOW_MS, travelHeading } from './core/compass';
 import { navZoom, offRouteLimit, type NavState } from './core/nav';
 import type { Mode, Route, TravelMode } from './core/route';
-import { LABEL_LAYERS, ROUTE_ALT_LAYER, ROUTE_SOURCE } from './core/style';
+import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
 import { lang, t } from './i18n';
 import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
 import { onLongPress } from './ui/gestures';
-import { pinMarker, startMarker, userMarker } from './ui/markers';
+import { pinMarker, userMarker } from './ui/markers';
 import { isNative } from './ui/native';
 import { NavView } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
@@ -24,6 +24,7 @@ import { useMap } from './ui/useMap';
 import { useNav } from './ui/useNav';
 import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
+import { useRouteLayer } from './ui/useRouteLayer';
 import { useNavTheme } from './ui/useNavTheme';
 import { useTheme } from './ui/useTheme';
 import { systemVoice } from './ui/voice';
@@ -79,7 +80,11 @@ async function fetchPlaces(url: string): Promise<Place[]> {
 export function App() {
   const systemTheme = useTheme();
   const [navigating, setNavigating] = useState(false);
-  const { dark: navDark, update: updateNavTheme } = useNavTheme(navigating);
+  const {
+    dark: navDark,
+    update: updateNavTheme,
+    updateNight: updateRideTheme,
+  } = useNavTheme(navigating);
   const theme = navDark ? 'dark' : systemTheme;
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -369,83 +374,16 @@ export function App() {
   // Route: alternatives under the chosen one; refit only when the trip itself changes.
   const shown = route.routes;
   const chosen = Math.min(active, Math.max(0, shown.length - 1));
-  /** A public transport route draws each ride in its line colour, the walks dashed. */
-  const routeFeatures = useCallback(
-    (i: number): GeoJSON.Feature[] => {
-      const r = shown[i];
-      const alt = i !== chosen;
-      if (alt || !r.transit) {
-        return [
-          {
-            type: 'Feature',
-            properties: { index: i, alt },
-            geometry: { type: 'LineString', coordinates: r.coords },
-          },
-        ];
-      }
-      return [
-        ...r.transit.legs.map((l): GeoJSON.Feature => ({
-          type: 'Feature',
-          properties: { index: i, alt, walk: !l.ride, ...(l.color ? { color: l.color } : {}) },
-          geometry: { type: 'LineString', coordinates: l.coords },
-        })),
-        ...r.transit.legs
-          .filter((l) => l.ride)
-          .flatMap((l) => [l.from, l.to])
-          .map((p): GeoJSON.Feature => ({
-            type: 'Feature',
-            properties: { index: i, alt, stop: true },
-            geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-          })),
-      ];
-    },
-    [shown, chosen],
-  );
-  useEffect(() => {
-    const src = map?.getSource(ROUTE_SOURCE) as maplibregl.GeoJSONSource | undefined;
-    if (!src) return;
-    const order = navigating
-      ? shown.length
-        ? [chosen]
-        : []
-      : shown.map((_, i) => i).sort((a, b) => (a === chosen ? 1 : b === chosen ? -1 : 0));
-    src.setData({ type: 'FeatureCollection', features: order.flatMap((i) => routeFeatures(i)) });
-  }, [map, shown, chosen, navigating, routeFeatures]);
-
-  const fitted = useRef('');
-  useEffect(() => {
-    if (!map || navigating || route.status !== 'ready' || fitted.current === route.key) return;
-    fitted.current = route.key;
-    const [w, s, e, n] = shown.reduce(
-      (b, r) => [
-        Math.min(b[0], r.bbox[0]),
-        Math.min(b[1], r.bbox[1]),
-        Math.max(b[2], r.bbox[2]),
-        Math.max(b[3], r.bbox[3]),
-      ],
-      [180, 90, -180, -90],
-    );
-    // MapLibre adds the camera's standing padding (left by an earlier flyTo or by navigation) to
-    // the fit's own; together they can exceed the screen and the fit is silently dropped.
-    map.stop();
-    map.setPadding(NO_PADDING);
-    map.fitBounds([w, s, e, n], { padding: routePadding(), maxZoom: 17, duration: 1200 });
-  }, [map, navigating, route.status, route.key, shown]);
-  useEffect(() => {
-    if (!trip) fitted.current = '';
-  }, [trip]);
-
-  // A chosen start gets its own marker; "my location" already has the dot.
-  const startPin = useRef<maplibregl.Marker | null>(null);
-  const from = trip?.from;
-  useEffect(() => {
-    if (!map || !from) {
-      startPin.current?.remove();
-      return;
-    }
-    startPin.current ??= startMarker();
-    startPin.current.setLngLat([from.lng, from.lat]).addTo(map);
-  }, [map, from]);
+  useRouteLayer(map, {
+    routes: shown,
+    chosen,
+    navigating,
+    ready: route.status === 'ready',
+    tripKey: route.key,
+    from: trip?.from ?? null,
+    hasTrip: !!trip,
+    padding: routePadding,
+  });
 
   // Navigation: guidance on the device, camera behind the user, the router asked only to reroute.
   const lastSnap = useRef<NavState['snap']>(null);
@@ -498,11 +436,19 @@ export function App() {
   const ride = useRide({
     transit: shown[chosen]?.transit,
     active: riding,
+    fix,
     subscribe,
     voice,
     muted,
-    say: (p) => rideWords(shown[chosen]!.transit!, p, trip?.to.name ?? '', lang),
+    lang,
+    say: (tr, p) => rideWords(tr, p, trip?.to.name ?? '', lang),
   });
+  // Public transport turns the map dark after sunset too; tunnels are the driver's concern.
+  const rideFix = ride?.st.fix;
+  const rideTime = ride?.st.time;
+  useEffect(() => {
+    if (rideFix && rideTime) updateRideTheme(rideFix, rideTime);
+  }, [rideFix, rideTime, updateRideTheme]);
 
   const startNav = () => {
     if (!trip) return;
@@ -600,10 +546,10 @@ export function App() {
     <>
       <div ref={mapEl} className="map" />
       <main className="ui" data-nav={navigating || undefined}>
-        {riding && shown[chosen]?.transit && ride && (
+        {riding && ride && (
           <RideView
-            transit={shown[chosen].transit}
-            st={ride}
+            transit={ride.transit}
+            st={ride.st}
             destination={trip.to.name}
             lang={lang}
             muted={muted}

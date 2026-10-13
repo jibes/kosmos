@@ -2,7 +2,7 @@ import type { RidePrompt, RideState } from '../core/ride';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import type { Transit, TransitLeg } from '../core/transit';
 import { fill, t } from '../i18n';
-import { LocateIcon, ModeIcon } from './icons';
+import { LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { SoundIcon } from './NavView';
 
 interface Props {
@@ -66,9 +66,20 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
   let big = '';
   let title = t.arrived;
   let sub = '';
+  /** Walking with a turn ahead: where to, overall. */
+  let goal = '';
   if (st.phase === 'walk' && leg) {
-    big = formatDistance(st.toGo, lang);
-    title = fill(t.walkTo, { stop: endName(transit, st.leg, destination) });
+    const walkTo = fill(t.walkTo, { stop: endName(transit, st.leg, destination) });
+    if (st.turn) {
+      // The next turn leads, as in road navigation; the stop and its distance follow.
+      icon = <TurnIcon turn={st.turn.turn} size={40} />;
+      big = formatDistance(st.turn.in, lang);
+      title = st.turn.street ?? walkTo;
+      goal = `${walkTo} · ${formatDistance(st.toGo, lang)}`;
+    } else {
+      big = formatDistance(st.toGo, lang);
+      title = walkTo;
+    }
     if (ride && st.missed) sub = fill(t.hasLeft, { line: ride.line ?? t.transit });
     else if (ride)
       sub = `${fill(t.leaves, { line: ride.line ?? t.transit, time: clock(ride.start) })}${platform}`;
@@ -98,6 +109,7 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
         <div>
           {big && <strong>{big}</strong>}
           <p>{title}</p>
+          {goal && <small>{goal}</small>}
           {sub && <small>{sub}</small>}
         </div>
         {st.missed && (

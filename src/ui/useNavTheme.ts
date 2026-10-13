@@ -50,5 +50,10 @@ export function useNavTheme(active: boolean) {
     if (hold > 0 && !night) timer.current = setTimeout(() => setDark(false), hold);
   }, []);
 
-  return { dark: active && dark, update };
+  /** Night alone, for public transport: no route bearing to match tunnels against. */
+  const updateNight = useCallback((p: { lng: number; lat: number }, time: number) => {
+    setDark(isNight(p.lat, p.lng, time));
+  }, []);
+
+  return { dark: active && dark, update, updateNight };
 }
