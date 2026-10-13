@@ -127,6 +127,23 @@ jobs:
       - name: Smoke test
         run: scripts/android-smoke.sh "${{ steps.apk.outputs.file }}"
 
+      # The latest screenshot also goes to the orphan branch ci-smoke (force-pushed, one commit),
+      # so it can be looked at without downloading artifacts.
+      - name: Publish smoke screenshot
+        if: always() && github.ref == 'refs/heads/main' && hashFiles('smoke/screen.png') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dir=$(mktemp -d)
+          cp smoke/screen.png "$dir/screen.png"
+          cp smoke/logcat.txt "$dir/logcat.txt" 2>/dev/null || true
+          cd "$dir"
+          git init -q -b ci-smoke
+          git add -A
+          git -c user.name="github-actions" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Smoke screenshot for $GITHUB_SHA"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-smoke
+
       - if: always()
         # TODO pin to SHA (Dependabot keeps it current), as in apps-data templates
         uses: actions/upload-artifact@v7
