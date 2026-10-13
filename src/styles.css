@@ -888,6 +888,118 @@ button {
   color: var(--accent);
 }
 
+/* ---------- Public transport ---------- */
+
+.depart {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.depart label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.depart input {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.depart button {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.legs {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border-top: 0.5px solid var(--line);
+  font-size: 14px;
+}
+
+.legs li {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.legs .walk {
+  align-items: center;
+  color: var(--muted);
+}
+
+.legs .walk svg {
+  justify-self: center;
+}
+
+.legs .line {
+  justify-self: start;
+  max-width: 52px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: var(--text);
+  color: var(--surface-solid);
+  font-weight: 700;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legs p {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.legs p small,
+.legs .via {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legs .via {
+  display: block;
+  margin: 3px 0 3px calc(var(--clock) + 8px);
+}
+
+/* Wide enough for "10:07 PM" as well as "22:07", so stop names line up. */
+.legs .ride {
+  --clock: 68px;
+}
+
+.legs time {
+  flex: none;
+  min-width: var(--clock);
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.legs time[data-late] {
+  color: #d9480f;
+}
+
+.legs [data-cancelled] {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
 .steps {
   margin-top: 12px;
   border-top: 0.5px solid var(--line);

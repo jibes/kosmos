@@ -1,11 +1,16 @@
 import type { LngLat } from './geo';
 import { parseLanes, type Lane } from './lanes';
+import type { Transit } from './transit';
 
 /** Valhalla on FOSSGIS: the router behind openstreetmap.org's directions. Fair use, no key. */
 export const ROUTER_URL = 'https://valhalla1.openstreetmap.de';
 
+/** Ways the router finds along roads and paths; these can be navigated turn by turn. */
 export type Mode = 'car' | 'bike' | 'foot';
 export const MODES: readonly Mode[] = ['car', 'bike', 'foot'];
+/** What the route card offers: the road modes, and public transport from Transitous. */
+export type TravelMode = Mode | 'transit';
+export const TRAVEL_MODES: readonly TravelMode[] = [...MODES, 'transit'];
 const COSTING: Record<Mode, string> = { car: 'auto', bike: 'bicycle', foot: 'pedestrian' };
 
 /** Languages Valhalla writes instructions in; anything else falls back to English. */
@@ -45,6 +50,8 @@ export interface Route {
   maneuvers: Maneuver[];
   /** [west, south, east, north]. */
   bbox: [number, number, number, number];
+  /** Set for public transport: legs and timetable. Such routes have no maneuvers. */
+  transit?: Transit;
 }
 
 export function routeUrl(from: LngLat, to: LngLat, mode: Mode, lang: string, alternates = 2) {

@@ -87,6 +87,79 @@ function fakeTrip(a: Pt, corner: Pt, b: Pt, speed: number) {
   };
 }
 
+/** A Transitous plan: walk to a stop, ride the U6 with a late start, walk on; or walk all the way. */
+function fakePlan(a: Pt, b: Pt, depart: number) {
+  const iso = (min: number) => new Date(depart + min * 60_000).toISOString();
+  const s1: Pt = [a[0], (a[1] + b[1]) / 2 + 0.002];
+  const s2: Pt = [b[0], s1[1]];
+  const place = (name: string, p: Pt, extra = {}) => ({ name, lon: p[0], lat: p[1], ...extra });
+  const leg = (
+    mode: string,
+    from: object,
+    to: object,
+    m0: number,
+    m1: number,
+    pts: Pt[],
+    extra = {},
+  ) => ({
+    mode,
+    from,
+    to,
+    startTime: iso(m0),
+    endTime: iso(m1),
+    scheduledStartTime: iso(m0),
+    scheduledEndTime: iso(m1),
+    realTime: false,
+    duration: (m1 - m0) * 60,
+    legGeometry: { points: encodePolyline(pts), precision: 6, length: pts.length },
+    ...extra,
+  });
+  return {
+    itineraries: [3, 13].map((t0) => ({
+      startTime: iso(t0),
+      endTime: iso(t0 + 22),
+      duration: 22 * 60,
+      transfers: 0,
+      legs: [
+        leg('WALK', place('START', a), place('Stadtmitte', s1), t0, t0 + 5, [a, s1], {
+          distance: 380,
+        }),
+        leg(
+          'SUBWAY',
+          place('Stadtmitte', s1, { track: '2' }),
+          place('Unter den Linden', s2),
+          t0 + 5,
+          t0 + 17,
+          [s1, s2],
+          {
+            displayName: 'U6',
+            headsign: 'Alt-Tegel',
+            routeColor: '8C6DAB',
+            intermediateStops: [{}, {}],
+            // The first train runs two minutes late.
+            ...(t0 === 3 ? { scheduledStartTime: iso(t0 + 3) } : {}),
+          },
+        ),
+        leg('WALK', place('Unter den Linden', s2), place('END', b), t0 + 17, t0 + 22, [s2, b], {
+          distance: 300,
+        }),
+      ],
+    })),
+    direct: [
+      {
+        startTime: iso(0),
+        endTime: iso(48),
+        duration: 48 * 60,
+        transfers: 0,
+        legs: [leg('WALK', place('START', a), place('END', b), 0, 48, [a, b], { distance: 3600 })],
+      },
+    ],
+  };
+}
+
+/** Every Transitous plan request the app made. */
+export const transitRequests: URLSearchParams[] = [];
+
 /** Every routing request the app made, for assertions. */
 export const routeRequests: { costing: string; from: Pt; to: Pt }[] = [];
 
@@ -138,6 +211,23 @@ export async function offlineWorld(context: BrowserContext) {
         trip: fakeTrip(s, [s[0], e[1]], e, speed),
         alternates: [{ trip: fakeTrip(s, [e[0], s[1]], e, speed * 0.8) }],
       }),
+    });
+  });
+  await context.route(/api\.transitous\.org\/api\/v5\/plan/, (route) => {
+    const q = new URL(route.request().url()).searchParams;
+    transitRequests.push(q);
+    const pt = (v: string | null) => (v ?? '0,0').split(',').map(Number).reverse() as Pt;
+    const time = q.get('time');
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(
+        fakePlan(
+          pt(q.get('fromPlace')),
+          pt(q.get('toPlace')),
+          time ? Date.parse(time) : Date.now(),
+        ),
+      ),
     });
   });
   await context.route(/photon\.komoot\.io\/reverse/, (route) => {

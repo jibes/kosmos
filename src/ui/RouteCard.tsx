@@ -1,12 +1,12 @@
 import {
-  MODES,
+  TRAVEL_MODES,
   formatClock,
   formatDistance,
   formatDuration,
   turnOf,
-  type Mode,
   type Route,
   type RouteError,
+  type TravelMode,
 } from '../core/route';
 import { directionsUrl, geoUri } from '../core/geo';
 import type { Place } from '../core/search';
@@ -14,6 +14,7 @@ import { t } from '../i18n';
 import { CloseIcon, LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { isNative } from './native';
 import { Sheet } from './Sheet';
+import { changesText, DepartTime, linesText, TransitCredit, TransitLegs } from './TransitParts';
 import { useNow } from './useNow';
 
 export type RouteStatus = 'locating' | 'loading' | 'ready' | Exclude<RouteError, 'none'> | 'none';
@@ -21,19 +22,23 @@ export type RouteStatus = 'locating' | 'loading' | 'ready' | Exclude<RouteError,
 interface Props {
   to: Place;
   from: Place | null;
-  mode: Mode;
+  mode: TravelMode;
   routes: Route[];
   active: number;
   status: RouteStatus;
   lang: string;
-  onMode: (mode: Mode) => void;
+  onMode: (mode: TravelMode) => void;
   onActive: (index: number) => void;
   onChangeStart: () => void;
   onChangeEnd: () => void;
   onUseMyLocation: () => void;
   onRetry: () => void;
   onClose: () => void;
+  /** Absent where there is no turn-by-turn (public transport). */
   onStart?: () => void;
+  /** Public transport departure; `null` is now. */
+  at: number | null;
+  onDepart: (at: number | null) => void;
 }
 
 const MESSAGE: Partial<Record<RouteStatus, string>> = {
@@ -48,7 +53,14 @@ export function RouteCard(props: Props) {
   const { to, from, mode, routes, active, status, lang } = props;
   const route = status === 'ready' ? routes[active] : undefined;
   const now = useNow();
-  const arrival = route && formatClock(new Date(now + route.duration * 1000), lang);
+  const clock = (ms: number) => formatClock(new Date(ms), lang);
+  const transit = route?.transit;
+  const arrival = route && clock(transit ? transit.end : now + route.duration * 1000);
+  /** "08:12–08:47" for a connection, the distance for a road route. */
+  const span = (r: Route) =>
+    r.transit
+      ? `${clock(r.transit.start)}–${clock(r.transit.end)}`
+      : formatDistance(r.distance, lang);
 
   return (
     <Sheet
@@ -59,7 +71,7 @@ export function RouteCard(props: Props) {
           <>
             <strong className="peek-time">{formatDuration(route.duration)}</strong>
             <span>
-              {formatDistance(route.distance, lang)} · {to.name}
+              {span(route)} · {to.name}
             </span>
           </>
         ) : (
@@ -69,7 +81,7 @@ export function RouteCard(props: Props) {
     >
       <header>
         <div className="modes" role="radiogroup" aria-label={t.travelMode}>
-          {MODES.map((m) => (
+          {TRAVEL_MODES.map((m) => (
             <button
               key={m}
               type="button"
@@ -119,11 +131,15 @@ export function RouteCard(props: Props) {
         </dd>
       </dl>
 
+      {mode === 'transit' && <DepartTime at={props.at} now={now} onDepart={props.onDepart} />}
+
       {route ? (
         <div className="summary">
           <strong>{formatDuration(route.duration)}</strong>
           <span>
-            {formatDistance(route.distance, lang)} · {t.arriveAt} {arrival}
+            {transit
+              ? `${span(route)} · ${changesText(transit)}`
+              : `${formatDistance(route.distance, lang)} · ${t.arriveAt} ${arrival}`}
           </span>
         </div>
       ) : (
@@ -147,14 +163,20 @@ export function RouteCard(props: Props) {
               aria-checked={i === active}
               onClick={() => props.onActive(i)}
             >
-              {formatDuration(r.duration)}
-              <small>{formatDistance(r.distance, lang)}</small>
+              {r.transit ? clock(r.transit.start) : formatDuration(r.duration)}
+              <small>
+                {r.transit
+                  ? `${formatDuration(r.duration)} · ${linesText(r.transit)}`
+                  : formatDistance(r.distance, lang)}
+              </small>
             </button>
           ))}
         </div>
       )}
 
-      {route && (
+      {transit && <TransitLegs transit={transit} lang={lang} />}
+
+      {route && !transit && (
         <details className="steps">
           <summary>
             {t.steps} <small>{route.maneuvers.length}</small>
@@ -184,6 +206,7 @@ export function RouteCard(props: Props) {
           </button>
         )}
       </div>
+      {mode === 'transit' && <TransitCredit />}
       <a
         className="quiet-link"
         href={isNative ? geoUri(to, to.name) : directionsUrl(to)}

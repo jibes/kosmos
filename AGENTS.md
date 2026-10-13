@@ -27,7 +27,8 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 ## Invariants
 
 - Storage keys follow `kosmos.<name>.v<N>` (`kosmos.view.v1`). Never rename an existing key: bump the version and migrate.
-- Network calls go only to OpenFreeMap, Photon and the FOSSGIS Valhalla router (README → Privacy, CSP in `index.html`).
+- Network calls go only to OpenFreeMap, Photon, the FOSSGIS Valhalla router and Transitous (README → Privacy, CSP in `index.html`).
+- Transitous (`core/transit.ts`) is volunteer-run too: one plan request per trip, travel-mode or departure change (the time field settles 800 ms first), never polled. The Android app names itself with a User-Agent via `CapacitorHttp`; browsers send their Referer. Public transport has no turn-by-turn yet: `Mode` (road, navigable) vs `TravelMode` (adds `transit`).
 - The router is a volunteer service under fair use: one request per trip or travel-mode change, re-requested only when the start moves more than 150 m (`ui/useRoute.ts`), and while navigating only on a confirmed off-route, at most every 30 s (`ui/useNav.ts`). Never poll it.
 - No user-facing string is hard-coded. Add it to `src/i18n/en.ts` and `de.ts`.
 - Android app ID `io.github.jibes.kosmos` and the release key are permanent; changing either breaks updates for installed users.

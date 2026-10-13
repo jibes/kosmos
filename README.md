@@ -16,7 +16,7 @@ Designed from first principles: a map app answers six questions, and kOSMos answ
 | Where is X?             | Search (as you type, biased to what you are looking at)                                                                                                                                                                                                                                                                                                          |
 | Where am I?             | The location button: first tap follows you north-up, the second turns the map with the compass; a beam on your dot shows where the phone points                                                                                                                                                                                                                  |
 | What is here?           | Tap a label, or long-press (right-click) anywhere: name, address, coordinates, share, route                                                                                                                                                                                                                                                                      |
-| How do I get there?     | Route from the place card: car, bike or walk, with alternatives, steps, changeable start and destination; "Open in…" hands off to another app                                                                                                                                                                                                                    |
+| How do I get there?     | Route from the place card: car, bike, walk or public transport (connections with lines, platforms, delays; leave now or later), with alternatives, steps, changeable start and destination; "Open in…" hands off to another app                                                                                                                                  |
 | Take me there           | Start: turn-by-turn on the device with spoken prompts, lane guidance where the lane matters (small ahead, large near the turn), heading-up camera (the compass takes over when walking or standing), current speed, automatic rerouting, and a dark map after sunset and in tunnels. Android keeps guiding with the screen off; in the browser keep the app open |
 
 The view is kept between sessions and in the URL (`#map=zoom/lat/lng/bearing/pitch`), so any view is a link.
@@ -30,13 +30,14 @@ SHA-256 (release certificate): 00:82:00:1C:3F:66:FD:D2:C1:4F:80:85:2F:4A:D2:96:9
 
 ## Privacy
 
-No account, no analytics, no tracking. Your location leaves the device only as the start of a route you ask for. The app talks to exactly three services:
+No account, no analytics, no tracking. Your location leaves the device only as the start of a route you ask for. The app talks to exactly four services:
 
 | Service                                                   | For                                     | Sends                                                                              |
 | --------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------- |
 | [OpenFreeMap](https://openfreemap.org)                    | Map tiles, glyphs for non-Latin scripts | Tile coordinates of what you view                                                  |
 | [Photon](https://photon.komoot.io) by komoot              | Search, address lookup                  | Search text, map centre; the point you long-press                                  |
 | [Valhalla](https://valhalla1.openstreetmap.de) by FOSSGIS | Routing                                 | Route start (your location, when you ask for a route), destination and travel mode |
+| [Transitous](https://transitous.org)                      | Public transport                        | Start, destination and departure time of a public transport route you ask for      |
 
 ## Android permissions
 

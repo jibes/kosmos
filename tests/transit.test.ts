@@ -1,0 +1,149 @@
+import { describe, expect, it } from 'vitest';
+import { encodePolyline } from '../src/core/route';
+import { clockValue, departureAt, parseMotis, textOn, transitUrl } from '../src/core/transit';
+
+const at = (hh: number, mm: number, day = 13) => new Date(2026, 9, day, hh, mm).getTime();
+
+describe('transitUrl', () => {
+  it('asks Transitous v5 for a plan, now unless a time is set', () => {
+    const url = new URL(transitUrl({ lng: 13.4, lat: 52.5 }, { lng: 13.5, lat: 52.6 }, 'de'));
+    expect(url.origin + url.pathname).toBe('https://api.transitous.org/api/v5/plan');
+    expect(url.searchParams.get('fromPlace')).toBe('52.500000,13.400000');
+    expect(url.searchParams.get('toPlace')).toBe('52.600000,13.500000');
+    expect(url.searchParams.get('language')).toBe('de');
+    expect(url.searchParams.has('time')).toBe(false);
+    const later = new URL(transitUrl({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, 'en', 0));
+    expect(later.searchParams.get('time')).toBe('1970-01-01T00:00:00.000Z');
+  });
+});
+
+describe('departureAt', () => {
+  it('means today, or tomorrow once the time has passed', () => {
+    const now = at(22, 30);
+    expect(departureAt('23:15', now)).toBe(at(23, 15));
+    expect(departureAt('22:25', now)).toBe(at(22, 25));
+    expect(departureAt('06:00', now)).toBe(at(6, 0, 14));
+    expect(departureAt('nonsense', now)).toBeNull();
+    expect(clockValue(at(7, 5))).toBe('07:05');
+  });
+});
+
+describe('textOn', () => {
+  it('picks the readable ink for a line colour', () => {
+    expect(textOn('#ffd800')).toBe('#000000');
+    expect(textOn('#004e9e')).toBe('#ffffff');
+  });
+});
+
+describe('parseMotis', () => {
+  const a: [number, number] = [13.4, 52.5];
+  const b: [number, number] = [13.41, 52.5];
+  const c: [number, number] = [13.45, 52.52];
+  const d: [number, number] = [13.46, 52.52];
+  const json = {
+    itineraries: [
+      {
+        startTime: '2026-10-13T12:00:00Z',
+        endTime: '2026-10-13T12:25:00Z',
+        duration: 1500,
+        transfers: 0,
+        legs: [
+          {
+            mode: 'WALK',
+            from: { name: 'START', lat: a[1], lon: a[0] },
+            to: { name: 'Stadtmitte', lat: b[1], lon: b[0] },
+            startTime: '2026-10-13T12:00:00Z',
+            endTime: '2026-10-13T12:06:00Z',
+            scheduledStartTime: '2026-10-13T12:00:00Z',
+            distance: 420,
+            legGeometry: { points: encodePolyline([a, b]), precision: 6 },
+          },
+          {
+            mode: 'SUBWAY',
+            from: { name: 'Stadtmitte', lat: b[1], lon: b[0], track: '2' },
+            to: { name: 'Alexanderplatz', lat: c[1], lon: c[0] },
+            startTime: '2026-10-13T12:08:00Z',
+            endTime: '2026-10-13T12:20:00Z',
+            scheduledStartTime: '2026-10-13T12:06:00Z',
+            displayName: 'U2',
+            headsign: 'Pankow',
+            routeColor: 'DA421E',
+            intermediateStops: [{}, {}, {}],
+            legGeometry: { points: encodePolyline([b, c]), precision: 6 },
+          },
+          {
+            mode: 'WALK',
+            from: { name: 'Alexanderplatz', lat: c[1], lon: c[0] },
+            to: { name: 'END', lat: d[1], lon: d[0] },
+            startTime: '2026-10-13T12:20:00Z',
+            endTime: '2026-10-13T12:25:00Z',
+            legGeometry: { points: '', precision: 6 },
+          },
+        ],
+      },
+    ],
+    direct: [
+      {
+        startTime: '2026-10-13T12:00:00Z',
+        endTime: '2026-10-13T12:50:00Z',
+        duration: 3000,
+        transfers: 0,
+        legs: [
+          {
+            mode: 'WALK',
+            from: { name: 'START', lat: a[1], lon: a[0] },
+            to: { name: 'END', lat: d[1], lon: d[0] },
+            startTime: '2026-10-13T12:00:00Z',
+            endTime: '2026-10-13T12:50:00Z',
+            distance: 4100,
+            legGeometry: { points: encodePolyline([a, d]), precision: 6 },
+          },
+        ],
+      },
+    ],
+  };
+
+  it('reads connections, then walking the whole way', () => {
+    const routes = parseMotis(json);
+    expect(routes).toHaveLength(2);
+    const [r, walk] = routes;
+    expect(r.duration).toBe(1500);
+    expect(r.maneuvers).toEqual([]);
+    expect(r.coords).toEqual([a, b, c, d]);
+    expect(r.bbox).toEqual([13.4, 52.5, 13.46, 52.52]);
+    expect(r.transit).toMatchObject({
+      start: Date.parse('2026-10-13T12:00:00Z'),
+      end: Date.parse('2026-10-13T12:25:00Z'),
+      transfers: 0,
+    });
+    expect(walk.transit?.legs).toHaveLength(1);
+    expect(walk.distance).toBe(4100);
+  });
+
+  it('describes each leg as a rider needs it', () => {
+    const [walkIn, ride, walkOut] = parseMotis(json)[0].transit!.legs;
+    expect(walkIn).toMatchObject({ ride: false, distance: 420, delay: 0 });
+    expect(walkIn.line).toBeUndefined();
+    expect(ride).toMatchObject({
+      ride: true,
+      mode: 'SUBWAY',
+      line: 'U2',
+      headsign: 'Pankow',
+      color: '#da421e',
+      textColor: '#ffffff',
+      stops: 3,
+      delay: 2,
+      from: { name: 'Stadtmitte', track: '2' },
+      to: { name: 'Alexanderplatz' },
+    });
+    // No geometry: a straight line between the stops, measured.
+    expect(walkOut.coords).toEqual([c, d]);
+    expect(walkOut.distance).toBeGreaterThan(600);
+  });
+
+  it('survives an empty or broken answer', () => {
+    expect(parseMotis(null)).toEqual([]);
+    expect(parseMotis({ itineraries: [{ legs: [{ mode: 'BUS' }] }] })).toEqual([]);
+    expect(parseMotis({ error: 'oops' })).toEqual([]);
+  });
+});

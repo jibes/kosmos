@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { CENTER } from './fixtures/scene';
-import { SEARCH_HIT, offlineWorld, routeRequests } from './fixtures/offline-world';
+import { SEARCH_HIT, offlineWorld, routeRequests, transitRequests } from './fixtures/offline-world';
 
 declare global {
   interface Window {
@@ -205,6 +205,58 @@ test.describe('map', () => {
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Brandenburg an der Havel');
   });
 
+  test('plans public transport, now or at a chosen time', async ({ page, context }, info) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    const asked = transitRequests.length;
+    await card.getByRole('radio', { name: 'Public transport' }).click();
+
+    const legs = card.locator('.legs');
+    await expect(legs.locator('.line').first()).toHaveText('U6');
+    await expect(legs).toContainText('Platform 2');
+    await expect(legs).toContainText('→ Alt-Tegel · 3 stops · +2 min late');
+    await expect(legs.locator('.ride time').first()).toHaveAttribute('data-late');
+    await expect(legs.locator('.walk')).toHaveCount(2);
+    await expect(card.locator('.summary')).toContainText('No change');
+    // Two connections and walking the whole way.
+    await expect(card.locator('.alts [role=radio]')).toHaveCount(3);
+    await expect(card.getByRole('button', { name: 'Start' })).toHaveCount(0);
+    await expect(card.getByRole('link', { name: 'Timetables via Transitous' })).toBeVisible();
+    expect(transitRequests.length).toBe(asked + 1);
+    expect(transitRequests.at(-1)!.has('time')).toBe(false);
+
+    // The chosen connection draws its ride in the line's colour and its walks dotted.
+    const drawn = () =>
+      page.evaluate(() =>
+        window
+          .kosmos!.querySourceFeatures('route')
+          .map((f) => (f.properties.walk ? 'walk' : (f.properties.color ?? 'line'))),
+      );
+    await expect.poll(drawn).toContain('#8c6dab');
+    await expect.poll(drawn).toContain('walk');
+    await idle(page);
+    await shot(page, info, 'transit');
+
+    // A later departure asks once, after typing settles; "Now" goes back.
+    await card.locator('.depart input').fill('08:30');
+    await expect.poll(() => transitRequests.length).toBe(asked + 2);
+    const time = new Date(transitRequests.at(-1)!.get('time')!);
+    expect([time.getHours(), time.getMinutes()]).toEqual([8, 30]);
+    await card.getByRole('button', { name: 'Now' }).click();
+    await expect.poll(() => transitRequests.length).toBe(asked + 3);
+    expect(transitRequests.at(-1)!.has('time')).toBe(false);
+    await page.waitForTimeout(1200);
+    expect(transitRequests.length).toBe(asked + 3);
+  });
+
   test('navigates turn by turn with spoken prompts', async ({ page, context }, info) => {
     await page.evaluate(() => {
       const spoken: string[] = [];
@@ -294,6 +346,8 @@ test.describe('map', () => {
     }
     await west(500);
     await expect.poll(theme).toBe('light');
+    // Tunnels come from loaded tiles; a phone sends a fix a second, this test only one inside.
+    await idle(page);
     await west(150);
     await expect.poll(theme).toBe('dark');
     expect(await page.evaluate(() => window.kosmos!.getStyle().name)).toBe('kOSMos dark');

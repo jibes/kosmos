@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import type { LaneView } from '../core/lanes';
-import type { Mode, Turn } from '../core/route';
+import type { TravelMode, Turn } from '../core/route';
 
 const Svg = ({ children, size = 20 }: { children: ReactNode; size?: number }) => (
   <svg
@@ -116,7 +116,7 @@ export const TurnIcon = ({ turn, size = 22 }: { turn: Turn; size?: number }) => 
   <Svg size={size}>{TURN_PATHS[turn]}</Svg>
 );
 
-const MODE_PATHS: Record<Mode, ReactNode> = {
+const MODE_PATHS: Record<TravelMode, ReactNode> = {
   car: (
     <>
       <path d="M4 16v-3.5L6.2 7h11.6l2.2 5.5V16" />
@@ -138,9 +138,19 @@ const MODE_PATHS: Record<Mode, ReactNode> = {
       <path d="M9 21l2.2-6.2L14 17v4M11.2 14.8 12.3 9l3 2.5 2.7.8M12.3 9 9.2 10.4 8 13.5" />
     </>
   ),
+  transit: (
+    <>
+      <rect x="6" y="3.5" width="12" height="14" rx="3" />
+      <path d="M6 11h12M9.5 20.5l1-3M14.5 20.5l-1-3" />
+      <circle cx="9.5" cy="14.2" r="0.7" fill="currentColor" />
+      <circle cx="14.5" cy="14.2" r="0.7" fill="currentColor" />
+    </>
+  ),
 };
 
-export const ModeIcon = ({ mode }: { mode: Mode }) => <Svg>{MODE_PATHS[mode]}</Svg>;
+export const ModeIcon = ({ mode, size }: { mode: TravelMode; size?: number }) => (
+  <Svg size={size}>{MODE_PATHS[mode]}</Svg>
+);
 
 /** Lane arrows share one stem from the bottom centre, so several overlay as one painted mark. */
 const LANE_PATHS: Record<LaneView['arrows'][number]['arrow'], string> = {

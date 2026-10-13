@@ -4,7 +4,7 @@ import { distance, type LngLat } from './core/geo';
 import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
 import { COMPASS_BELOW_MS, travelHeading } from './core/compass';
 import { navZoom, offRouteLimit, type NavState } from './core/nav';
-import type { Mode, Route } from './core/route';
+import type { Mode, Route, TravelMode } from './core/route';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER, ROUTE_SOURCE } from './core/style';
 import { lang, t } from './i18n';
 import { About } from './ui/About';
@@ -162,7 +162,7 @@ export function App() {
     setPicking(null);
   }, []);
 
-  const setMode = useCallback((mode: Mode) => {
+  const setMode = useCallback((mode: TravelMode) => {
     setActive(0);
     setTrip((tr) => (tr ? { ...tr, mode } : tr));
   }, []);
@@ -357,6 +357,38 @@ export function App() {
   // Route: alternatives under the chosen one; refit only when the trip itself changes.
   const shown = route.routes;
   const chosen = Math.min(active, Math.max(0, shown.length - 1));
+  /** A public transport route draws each ride in its line colour, the walks dashed. */
+  const routeFeatures = useCallback(
+    (i: number): GeoJSON.Feature[] => {
+      const r = shown[i];
+      const alt = i !== chosen;
+      if (alt || !r.transit) {
+        return [
+          {
+            type: 'Feature',
+            properties: { index: i, alt },
+            geometry: { type: 'LineString', coordinates: r.coords },
+          },
+        ];
+      }
+      return [
+        ...r.transit.legs.map((l): GeoJSON.Feature => ({
+          type: 'Feature',
+          properties: { index: i, alt, walk: !l.ride, ...(l.color ? { color: l.color } : {}) },
+          geometry: { type: 'LineString', coordinates: l.coords },
+        })),
+        ...r.transit.legs
+          .filter((l) => l.ride)
+          .flatMap((l) => [l.from, l.to])
+          .map((p): GeoJSON.Feature => ({
+            type: 'Feature',
+            properties: { index: i, alt, stop: true },
+            geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+          })),
+      ];
+    },
+    [shown, chosen],
+  );
   useEffect(() => {
     const src = map?.getSource(ROUTE_SOURCE) as maplibregl.GeoJSONSource | undefined;
     if (!src) return;
@@ -365,15 +397,8 @@ export function App() {
         ? [chosen]
         : []
       : shown.map((_, i) => i).sort((a, b) => (a === chosen ? 1 : b === chosen ? -1 : 0));
-    src.setData({
-      type: 'FeatureCollection',
-      features: order.map((i) => ({
-        type: 'Feature',
-        properties: { index: i, alt: i !== chosen },
-        geometry: { type: 'LineString', coordinates: shown[i].coords },
-      })),
-    });
-  }, [map, shown, chosen, navigating]);
+    src.setData({ type: 'FeatureCollection', features: order.flatMap((i) => routeFeatures(i)) });
+  }, [map, shown, chosen, navigating, routeFeatures]);
 
   const fitted = useRef('');
   useEffect(() => {
@@ -445,9 +470,11 @@ export function App() {
     setActive(0);
     route.retry();
   }, [route, chosen]);
+  /** Public transport has no turn-by-turn yet, so guidance only ever sees a road mode. */
+  const roadMode: Mode = trip && trip.mode !== 'transit' ? trip.mode : 'car';
   const { nav } = useNav({
     route: navigating ? shown[chosen] : undefined,
-    mode: trip?.mode ?? 'car',
+    mode: roadMode,
     active: navigating,
     subscribe,
     voice,
@@ -538,7 +565,7 @@ export function App() {
         {navigating && shown[chosen] && (
           <NavView
             route={shown[chosen]}
-            mode={trip?.mode ?? 'car'}
+            mode={roadMode}
             nav={nav}
             lang={lang}
             muted={muted}
@@ -572,7 +599,12 @@ export function App() {
               }}
               onRetry={route.retry}
               onClose={closeRoute}
-              onStart={startNav}
+              onStart={trip.mode === 'transit' ? undefined : startNav}
+              at={trip.at ?? null}
+              onDepart={(at) => {
+                setActive(0);
+                setTrip({ ...trip, at });
+              }}
             />
           )}
           {selection && !trip && (

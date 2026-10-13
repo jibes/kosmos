@@ -377,13 +377,16 @@ function roads(p: Palette): LayerSpecification[] {
 function route(p: Palette): LayerSpecification[] {
   const width = (k: number): Expr => expLerp(8, 3 * k, 13, 6 * k, 18, 16 * k);
   const isAlt: Expr = ['==', ['get', 'alt'], true];
+  // Public transport: walks are dotted, rides take their line's colour.
+  const isWalk: Expr = ['==', ['get', 'walk'], true];
+  const main: Expr = ['all', isLine, ['!', isAlt], ['!', isWalk]];
   const join = { 'line-cap': 'round', 'line-join': 'round' } as const;
   return [
     {
       id: ROUTE_ALT_LAYER,
       type: 'line',
       source: ROUTE_SOURCE,
-      filter: isAlt,
+      filter: ['all', isLine, isAlt],
       layout: join,
       paint: { 'line-color': p.routeAlt, 'line-width': width(0.8) },
     },
@@ -391,17 +394,37 @@ function route(p: Palette): LayerSpecification[] {
       id: 'route-casing',
       type: 'line',
       source: ROUTE_SOURCE,
-      filter: ['!', isAlt],
+      filter: main,
       layout: join,
       paint: { 'line-color': p.routeCasing, 'line-width': width(1.45) },
+    },
+    {
+      id: 'route-walk',
+      type: 'line',
+      source: ROUTE_SOURCE,
+      filter: ['all', isLine, ['!', isAlt], isWalk],
+      layout: join,
+      paint: { 'line-color': p.accent, 'line-width': width(0.6), 'line-dasharray': [0.1, 1.8] },
     },
     {
       id: 'route-line',
       type: 'line',
       source: ROUTE_SOURCE,
-      filter: ['!', isAlt],
+      filter: main,
       layout: join,
-      paint: { 'line-color': p.accent, 'line-width': width(1) },
+      paint: { 'line-color': ['coalesce', ['get', 'color'], p.accent], 'line-width': width(1) },
+    },
+    {
+      id: 'route-stops',
+      type: 'circle',
+      source: ROUTE_SOURCE,
+      filter: ['all', isPoint, ['!', isAlt]],
+      paint: {
+        'circle-radius': expLerp(10, 3, 16, 6),
+        'circle-color': p.routeCasing,
+        'circle-stroke-color': p.label,
+        'circle-stroke-width': 2,
+      },
     },
   ];
 }
