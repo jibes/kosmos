@@ -8,7 +8,7 @@ One map, one search field, one location button. Everything else is the map.
 
 ## What it does
 
-Designed from first principles: a map app answers five questions, and kOSMos answers each in exactly one way.
+Designed from first principles: a map app answers six questions, and kOSMos answers each in exactly one way.
 
 | Question                | Answer                                                                                                                                                                                                                                         |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
