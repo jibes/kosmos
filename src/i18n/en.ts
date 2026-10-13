@@ -57,6 +57,10 @@ export const en = {
   remaining: 'remaining',
   navNotifTitle: 'kOSMos is guiding you',
   navNotifText: 'Directions continue with the screen off. End navigation in the app.',
+  minimize: 'Make smaller',
+  expand: 'Show details',
+  searchEnd: 'Search destination',
+  cancel: 'Cancel',
   hint: 'Long-press anywhere to drop a pin',
 };
 

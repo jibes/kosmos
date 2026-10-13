@@ -59,5 +59,9 @@ export const de = {
   remaining: 'verbleibend',
   navNotifTitle: 'kOSMos navigiert',
   navNotifText: 'Ansagen laufen auch bei ausgeschaltetem Bildschirm weiter. Beenden in der App.',
+  minimize: 'Verkleinern',
+  expand: 'Details zeigen',
+  searchEnd: 'Ziel suchen',
+  cancel: 'Abbrechen',
   hint: 'Lange tippen, um eine Markierung zu setzen',
 } satisfies Catalogue;

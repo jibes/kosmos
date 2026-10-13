@@ -39,6 +39,18 @@ export function Controls({ map, status, following, onLocate }: Props) {
     <div className="controls">
       <button
         type="button"
+        className="ctl surface"
+        aria-label={label}
+        title={label}
+        aria-pressed={following}
+        data-state={status}
+        data-following={following || undefined}
+        onClick={onLocate}
+      >
+        {blocked ? <NoLocationIcon /> : <LocateIcon filled={following} />}
+      </button>
+      <button
+        type="button"
         className="ctl surface compass"
         data-hidden={!tilted || undefined}
         aria-label={t.resetNorth}
@@ -52,18 +64,6 @@ export function Controls({ map, status, following, onLocate }: Props) {
         >
           <NeedleIcon />
         </span>
-      </button>
-      <button
-        type="button"
-        className="ctl surface"
-        aria-label={label}
-        title={label}
-        aria-pressed={following}
-        data-state={status}
-        data-following={following || undefined}
-        onClick={onLocate}
-      >
-        {blocked ? <NoLocationIcon /> : <LocateIcon filled={following} />}
       </button>
     </div>
   );

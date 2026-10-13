@@ -55,11 +55,13 @@ const storedMuted = () => {
   }
 };
 
-/** Routes leave room for the taller route card. */
-const routePadding = () =>
-  wide()
-    ? { top: 64, bottom: 64, left: 460, right: 64 }
-    : { top: 96, bottom: 380, left: 40, right: 40 };
+/** Fits a route into the map area the route card leaves free, measured, not guessed. */
+const routePadding = () => {
+  const panel = document.querySelector('.panel')?.getBoundingClientRect();
+  if (wide()) return { top: 64, bottom: 64, left: (panel?.right ?? 420) + 48, right: 96 };
+  const bottom = panel && panel.height ? innerHeight - panel.top + 24 : 380;
+  return { top: 96, bottom: Math.min(bottom, innerHeight - 220), left: 40, right: 80 };
+};
 
 async function fetchPlaces(url: string): Promise<Place[]> {
   const res = await fetch(url);
@@ -78,7 +80,12 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [active, setActive] = useState(0);
-  const [pickingStart, setPickingStart] = useState(false);
+  /** Which end of the route the search bar is choosing, if any. */
+  const [picking, setPicking] = useState<'start' | 'end' | null>(null);
+  const pickingRef = useRef(picking);
+  useEffect(() => {
+    pickingRef.current = picking;
+  }, [picking]);
   const [navigating, setNavigating] = useState(false);
   const [navFollow, setNavFollow] = useState(true);
   const [muted, setMuted] = useState(storedMuted);
@@ -126,7 +133,7 @@ export function App() {
     pending.current++;
     setSelection(null);
     setTrip(null);
-    setPickingStart(false);
+    setPicking(null);
   }, []);
 
   const openRoute = useCallback(() => {
@@ -140,7 +147,7 @@ export function App() {
   const closeRoute = useCallback(() => {
     setNavigating(false);
     setTrip(null);
-    setPickingStart(false);
+    setPicking(null);
   }, []);
 
   const setMode = useCallback((mode: Mode) => {
@@ -230,9 +237,15 @@ export function App() {
     (place: Place) => {
       if (!map) return;
       if (tripRef.current) {
-        setPickingStart(false);
+        const end = pickingRef.current;
+        setPicking(null);
         setActive(0);
-        setTrip({ ...tripRef.current, from: place });
+        if (end === 'end') {
+          setTrip({ ...tripRef.current, to: place });
+          select(place);
+        } else {
+          setTrip({ ...tripRef.current, from: place });
+        }
         return;
       }
       setFollowing(false);
@@ -461,7 +474,7 @@ export function App() {
           />
         )}
         <div className="panel" hidden={navigating}>
-          {trip && !pickingStart && (
+          {trip && !picking && (
             <RouteCard
               to={trip.to}
               from={trip.from}
@@ -472,7 +485,8 @@ export function App() {
               lang={lang}
               onMode={setMode}
               onActive={setActive}
-              onChangeStart={() => setPickingStart(true)}
+              onChangeStart={() => setPicking('start')}
+              onChangeEnd={() => setPicking('end')}
               onUseMyLocation={() => {
                 start();
                 setTrip({ ...trip, from: null });
@@ -492,16 +506,19 @@ export function App() {
               onRoute={openRoute}
             />
           )}
-          {(!trip || pickingStart) && (
+          {(!trip || picking) && (
             <SearchBar
-              key={pickingStart ? 'start' : 'place'}
+              key={picking ?? 'place'}
               lang={lang}
               bias={bias}
               onPick={pick}
-              collapsed={!!selection && !pickingStart}
-              onFocus={pickingStart ? () => undefined : clear}
-              placeholder={pickingStart ? t.searchStart : undefined}
-              autoFocus={pickingStart}
+              collapsed={!!selection && !picking}
+              onFocus={picking ? () => undefined : clear}
+              placeholder={
+                picking === 'start' ? t.searchStart : picking === 'end' ? t.searchEnd : undefined
+              }
+              autoFocus={!!picking}
+              onCancel={picking ? () => setPicking(null) : undefined}
             />
           )}
         </div>

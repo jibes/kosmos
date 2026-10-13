@@ -140,18 +140,55 @@ test.describe('map', () => {
     await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
     await expect.poll(() => routeRequests.at(-1)?.costing).toBe('pedestrian');
 
-    await card.locator('.end-btn').click();
+    await card.locator('.end-btn').first().click();
     const start = page.getByRole('combobox', { name: 'Search start' });
     await expect(start).toBeFocused();
     await start.fill('brandenburg');
     await page.getByRole('option').nth(1).click();
-    await expect(card.locator('.end-btn')).toHaveText('Brandenburg an der Havel');
+    await expect(card.locator('.end-btn').first()).toHaveText('Brandenburg an der Havel');
     await expect.poll(() => routeRequests.at(-1)?.from[0]).toBeCloseTo(13.0, 3);
     await expect(page.locator('.start-dot')).toHaveCount(1);
+    // The whole new route is in view once it is calculated.
+    await idle(page);
+    // The camera fits the whole new route clear of the card (slow on emulated phones).
+    await page.waitForFunction(
+      ([a, b]) => {
+        const m = window.kosmos!;
+        if (m.isMoving()) return false;
+        const card = document.querySelector('.panel')!.getBoundingClientRect();
+        return [a, b].every(([lng, lat]) => {
+          const p = m.project([lng, lat]);
+          const inMap = p.x >= 0 && p.x <= innerWidth && p.y >= 0 && p.y <= innerHeight;
+          const underCard =
+            p.x >= card.left && p.x <= card.right && p.y >= card.top && p.y <= card.bottom;
+          return inMap && !underCard;
+        });
+      },
+      [
+        [13.0, 52.4],
+        [SEARCH_HIT.lng, SEARCH_HIT.lat],
+      ] as [number, number][],
+      { timeout: 15_000, polling: 250 },
+    );
+
+    // Changing the start can be abandoned.
+    await card.locator('.end-btn').first().click();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(card.locator('.end-btn').first()).toHaveText('Brandenburg an der Havel');
+
+    // The destination can be changed from the route view too.
+    await card.locator('.end-btn').nth(1).click();
+    const dest = page.getByRole('combobox', { name: 'Search destination' });
+    await expect(dest).toBeFocused();
+    await dest.fill('brandenburg');
+    await page.getByRole('option', { name: /Havel/ }).click();
+    await expect(card.locator('.end-btn').nth(1)).toHaveText('Brandenburg an der Havel');
+    await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(13.0, 4);
 
     await card.getByRole('button', { name: /close/i }).click();
     await expect(card).toHaveCount(0);
-    await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    // The place card follows the new destination.
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Brandenburg an der Havel');
   });
 
   test('navigates turn by turn with spoken prompts', async ({ page, context }, info) => {
@@ -205,6 +242,45 @@ test.describe('map', () => {
     await page.getByRole('button', { name: 'End' }).click();
     await expect(banner).toHaveCount(0);
     await expect(page.locator('.card.route')).toBeVisible();
+  });
+
+  test('Enter jumps to the first result, even before results load', async ({ page }) => {
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    await input.press('Enter');
+    await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    await idle(page);
+    const c = await page.evaluate(() => window.kosmos!.getCenter());
+    expect(Math.abs(c.lng - SEARCH_HIT.lng)).toBeLessThan(0.01);
+  });
+
+  test('pulls a card down to a strip and back', async ({ page }, info) => {
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    const card = page.locator('.card');
+    await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    const grab = card.locator('.grab');
+    const box = (await grab.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + 60, { steps: 4 });
+    await page.mouse.move(x, y + 140, { steps: 4 });
+    await page.mouse.up();
+    await expect(card).toHaveAttribute('data-min');
+    await expect(card.locator('.peek')).toHaveText(SEARCH_HIT.name);
+    await expect(card.getByRole('heading')).toHaveCount(0);
+    await shot(page, info, 'minimised');
+    await card.locator('.peek').click();
+    await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+  });
+
+  test('keeps the location button above the compass', async ({ page }) => {
+    const order = await page
+      .locator('.controls > button')
+      .evaluateAll((els) => els.map((e) => e.classList.contains('compass')));
+    expect(order).toEqual([false, true]);
   });
 
   test('drops a pin and looks up the address', async ({ page }) => {

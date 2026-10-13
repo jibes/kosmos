@@ -4,6 +4,7 @@ import type { Place } from '../core/search';
 import { t } from '../i18n';
 import { CloseIcon, RouteIcon, ShareIcon } from './icons';
 import { copy, share } from './native';
+import { Sheet } from './Sheet';
 
 interface Props {
   place: Place;
@@ -32,7 +33,7 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) 
   };
 
   return (
-    <section className="card surface" aria-live="polite" aria-busy={loading}>
+    <Sheet className="card surface" busy={loading} peek={<strong>{place.name}</strong>}>
       <header>
         <div className="card-title">
           <h2>{place.name}</h2>
@@ -59,6 +60,6 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) 
           {t.share}
         </button>
       </div>
-    </section>
+    </Sheet>
   );
 }

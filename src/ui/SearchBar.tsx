@@ -16,6 +16,8 @@ interface Props {
   /** Overrides the default "Search places" prompt, e.g. when choosing a route start. */
   placeholder?: string;
   autoFocus?: boolean;
+  /** Shows a Cancel button; also what Escape does on an empty field. */
+  onCancel?: () => void;
 }
 
 const DEBOUNCE_MS = 200;
@@ -35,6 +37,7 @@ export function SearchBar({
   onFocus,
   placeholder,
   autoFocus,
+  onCancel,
 }: Props) {
   const [query, setQuery] = useState('');
   const [response, setResponse] = useState<Response | null>(null);
@@ -42,6 +45,12 @@ export function SearchBar({
   const [focused, setFocused] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const listId = useId();
+  /** Enter pressed before results arrived: jump to the first one when they do. */
+  const jumpFor = useRef<string | null>(null);
+  const onPickRef = useRef(onPick);
+  useEffect(() => {
+    onPickRef.current = onPick;
+  });
 
   const q = query.trim();
   const key = `${lang}|${q}`;
@@ -68,6 +77,13 @@ export function SearchBar({
         if (cache.size > 64) cache.delete(cache.keys().next().value as string);
         cache.set(key, places);
         setResponse({ key, places, status: 'done' });
+        if (jumpFor.current === key) {
+          jumpFor.current = null;
+          if (places[0]) {
+            onPickRef.current(places[0]);
+            input.current?.blur();
+          }
+        }
       } catch (e) {
         if (ctrl.signal.aborted) return;
         console.warn('search failed', e);
@@ -101,10 +117,14 @@ export function SearchBar({
       e.preventDefault();
       const n = results.length;
       if (n) setActive((active + (e.key === 'ArrowDown' ? 1 : n - 1)) % n);
-    } else if (e.key === 'Enter' && results[active]) {
-      pick(results[active]);
+    } else if (e.key === 'Enter') {
+      // Only results for exactly this query; stale ones from the last query would jump wrong.
+      const hit = current?.places[cursor.key === key ? active : 0];
+      if (hit) pick(hit);
+      else if (q.length >= 2 && status === 'loading') jumpFor.current = key;
     } else if (e.key === 'Escape') {
       if (query) setQuery('');
+      else if (onCancel) onCancel();
       else input.current?.blur();
     }
   };
@@ -173,6 +193,16 @@ export function SearchBar({
           </button>
         )}
         {status === 'loading' && <span className="spinner" aria-hidden="true" />}
+        {onCancel && (
+          <button
+            type="button"
+            className="bar-cancel"
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={onCancel}
+          >
+            {t.cancel}
+          </button>
+        )}
       </label>
     </div>
   );

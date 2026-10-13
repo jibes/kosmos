@@ -13,6 +13,7 @@ import type { Place } from '../core/search';
 import { t } from '../i18n';
 import { CloseIcon, LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { isNative } from './native';
+import { Sheet } from './Sheet';
 import { useNow } from './useNow';
 
 export type RouteStatus = 'locating' | 'loading' | 'ready' | Exclude<RouteError, 'none'> | 'none';
@@ -28,6 +29,7 @@ interface Props {
   onMode: (mode: Mode) => void;
   onActive: (index: number) => void;
   onChangeStart: () => void;
+  onChangeEnd: () => void;
   onUseMyLocation: () => void;
   onRetry: () => void;
   onClose: () => void;
@@ -49,7 +51,22 @@ export function RouteCard(props: Props) {
   const arrival = route && formatClock(new Date(now + route.duration * 1000), lang);
 
   return (
-    <section className="card route surface" aria-live="polite" aria-busy={status === 'loading'}>
+    <Sheet
+      className="card route surface"
+      busy={status === 'loading'}
+      peek={
+        route ? (
+          <>
+            <strong className="peek-time">{formatDuration(route.duration)}</strong>
+            <span>
+              {formatDistance(route.distance, lang)} · {to.name}
+            </span>
+          </>
+        ) : (
+          <span>{MESSAGE[status]}</span>
+        )
+      }
+    >
       <header>
         <div className="modes" role="radiogroup" aria-label={t.travelMode}>
           {MODES.map((m) => (
@@ -95,7 +112,11 @@ export function RouteCard(props: Props) {
           )}
         </dd>
         <dt>{t.to}</dt>
-        <dd className="end-to">{to.name}</dd>
+        <dd>
+          <button type="button" className="end-btn" onClick={props.onChangeEnd}>
+            {to.name}
+          </button>
+        </dd>
       </dl>
 
       {route ? (
@@ -162,15 +183,15 @@ export function RouteCard(props: Props) {
             {t.start}
           </button>
         )}
-        <a
-          className="action"
-          href={isNative ? geoUri(to, to.name) : directionsUrl(to)}
-          target={isNative ? undefined : '_blank'}
-          rel="noreferrer"
-        >
-          {t.openIn}
-        </a>
       </div>
-    </section>
+      <a
+        className="quiet-link"
+        href={isNative ? geoUri(to, to.name) : directionsUrl(to)}
+        target={isNative ? undefined : '_blank'}
+        rel="noreferrer"
+      >
+        {t.openIn}
+      </a>
+    </Sheet>
   );
 }
