@@ -22,7 +22,7 @@ The view is kept between sessions and in the URL (`#map=zoom/lat/lng/bearing/pit
 ## Install
 
 - **Web:** <https://jibes.github.io/kosmos/>, installable as a PWA; the app shell works offline, and areas you have viewed stay cached.
-- **Android:** [Releases](https://github.com/jibes/kosmos/releases), or with [Obtainium](https://obtainium.imranr.dev/): add `https://github.com/jibes/kosmos`.
+- **Android:** [Releases](https://github.com/jibes/kosmos/releases), or with [Obtainium](https://obtainium.imranr.dev/): add `https://github.com/jibes/kosmos`, or on the phone tap [add to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/jibes/kosmos).
 
 SHA-256 (release certificate): 00:82:00:1C:3F:66:FD:D2:C1:4F:80:85:2F:4A:D2:96:95:A4:91:E5:51:98:5D:DB:7C:99:A5:5F:77:B5:E8:5F
 
