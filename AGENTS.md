@@ -37,11 +37,12 @@ Four jobs, one control each: **view** (the map), **find** (search), **locate** (
 
 - `android.yml` uses the runner's preinstalled JDK 21 and Android SDK instead of setup actions (fewer third-party actions to pin).
 - `upload-artifact` stays on a tag, as in the apps-data templates (TODO pin).
+- `@playwright/test` is pinned (exact) to the version whose Chromium ships in cloud sessions (`/opt/pw-browsers`). The Chromium of 1.64 rendered no WebGL in CI, so the map never loaded; bump only together with a green CI e2e run.
 - Fonts and tiles for scripts beyond Latin come from OpenFreeMap's glyph server at runtime; self-hosting all of Noto would add tens of MB.
 
 ## Done checklist (before every push)
 
 1. `npm run check` (typecheck, lint, format:check, unit)
-2. `npm run build && npm run e2e` (cloud sessions: `CHROMIUM_PATH=/opt/pw-browsers/chromium-*/chrome-linux/chrome`)
+2. `npm run build && npm run e2e`
 3. If you fixed a bug, a test now covers it.
 4. README is updated if you changed behaviour, scripts or services.

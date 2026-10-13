@@ -17,14 +17,35 @@ async function shot(page: Page, info: TestInfo, name: string) {
     writeFileSync(`${process.env.SHOTS}/${info.project.name}-${name}.png`, body);
 }
 
+const consoleErrors = new WeakMap<Page, string[]>();
+
+/** Waits for a settled map; on timeout, fails with the page's errors (e.g. no WebGL) instead. */
 async function idle(page: Page) {
-  await page.waitForFunction(() => {
-    const m = window.kosmos;
-    return !!m && m.loaded() && m.areTilesLoaded() && !m.isMoving();
-  });
+  try {
+    await page.waitForFunction(
+      () => {
+        const m = window.kosmos;
+        return !!m && m.loaded() && m.areTilesLoaded() && !m.isMoving();
+      },
+      undefined,
+      { timeout: 20_000 },
+    );
+  } catch (e) {
+    const errors = consoleErrors.get(page) ?? [];
+    throw new Error(`map never settled; page errors:\n${errors.join('\n') || '(none)'}`, {
+      cause: e,
+    });
+  }
   // Symbol placement fades in after the map reports idle.
   await page.waitForTimeout(400);
 }
+
+test.beforeEach(({ page }) => {
+  const errors: string[] = [];
+  consoleErrors.set(page, errors);
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('pageerror', (e) => errors.push(e.message));
+});
 
 async function jump(
   page: Page,
