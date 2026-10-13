@@ -14,6 +14,7 @@ import { pinMarker, startMarker, userMarker } from './ui/markers';
 import { isNative } from './ui/native';
 import { NavView } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
+import { RideView, rideWords } from './ui/RideView';
 import { RouteCard } from './ui/RouteCard';
 import { SearchBar } from './ui/SearchBar';
 import { UpdateToast } from './ui/UpdateToast';
@@ -21,6 +22,7 @@ import { useLocation } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
 import { useMap } from './ui/useMap';
 import { useNav } from './ui/useNav';
+import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useNavTheme } from './ui/useNavTheme';
 import { useTheme } from './ui/useTheme';
@@ -105,11 +107,15 @@ export function App() {
   const route = useRoute(trip, fix, lang, navigating);
   const voice = useMemo(() => systemVoice(navigator.language || lang), []);
   const navRef = useRef(false);
+  /** Road navigation owns the camera and the arrow; public transport only follows the dot. */
+  const riding = navigating && trip?.mode === 'transit';
+  const roadNavRef = useRef(false);
   const navFollowRef = useRef(true);
   useEffect(() => {
     navRef.current = navigating;
+    roadNavRef.current = navigating && !riding;
     navFollowRef.current = navFollow;
-  }, [navigating, navFollow]);
+  }, [navigating, navFollow, riding]);
   const tripRef = useRef(trip);
   useEffect(() => {
     tripRef.current = trip;
@@ -297,15 +303,21 @@ export function App() {
   }, [map]);
 
   useEffect(() => {
-    if (!map || !fix || navRef.current) return;
+    if (!map || !fix || roadNavRef.current) return;
     me.current?.update(fix);
     if (flyOnFix.current) {
       flyOnFix.current = false;
       map.flyTo({ center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: 1800 });
     } else if (followRef.current === 'position') {
-      // Never cut short the fly-in after tapping locate: easing only the centre would stop it
-      // at globe zoom. The next fix catches up.
-      if (!map.isMoving()) map.easeTo({ center: [fix.lng, fix.lat], duration: 800 });
+      // Never cut short a running camera move (the fly-in after tapping locate would stop at
+      // globe zoom); catch up when it ends, since underground no further fix may come.
+      const follow = () => map.easeTo({ center: [fix.lng, fix.lat], duration: 800 });
+      if (!map.isMoving()) follow();
+      else {
+        map.once('moveend', () => {
+          if (followRef.current === 'position' && !map.isMoving()) follow();
+        });
+      }
     } else if (followRef.current === 'compass') {
       // The compass turns the map every frame; an ease here would fight it, so the centre jumps.
       if (!map.isMoving()) map.jumpTo({ center: [fix.lng, fix.lat] });
@@ -320,7 +332,7 @@ export function App() {
     let latest = 0;
     const off = compass.subscribe((h) => {
       latest = h;
-      if (navRef.current) {
+      if (roadNavRef.current) {
         // Slow or standing: GPS course is noise, so the arrow shows where the phone faces.
         if (lastNavSpeed.current < COMPASS_BELOW_MS) me.current?.heading(h);
         return;
@@ -473,9 +485,9 @@ export function App() {
   /** Public transport has no turn-by-turn yet, so guidance only ever sees a road mode. */
   const roadMode: Mode = trip && trip.mode !== 'transit' ? trip.mode : 'car';
   const { nav } = useNav({
-    route: navigating ? shown[chosen] : undefined,
+    route: navigating && !riding ? shown[chosen] : undefined,
     mode: roadMode,
-    active: navigating,
+    active: navigating && !riding,
     subscribe,
     voice,
     muted,
@@ -483,8 +495,34 @@ export function App() {
     onReroute: reroute,
   });
 
+  const ride = useRide({
+    transit: shown[chosen]?.transit,
+    active: riding,
+    subscribe,
+    voice,
+    muted,
+    say: (p) => rideWords(shown[chosen]!.transit!, p, trip?.to.name ?? '', lang),
+  });
+
   const startNav = () => {
     if (!trip) return;
+    if (trip.mode === 'transit') {
+      // The connection stays as planned, from wherever it starts; the map follows the dot.
+      start();
+      void compass.start();
+      setNavigating(true);
+      setFollow('position');
+      if (!isNative) showToast(t.keepOpen);
+      map?.easeTo({
+        ...(fix ? { center: [fix.lng, fix.lat] as [number, number] } : {}),
+        zoom: Math.max(map.getZoom(), 16),
+        pitch: 0,
+        bearing: 0,
+        padding: NO_PADDING,
+        duration: 800,
+      });
+      return;
+    }
     start();
     void compass.start();
     if (trip.from) setTrip({ ...trip, from: null });
@@ -562,7 +600,28 @@ export function App() {
     <>
       <div ref={mapEl} className="map" />
       <main className="ui" data-nav={navigating || undefined}>
-        {navigating && shown[chosen] && (
+        {riding && shown[chosen]?.transit && ride && (
+          <RideView
+            transit={shown[chosen].transit}
+            st={ride}
+            destination={trip.to.name}
+            lang={lang}
+            muted={muted}
+            following={follow !== 'off'}
+            onMute={toggleMute}
+            onRecenter={() => {
+              setFollow('position');
+              if (fix) map?.easeTo({ center: [fix.lng, fix.lat], duration: 600 });
+            }}
+            onNewConnection={() => {
+              setActive(0);
+              setTrip({ ...trip, from: null, at: null });
+              route.retry();
+            }}
+            onEnd={endNav}
+          />
+        )}
+        {navigating && !riding && shown[chosen] && (
           <NavView
             route={shown[chosen]}
             mode={roadMode}
@@ -599,7 +658,7 @@ export function App() {
               }}
               onRetry={route.retry}
               onClose={closeRoute}
-              onStart={trip.mode === 'transit' ? undefined : startNav}
+              onStart={startNav}
               at={trip.at ?? null}
               onDepart={(at) => {
                 setActive(0);

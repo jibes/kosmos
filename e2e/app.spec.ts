@@ -228,7 +228,7 @@ test.describe('map', () => {
     await expect(card.locator('.summary')).toContainText('No change');
     // Two connections and walking the whole way.
     await expect(card.locator('.alts [role=radio]')).toHaveCount(3);
-    await expect(card.getByRole('button', { name: 'Start' })).toHaveCount(0);
+    await expect(card.getByRole('button', { name: 'Start' })).toBeEnabled();
     await expect(card.getByRole('link', { name: 'Timetables via Transitous' })).toBeVisible();
     expect(transitRequests.length).toBe(asked + 1);
     expect(transitRequests.at(-1)!.has('time')).toBe(false);
@@ -255,6 +255,81 @@ test.describe('map', () => {
     expect(transitRequests.at(-1)!.has('time')).toBe(false);
     await page.waitForTimeout(1200);
     expect(transitRequests.length).toBe(asked + 3);
+  });
+
+  test('guides a public transport trip: walk, board, ride, get off', async ({
+    page,
+    context,
+  }, info) => {
+    await page.evaluate(() => {
+      const w = window as unknown as { spoken: string[]; offset: number };
+      w.spoken = [];
+      Object.defineProperty(window, 'speechSynthesis', {
+        value: { speak: (u: SpeechSynthesisUtterance) => w.spoken.push(u.text), cancel: () => {} },
+      });
+      // A clock the test can move: the timetable runs in minutes, the test in seconds.
+      w.offset = 0;
+      const now = Date.now.bind(Date);
+      Date.now = () => now() + w.offset;
+    });
+    const minutes = (n: number) =>
+      page.evaluate((ms) => ((window as unknown as { offset: number }).offset = ms), n * 60_000);
+    const spoken = () => page.evaluate(() => (window as unknown as { spoken: string[] }).spoken);
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const to = SEARCH_HIT;
+    // The fixture's stops: halfway up in latitude, at the start's and the destination's longitude.
+    const stopLat = (from.lat + to.lat) / 2 + 0.002;
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Public transport' }).click();
+    await expect(card.locator('.legs .line').first()).toHaveText('U6');
+    await card.getByRole('button', { name: 'Start' }).click();
+
+    // The first connection: walk minutes 3–8, U6 8–20 with stops at 12 and 16, walk 20–25.
+    const banner = page.locator('.nav-banner');
+    await expect(banner).toContainText('Walk to Stadtmitte');
+    await expect(banner).toContainText('U6 leaves');
+    await expect.poll(spoken).toContain('Walk to Stadtmitte.');
+
+    await minutes(6);
+    await go(from.lng, stopLat);
+    await expect(banner.locator('.line')).toHaveText('U6');
+    await expect(banner).toContainText('→ Alt-Tegel');
+    // The map follows the dot to the stop and keeps it on screen.
+    await idle(page);
+    const dot = await page.locator('.me').boundingBox();
+    const view = page.viewportSize()!;
+    expect(dot!.y).toBeGreaterThan(0);
+    expect(dot!.y).toBeLessThan(view.height);
+    await expect
+      .poll(spoken)
+      .toContainEqual(expect.stringMatching(/^Take the U6 towards Alt-Tegel/));
+
+    // Underground: no fixes, the timetable counts the stops.
+    await minutes(13);
+    await expect(banner).toContainText('2 stops', { timeout: 10_000 });
+    await expect(banner).toContainText('Get off at Unter den Linden');
+    await shot(page, info, 'riding');
+    await minutes(17);
+    await expect(banner).toContainText('Next stop', { timeout: 10_000 });
+    await expect.poll(spoken).toContain('Get off at the next stop, Unter den Linden.');
+
+    await minutes(21);
+    await go(to.lng, stopLat);
+    await expect(banner).toContainText('Walk to Brandenburger Tor');
+    await go(to.lng, to.lat);
+    await expect(banner).toContainText('You have arrived');
+    await page.getByRole('button', { name: 'End' }).click();
+    await expect(banner).toHaveCount(0);
   });
 
   test('navigates turn by turn with spoken prompts', async ({ page, context }, info) => {
@@ -372,6 +447,10 @@ test.describe('map', () => {
     await page.getByRole('option').first().click();
     const card = page.locator('.card');
     await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    // The card rises into place; measured mid-animation, the grab bar is not where it ends up.
+    await card.evaluate((e) =>
+      Promise.all(e.getAnimations({ subtree: true }).map((a) => a.finished)),
+    );
     const grab = card.locator('.grab');
     const box = (await grab.boundingBox())!;
     const x = box.x + box.width / 2;

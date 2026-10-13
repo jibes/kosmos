@@ -14,3 +14,7 @@ export function pickLang(preferred: readonly string[]): string {
 
 export const lang = pickLang(typeof navigator === 'undefined' ? [] : navigator.languages);
 export const t: Catalogue = catalogues[lang];
+
+/** Fills `{name}` placeholders: `fill(t.walkTo, { stop: 'Hbf' })`. */
+export const fill = (s: string, vars: Record<string, string | number>) =>
+  s.replace(/\{(\w+)\}/g, (all, k: string) => (k in vars ? String(vars[k]) : all));

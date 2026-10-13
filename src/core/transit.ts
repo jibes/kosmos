@@ -35,6 +35,8 @@ export interface TransitLeg {
   textColor?: string;
   /** Stops passed without getting off. */
   stops: number;
+  /** Those stops in order, with arrival times (epoch ms) where the timetable has them. */
+  via: (Stop & { arrival?: number })[];
   /** Metres. */
   distance: number;
   coords: [number, number][];
@@ -116,7 +118,7 @@ interface MLeg {
   headsign?: string;
   routeColor?: string;
   routeTextColor?: string;
-  intermediateStops?: unknown[];
+  intermediateStops?: (MPlace & { arrival?: string })[];
   distance?: number;
   legGeometry?: { points?: string; precision?: number };
   cancelled?: boolean;
@@ -174,6 +176,10 @@ function toLeg(l: MLeg): TransitLeg | null {
     ...(ride && l.headsign ? { headsign: l.headsign } : {}),
     ...(color ? { color, textColor: hex(l.routeTextColor) ?? textOn(color) } : {}),
     stops: l.intermediateStops?.length ?? 0,
+    via: (l.intermediateStops ?? []).map((v) => {
+      const arrival = Date.parse(v?.arrival ?? '');
+      return { ...stop(v), ...(Number.isFinite(arrival) ? { arrival } : {}) };
+    }),
     distance: l.distance ?? length(coords),
     coords,
     cancelled: !!l.cancelled,

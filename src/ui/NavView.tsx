@@ -25,7 +25,7 @@ interface Props {
   onEnd: () => void;
 }
 
-const SoundIcon = ({ off }: { off: boolean }) => (
+export const SoundIcon = ({ off }: { off: boolean }) => (
   <svg
     width="20"
     height="20"

@@ -135,7 +135,15 @@ function fakePlan(a: Pt, b: Pt, depart: number) {
             displayName: 'U6',
             headsign: 'Alt-Tegel',
             routeColor: '8C6DAB',
-            intermediateStops: [{}, {}],
+            intermediateStops: [1, 2].map((k) =>
+              place(
+                k === 1 ? 'Französische Straße' : 'Friedrichstraße',
+                [s1[0] + ((s2[0] - s1[0]) * k) / 3, s1[1]],
+                {
+                  arrival: iso(t0 + 5 + 4 * k),
+                },
+              ),
+            ),
             // The first train runs two minutes late.
             ...(t0 === 3 ? { scheduledStartTime: iso(t0 + 3) } : {}),
           },

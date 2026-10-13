@@ -34,7 +34,7 @@ interface Props {
   onUseMyLocation: () => void;
   onRetry: () => void;
   onClose: () => void;
-  /** Absent where there is no turn-by-turn (public transport). */
+  /** Absent hides Start. */
   onStart?: () => void;
   /** Public transport departure; `null` is now. */
   at: number | null;
