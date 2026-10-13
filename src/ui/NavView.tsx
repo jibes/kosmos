@@ -1,11 +1,20 @@
+import { laneSize, lanesNeeded, laneViews } from '../core/lanes';
 import type { NavState } from '../core/nav';
-import { formatClock, formatDistance, formatDuration, turnOf, type Route } from '../core/route';
+import {
+  formatClock,
+  formatDistance,
+  formatDuration,
+  turnOf,
+  type Mode,
+  type Route,
+} from '../core/route';
 import { t } from '../i18n';
-import { LocateIcon, TurnIcon } from './icons';
+import { LaneIcon, LocateIcon, TurnIcon } from './icons';
 import { useNow } from './useNow';
 
 interface Props {
   route: Route;
+  mode: Mode;
   nav: NavState;
   lang: string;
   muted: boolean;
@@ -38,12 +47,16 @@ const SoundIcon = ({ off }: { off: boolean }) => (
 );
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
-export function NavView({ route, nav, lang, muted, following, rerouting, ...on }: Props) {
+export function NavView({ route, mode, nav, lang, muted, following, rerouting, ...on }: Props) {
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
   const eta = started ? nav.eta : route.duration;
   const remaining = started ? nav.remaining : route.distance;
+
+  const guiding = started && !nav.arrived && !rerouting && !nav.offRoute;
+  const lanes = guiding && lanesNeeded(m?.lanes) ? m.lanes : undefined;
+  const size = lanes ? laneSize(nav.toNext, nav.speed, mode) : 'none';
 
   let title = m?.instruction ?? '';
   let turn = m ? turnOf(m.type) : 'straight';
@@ -63,11 +76,18 @@ export function NavView({ route, nav, lang, muted, following, rerouting, ...on }
       >
         <TurnIcon turn={turn} size={40} />
         <div>
-          {started && !nav.arrived && !rerouting && !nav.offRoute && (
-            <strong>{formatDistance(nav.toNext, lang)}</strong>
-          )}
+          {guiding && <strong>{formatDistance(nav.toNext, lang)}</strong>}
           <p>{title}</p>
         </div>
+        {lanes && size !== 'none' && (
+          <div className="nav-lanes" data-size={size} role="img" aria-label={t.lanes}>
+            {laneViews(lanes).map((lane, i) => (
+              <span key={i} data-use={lane.use}>
+                <LaneIcon lane={lane} size={size === 'big' ? 40 : 24} />
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       {!following && (

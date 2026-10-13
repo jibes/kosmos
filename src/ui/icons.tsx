@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { LaneView } from '../core/lanes';
 import type { Mode, Turn } from '../core/route';
 
 const Svg = ({ children, size = 20 }: { children: ReactNode; size?: number }) => (
@@ -140,3 +141,28 @@ const MODE_PATHS: Record<Mode, ReactNode> = {
 };
 
 export const ModeIcon = ({ mode }: { mode: Mode }) => <Svg>{MODE_PATHS[mode]}</Svg>;
+
+/** Lane arrows share one stem from the bottom centre, so several overlay as one painted mark. */
+const LANE_PATHS: Record<LaneView['arrows'][number]['arrow'], string> = {
+  straight: 'M12 21V4M8 8l4-4 4 4',
+  left: 'M12 21v-7a4 4 0 0 0-4-4H4M7 7l-3 3 3 3',
+  right: 'M12 21v-7a4 4 0 0 1 4-4h4M17 7l3 3-3 3',
+  'slight-left': 'M12 21v-6L6.5 8M6 12.5V8h4.5',
+  'slight-right': 'M12 21v-6l5.5-7M18 12.5V8h-4.5',
+  'sharp-left': 'M12 21v-9l-6 6M6 13.5V18h4.5',
+  'sharp-right': 'M12 21v-9l6 6M18 13.5V18h-4.5',
+  uturn: 'M12 21V9a3.5 3.5 0 0 0-7 0v8M2 14l3 3 3-3',
+  'merge-left': 'M14 21v-6l-5-5V4M6 7l3-3 3 3',
+  'merge-right': 'M10 21v-6l5-5V4M12 7l3-3 3 3',
+};
+
+/** One lane: arrows that follow the route drawn solid, the others faint behind them. */
+export const LaneIcon = ({ lane, size }: { lane: LaneView; size: number }) => (
+  <Svg size={size}>
+    {[...lane.arrows]
+      .sort((a, b) => Number(a.on) - Number(b.on))
+      .map(({ arrow, on }) => (
+        <path key={arrow} d={LANE_PATHS[arrow]} className={on ? 'on' : 'off'} />
+      ))}
+  </Svg>
+);

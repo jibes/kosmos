@@ -66,6 +66,7 @@ export const de = {
   followCompass: 'Karte mit Kompass drehen',
   northUp: 'Norden oben',
   noCompass: 'Kein Kompass auf diesem Gerät',
+  lanes: 'Fahrspuren',
   speedUnit: 'km/h',
   hint: 'Lange tippen, um eine Markierung zu setzen',
 } satisfies Catalogue;

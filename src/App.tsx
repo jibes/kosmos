@@ -538,6 +538,7 @@ export function App() {
         {navigating && shown[chosen] && (
           <NavView
             route={shown[chosen]}
+            mode={trip?.mode ?? 'car'}
             nav={nav}
             lang={lang}
             muted={muted}

@@ -64,6 +64,7 @@ export const en = {
   followCompass: 'Turn map with compass',
   northUp: 'North up',
   noCompass: 'No compass on this device',
+  lanes: 'Lanes',
   speedUnit: 'km/h',
   hint: 'Long-press anywhere to drop a pin',
 };

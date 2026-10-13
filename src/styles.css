@@ -955,6 +955,7 @@ button {
 
 .nav-banner {
   position: absolute;
+  flex-wrap: wrap;
   top: calc(var(--gutter) + var(--safe-top));
   left: calc(var(--gutter) + var(--safe-left));
   right: calc(var(--gutter) + var(--safe-right));
@@ -982,6 +983,11 @@ button {
   min-width: 0;
 }
 
+/* The instruction takes the row beside the arrow; lanes wrap below both. */
+.nav-banner > div:first-of-type {
+  flex: 1 1 0;
+}
+
 .nav-banner strong {
   display: block;
   font-size: 30px;
@@ -989,6 +995,49 @@ button {
   font-weight: 600;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
+}
+
+/* Lanes into the next maneuver: a hint while far, the main thing once close. */
+.nav-lanes {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 0 -8px -6px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.16);
+  animation: rise 0.25s var(--ease);
+}
+
+.nav-lanes span {
+  display: grid;
+  place-items: center;
+  padding: 2px 6px;
+}
+
+.nav-lanes span + span {
+  border-left: 1.5px dashed currentColor;
+  border-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+
+.nav-lanes[data-size='big'] {
+  padding: 10px 8px;
+}
+
+.nav-lanes[data-size='big'] span {
+  padding: 4px 12px;
+}
+
+.nav-lanes .off {
+  opacity: 0.35;
+}
+
+.nav-lanes [data-use='no'] {
+  opacity: 0.45;
+}
+
+.nav-lanes [data-use='best'] svg {
+  stroke-width: 2.4;
 }
 
 .nav-banner p {

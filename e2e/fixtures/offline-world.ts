@@ -66,6 +66,8 @@ function fakeTrip(a: Pt, corner: Pt, b: Pt, speed: number) {
             verbal_pre_transition_instruction: 'Turn right onto Unter den Linden.',
             verbal_post_transition_instruction: 'Continue for 600 meters.',
             street_names: ['Unter den Linden'],
+            // Two lanes straight on, the right one turns right.
+            lanes: [{ directions: 2 }, { directions: 2 }, { directions: 64, active: 64 }],
             length: k2,
             time: (k2 / speed) * 3600,
             begin_shape_index: 1,

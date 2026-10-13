@@ -234,6 +234,8 @@ test.describe('map', () => {
     await expect(page.locator('.panel')).toBeHidden();
     const spoken = () => page.evaluate(() => (window as unknown as { spoken: string[] }).spoken);
     await expect.poll(spoken).toContain('Head south on Friedrichstraße.');
+    // Lanes stay out of the way while the turn is far.
+    await expect(page.locator('.nav-lanes')).toHaveCount(0);
 
     // Drive south along the first leg towards the turn.
     for (const f of [0.2, 0.5, 0.8, 0.97]) {
@@ -241,6 +243,10 @@ test.describe('map', () => {
       await page.waitForTimeout(250);
     }
     await expect(banner).toContainText('Turn right onto Unter den Linden.');
+    const lanes = banner.locator('.nav-lanes');
+    await expect(lanes).toHaveAttribute('data-size', 'big');
+    await expect(lanes.locator('span')).toHaveCount(3);
+    await expect(lanes.locator('span').nth(2)).toHaveAttribute('data-use', 'best');
     await expect(page.locator('.speed strong')).toHaveText(/^\d+$/);
     await expect(banner.locator('strong')).toHaveText(/m$/);
     await expect.poll(spoken).toContain('Turn right onto Unter den Linden.');

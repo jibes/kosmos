@@ -43,6 +43,7 @@ describe('routeUrl', () => {
       costing: 'bicycle',
       directions_options: { units: 'kilometers', language: 'de' },
       alternates: 2,
+      turn_lanes: true,
     });
   });
 
@@ -75,6 +76,7 @@ const trip = (coords: [number, number][], km: number, s: number) => ({
           verbal_pre_transition_instruction: 'Turn right onto B.',
           verbal_post_transition_instruction: 'Continue for 500 meters.',
           street_names: ['B'],
+          lanes: [{ directions: 2 }, { directions: 66, active: 64 }],
           length: km / 2,
           time: s / 2,
           begin_shape_index: 1,
@@ -126,6 +128,8 @@ describe('parseValhalla', () => {
       post: 'Continue for 500 meters.',
     });
     expect(r.maneuvers[1].distance).toBeCloseTo(900);
+    expect(r.maneuvers[1].lanes).toEqual([{ directions: 2 }, { directions: 66, active: 64 }]);
+    expect(r.maneuvers[0].lanes).toBeUndefined();
   });
 
   it('returns [] for errors and garbage', () => {

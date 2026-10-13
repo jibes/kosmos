@@ -1,4 +1,5 @@
 import type { LngLat } from './geo';
+import { parseLanes, type Lane } from './lanes';
 
 /** Valhalla on FOSSGIS: the router behind openstreetmap.org's directions. Fair use, no key. */
 export const ROUTER_URL = 'https://valhalla1.openstreetmap.de';
@@ -30,6 +31,8 @@ export interface Maneuver {
   /** Index into `Route.coords` where the maneuver happens. */
   begin: number;
   exit?: number;
+  /** Lanes approaching this maneuver, left to right, when the router knows them. */
+  lanes?: Lane[];
 }
 
 export interface Route {
@@ -53,6 +56,7 @@ export function routeUrl(from: LngLat, to: LngLat, mode: Mode, lang: string, alt
     costing: COSTING[mode],
     directions_options: { units: 'kilometers', language: LANGS.has(lang) ? lang : 'en' },
     alternates,
+    turn_lanes: true,
   };
   // GET keeps the request "simple" for CORS: no preflight.
   return `${ROUTER_URL}/route?json=${encodeURIComponent(JSON.stringify(body))}`;
@@ -121,6 +125,7 @@ interface VManeuver {
   time?: number;
   begin_shape_index?: number;
   roundabout_exit_count?: number;
+  lanes?: unknown;
 }
 interface VTrip {
   legs?: { shape?: string; maneuvers?: VManeuver[] }[];
@@ -148,6 +153,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
         duration: m.time ?? 0,
         begin: offset + (m.begin_shape_index ?? 0),
         exit: m.roundabout_exit_count,
+        lanes: parseLanes(m.lanes),
       });
     }
   }
