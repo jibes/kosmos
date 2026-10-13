@@ -10,7 +10,7 @@ List deviations from it here, each with a reason.
 
 ## Product rules (MECE)
 
-Four jobs, one control each: **view** (the map), **find** (search), **locate** (location button), **inspect** (tap a label / long-press → place card with share + directions). A new feature must fit one of them or argue for a fifth. No settings screen: theme follows the system, language follows the browser.
+Four jobs, one control each: **view** (the map), **find** (search), **locate** (location button), **inspect** (tap a label / long-press → place card with share + route; the route card is part of inspect). A new feature must fit one of them or argue for a fifth. No settings screen: theme follows the system, language follows the browser.
 
 ## Architecture
 
@@ -23,7 +23,8 @@ Four jobs, one control each: **view** (the map), **find** (search), **locate** (
 ## Invariants
 
 - Storage keys follow `kosmos.<name>.v<N>` (`kosmos.view.v1`). Never rename an existing key: bump the version and migrate.
-- Network calls go only to OpenFreeMap and Photon (README → Privacy, CSP in `index.html`).
+- Network calls go only to OpenFreeMap, Photon and the FOSSGIS Valhalla router (README → Privacy, CSP in `index.html`).
+- The router is a volunteer service under fair use: one request per trip or travel-mode change, re-requested only when the start moves more than 150 m (`ui/useRoute.ts`). Never poll it.
 - No user-facing string is hard-coded. Add it to `src/i18n/en.ts` and `de.ts`.
 - Android app ID `io.github.jibes.kosmos` and the release key are permanent; changing either breaks updates for installed users.
 

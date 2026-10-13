@@ -28,7 +28,7 @@ SHA-256 (release certificate): 00:82:00:1C:3F:66:FD:D2:C1:4F:80:85:2F:4A:D2:96:9
 
 ## Privacy
 
-No account, no analytics, no tracking. Your location never leaves the device. The app talks to exactly two services:
+No account, no analytics, no tracking. Your location leaves the device only as the start of a route you ask for. The app talks to exactly three services:
 
 | Service                                      | For                                     | Sends                                             |
 | -------------------------------------------- | --------------------------------------- | ------------------------------------------------- |

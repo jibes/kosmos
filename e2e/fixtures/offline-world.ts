@@ -1,6 +1,7 @@
 import type { BrowserContext } from '@playwright/test';
 import GeoJSONVT from 'geojson-vt';
 import vtpbf from 'vt-pbf';
+import { encodePolyline } from '../../src/core/route';
 import { CENTER, scene } from './scene';
 
 const indexes = Object.entries(scene()).map(
@@ -35,6 +36,57 @@ const photonPoint = (lng: number, lat: number, properties: object) => ({
   geometry: { type: 'Point', coordinates: [lng, lat] },
   properties,
 });
+
+type Pt = [number, number];
+
+/** An L-shaped trip through `corner`, with the maneuvers Valhalla would describe. */
+function fakeTrip(a: Pt, corner: Pt, b: Pt, speed: number) {
+  const km = (p: Pt, q: Pt) => Math.hypot((q[0] - p[0]) * 67.8, (q[1] - p[1]) * 111.2);
+  const k1 = km(a, corner);
+  const k2 = km(corner, b);
+  const coords: Pt[] = [a, corner, b];
+  return {
+    legs: [
+      {
+        shape: encodePolyline(coords),
+        maneuvers: [
+          {
+            type: 1,
+            instruction: 'Head north on Friedrichstraße.',
+            verbal_pre_transition_instruction: 'Head north on Friedrichstraße.',
+            street_names: ['Friedrichstraße'],
+            length: k1,
+            time: (k1 / speed) * 3600,
+            begin_shape_index: 0,
+          },
+          {
+            type: 15,
+            instruction: 'Turn left onto Unter den Linden.',
+            verbal_transition_alert_instruction: 'Turn left onto Unter den Linden.',
+            verbal_pre_transition_instruction: 'Turn left onto Unter den Linden.',
+            verbal_post_transition_instruction: 'Continue for 600 meters.',
+            street_names: ['Unter den Linden'],
+            length: k2,
+            time: (k2 / speed) * 3600,
+            begin_shape_index: 1,
+          },
+          {
+            type: 4,
+            instruction: 'You have arrived at your destination.',
+            verbal_pre_transition_instruction: 'You have arrived at your destination.',
+            length: 0,
+            time: 0,
+            begin_shape_index: 2,
+          },
+        ],
+      },
+    ],
+    summary: { length: k1 + k2, time: ((k1 + k2) / speed) * 3600 },
+  };
+}
+
+/** Every routing request the app made, for assertions. */
+export const routeRequests: { costing: string; from: Pt; to: Pt }[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
 export async function offlineWorld(context: BrowserContext) {
@@ -72,6 +124,19 @@ export async function offlineWorld(context: BrowserContext) {
         ]
       : [];
     return route.fulfill({ contentType: 'application/json', body: photon(hits) });
+  });
+  await context.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {
+    const body = JSON.parse(new URL(route.request().url()).searchParams.get('json') ?? '{}');
+    const [s, e] = body.locations.map((l: { lat: number; lon: number }) => [l.lon, l.lat] as Pt);
+    routeRequests.push({ costing: body.costing, from: s, to: e });
+    const speed = { auto: 30, bicycle: 15, pedestrian: 5 }[body.costing as string] ?? 30;
+    return route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        trip: fakeTrip(s, [s[0], e[1]], e, speed),
+        alternates: [{ trip: fakeTrip(s, [e[0], s[1]], e, speed * 0.8) }],
+      }),
+    });
   });
   await context.route(/photon\.komoot\.io\/reverse/, (route) => {
     const p = new URL(route.request().url()).searchParams;

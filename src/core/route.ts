@@ -1,0 +1,265 @@
+import type { LngLat } from './geo';
+
+/** Valhalla on FOSSGIS: the router behind openstreetmap.org's directions. Fair use, no key. */
+export const ROUTER_URL = 'https://valhalla1.openstreetmap.de';
+
+export type Mode = 'car' | 'bike' | 'foot';
+export const MODES: readonly Mode[] = ['car', 'bike', 'foot'];
+const COSTING: Record<Mode, string> = { car: 'auto', bike: 'bicycle', foot: 'pedestrian' };
+
+/** Languages Valhalla writes instructions in; anything else falls back to English. */
+const LANGS = new Set(
+  'bg ca cs da de el en es et fi fr hi hu it ja nb nl pl pt ro ru sk sl sv tr uk'.split(' '),
+);
+
+export interface Maneuver {
+  /** Valhalla maneuver type, 0–38. */
+  type: number;
+  instruction: string;
+  /** Spoken well ahead: "In 400 metres, turn right onto …" comes from distance + this. */
+  alert?: string;
+  /** Spoken just before the maneuver. */
+  pre?: string;
+  /** Spoken just after it: "Continue for 2 kilometres." */
+  post?: string;
+  street?: string;
+  /** Metres from this maneuver to the next. */
+  distance: number;
+  /** Seconds from this maneuver to the next. */
+  duration: number;
+  /** Index into `Route.coords` where the maneuver happens. */
+  begin: number;
+  exit?: number;
+}
+
+export interface Route {
+  /** [lng, lat] pairs. */
+  coords: [number, number][];
+  /** Metres. */
+  distance: number;
+  /** Seconds. */
+  duration: number;
+  maneuvers: Maneuver[];
+  /** [west, south, east, north]. */
+  bbox: [number, number, number, number];
+}
+
+export function routeUrl(from: LngLat, to: LngLat, mode: Mode, lang: string, alternates = 2) {
+  const body = {
+    locations: [
+      { lat: +from.lat.toFixed(6), lon: +from.lng.toFixed(6) },
+      { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
+    ],
+    costing: COSTING[mode],
+    directions_options: { units: 'kilometers', language: LANGS.has(lang) ? lang : 'en' },
+    alternates,
+  };
+  // GET keeps the request "simple" for CORS: no preflight.
+  return `${ROUTER_URL}/route?json=${encodeURIComponent(JSON.stringify(body))}`;
+}
+
+/** Google's encoded polyline, at Valhalla's precision of 6, to [lng, lat] pairs. */
+export function decodePolyline(encoded: string, precision = 6): [number, number][] {
+  const factor = 10 ** precision;
+  const out: [number, number][] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  const next = () => {
+    let result = 0;
+    let shift = 0;
+    let byte: number;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    return result & 1 ? ~(result >> 1) : result >> 1;
+  };
+  while (index < encoded.length) {
+    lat += next();
+    lng += next();
+    out.push([lng / factor, lat / factor]);
+  }
+  return out;
+}
+
+/** The inverse of `decodePolyline`; used by tests and fixtures. */
+export function encodePolyline(coords: [number, number][], precision = 6): string {
+  const factor = 10 ** precision;
+  let out = '';
+  let pLat = 0;
+  let pLng = 0;
+  const put = (v: number) => {
+    let x = v < 0 ? ~(v << 1) : v << 1;
+    while (x >= 0x20) {
+      out += String.fromCharCode((0x20 | (x & 0x1f)) + 63);
+      x >>= 5;
+    }
+    out += String.fromCharCode(x + 63);
+  };
+  for (const [lng, lat] of coords) {
+    const la = Math.round(lat * factor);
+    const lo = Math.round(lng * factor);
+    put(la - pLat);
+    put(lo - pLng);
+    pLat = la;
+    pLng = lo;
+  }
+  return out;
+}
+
+interface VManeuver {
+  type?: number;
+  instruction?: string;
+  verbal_transition_alert_instruction?: string;
+  verbal_succinct_transition_instruction?: string;
+  verbal_pre_transition_instruction?: string;
+  verbal_post_transition_instruction?: string;
+  street_names?: string[];
+  length?: number;
+  time?: number;
+  begin_shape_index?: number;
+  roundabout_exit_count?: number;
+}
+interface VTrip {
+  legs?: { shape?: string; maneuvers?: VManeuver[] }[];
+  summary?: { length?: number; time?: number };
+}
+
+function toRoute(trip: VTrip | undefined): Route | null {
+  if (!trip?.legs?.length) return null;
+  const coords: [number, number][] = [];
+  const maneuvers: Maneuver[] = [];
+  for (const leg of trip.legs) {
+    // Legs share their joining point; drop the duplicate.
+    const offset = coords.length ? coords.length - 1 : 0;
+    const shape = decodePolyline(leg.shape ?? '');
+    coords.push(...(coords.length ? shape.slice(1) : shape));
+    for (const m of leg.maneuvers ?? []) {
+      maneuvers.push({
+        type: m.type ?? 0,
+        instruction: m.instruction ?? '',
+        alert: m.verbal_transition_alert_instruction ?? m.verbal_succinct_transition_instruction,
+        pre: m.verbal_pre_transition_instruction,
+        post: m.verbal_post_transition_instruction,
+        street: m.street_names?.[0],
+        distance: (m.length ?? 0) * 1000,
+        duration: m.time ?? 0,
+        begin: offset + (m.begin_shape_index ?? 0),
+        exit: m.roundabout_exit_count,
+      });
+    }
+  }
+  if (coords.length < 2) return null;
+  let [w, s, e, n] = [180, 90, -180, -90];
+  for (const [x, y] of coords) {
+    w = Math.min(w, x);
+    e = Math.max(e, x);
+    s = Math.min(s, y);
+    n = Math.max(n, y);
+  }
+  return {
+    coords,
+    distance: (trip.summary?.length ?? 0) * 1000,
+    duration: trip.summary?.time ?? 0,
+    maneuvers,
+    bbox: [w, s, e, n],
+  };
+}
+
+/** The main route first, then any alternates. */
+export function parseValhalla(json: unknown): Route[] {
+  const r = json as { trip?: VTrip; alternates?: { trip?: VTrip }[] } | null;
+  return [r?.trip, ...(r?.alternates ?? []).map((a) => a.trip)]
+    .map(toRoute)
+    .filter((x): x is Route => !!x);
+}
+
+export type RouteError = 'none' | 'busy' | 'failed';
+
+/** Valhalla answers "no route" with HTTP 400; the public server says "busy" with 429. */
+export function classifyError(status: number): RouteError {
+  if (status === 429 || status === 503) return 'busy';
+  if (status === 400 || status === 404) return 'none';
+  return 'failed';
+}
+
+/** `850 m`, `4.2 km`, `37 km`. */
+export function formatDistance(m: number, lang: string): string {
+  const nf = (v: number, d: number) =>
+    v.toLocaleString(lang, { maximumFractionDigits: d, minimumFractionDigits: d });
+  if (m < 50) return `${Math.max(0, Math.round(m / 5) * 5)} m`;
+  if (m < 1000) return `${Math.round(m / 10) * 10} m`;
+  return m < 10_000 ? `${nf(m / 1000, 1)} km` : `${nf(m / 1000, 0)} km`;
+}
+
+/** `1 min`, `42 min`, `2 h 05`. */
+export function formatDuration(s: number): string {
+  const min = Math.max(1, Math.round(s / 60));
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
+}
+
+export function formatClock(date: Date, lang: string): string {
+  return date.toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' });
+}
+
+export type Turn =
+  | 'straight'
+  | 'slight-right'
+  | 'right'
+  | 'sharp-right'
+  | 'uturn'
+  | 'sharp-left'
+  | 'left'
+  | 'slight-left'
+  | 'roundabout'
+  | 'arrive'
+  | 'depart'
+  | 'ferry';
+
+/** Collapses Valhalla's 39 maneuver types into the dozen arrows a person reads. */
+export function turnOf(type: number): Turn {
+  switch (type) {
+    case 1:
+    case 2:
+    case 3:
+      return 'depart';
+    case 4:
+    case 5:
+    case 6:
+      return 'arrive';
+    case 9:
+    case 18:
+    case 20:
+    case 23:
+    case 37:
+      return 'slight-right';
+    case 10:
+      return 'right';
+    case 11:
+      return 'sharp-right';
+    case 12:
+    case 13:
+      return 'uturn';
+    case 14:
+      return 'sharp-left';
+    case 15:
+      return 'left';
+    case 16:
+    case 19:
+    case 21:
+    case 24:
+    case 38:
+      return 'slight-left';
+    case 26:
+    case 27:
+      return 'roundabout';
+    case 28:
+    case 29:
+      return 'ferry';
+    default:
+      return 'straight';
+  }
+}

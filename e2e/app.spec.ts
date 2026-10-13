@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { CENTER } from './fixtures/scene';
-import { SEARCH_HIT, offlineWorld } from './fixtures/offline-world';
+import { SEARCH_HIT, offlineWorld, routeRequests } from './fixtures/offline-world';
 
 declare global {
   interface Window {
@@ -107,6 +107,51 @@ test.describe('map', () => {
     await card.getByRole('button', { name: /close|schließen/i }).click();
     await expect(card).toHaveCount(0);
     await expect(page.locator('.pin')).toHaveCount(0);
+  });
+
+  test('routes to a place, by mode and from a chosen start', async ({ page, context }, info) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+
+    const card = page.locator('.card.route');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await expect(card.getByRole('radio', { name: 'Car' })).toHaveAttribute('aria-checked', 'true');
+    await expect(card.locator('.alts [role=radio]')).toHaveCount(2);
+    await expect(card).toContainText('My location');
+    const drawn = await page.evaluate(() => {
+      const src = window.kosmos!.getSource('route') as unknown as { _data: { geojson?: unknown } };
+      return JSON.stringify(src._data);
+    });
+    expect(drawn).toContain('LineString');
+    await idle(page);
+    await shot(page, info, 'route');
+
+    await card.locator('.steps summary').click();
+    await expect(card.locator('.steps li')).toHaveCount(3);
+    await expect(card.locator('.steps')).toContainText('Turn left onto Unter den Linden.');
+
+    await card.getByRole('radio', { name: 'Walk' }).click();
+    await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(() => routeRequests.at(-1)?.costing).toBe('pedestrian');
+
+    await card.locator('.end-btn').click();
+    const start = page.getByRole('combobox', { name: 'Search start' });
+    await expect(start).toBeFocused();
+    await start.fill('brandenburg');
+    await page.getByRole('option').nth(1).click();
+    await expect(card.locator('.end-btn')).toHaveText('Brandenburg an der Havel');
+    await expect.poll(() => routeRequests.at(-1)?.from[0]).toBeCloseTo(13.0, 3);
+    await expect(page.locator('.start-dot')).toHaveCount(1);
+
+    await card.getByRole('button', { name: /close/i }).click();
+    await expect(card).toHaveCount(0);
+    await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
   });
 
   test('drops a pin and looks up the address', async ({ page }) => {

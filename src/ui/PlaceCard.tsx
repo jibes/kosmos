@@ -1,18 +1,19 @@
 import { useState } from 'react';
-import { directionsUrl, formatLngLat, geoUri, osmUrl, plainLngLat } from '../core/geo';
+import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { t } from '../i18n';
 import { CloseIcon, RouteIcon, ShareIcon } from './icons';
-import { copy, isNative, share } from './native';
+import { copy, share } from './native';
 
 interface Props {
   place: Place;
   loading: boolean;
   onClose: () => void;
   onToast: (msg: string) => void;
+  onRoute: () => void;
 }
 
-export function PlaceCard({ place, loading, onClose, onToast }: Props) {
+export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) {
   const [copied, setCopied] = useState(false);
 
   const onShare = async () => {
@@ -49,15 +50,10 @@ export function PlaceCard({ place, loading, onClose, onToast }: Props) {
         {copied ? t.copied : formatLngLat(place)}
       </button>
       <div className="actions">
-        <a
-          className="action primary"
-          href={isNative ? geoUri(place, place.name) : directionsUrl(place)}
-          target={isNative ? undefined : '_blank'}
-          rel="noreferrer"
-        >
+        <button type="button" className="action primary" onClick={onRoute}>
           <RouteIcon />
-          {t.directions}
-        </a>
+          {t.route}
+        </button>
         <button type="button" className="action" onClick={onShare}>
           <ShareIcon />
           {t.share}

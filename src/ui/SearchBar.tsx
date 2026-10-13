@@ -13,6 +13,9 @@ interface Props {
   /** Hides the result list while a place card is showing. */
   collapsed: boolean;
   onFocus: () => void;
+  /** Overrides the default "Search places" prompt, e.g. when choosing a route start. */
+  placeholder?: string;
+  autoFocus?: boolean;
 }
 
 const DEBOUNCE_MS = 200;
@@ -24,7 +27,15 @@ interface Response {
   status: 'done' | 'error';
 }
 
-export function SearchBar({ lang, bias, onPick, collapsed, onFocus }: Props) {
+export function SearchBar({
+  lang,
+  bias,
+  onPick,
+  collapsed,
+  onFocus,
+  placeholder,
+  autoFocus,
+}: Props) {
   const [query, setQuery] = useState('');
   const [response, setResponse] = useState<Response | null>(null);
   const [cursor, setCursor] = useState({ key: '', index: 0 });
@@ -132,8 +143,9 @@ export function SearchBar({ lang, bias, onPick, collapsed, onFocus }: Props) {
           enterKeyHint="search"
           autoComplete="off"
           spellCheck={false}
-          placeholder={t.search}
-          aria-label={t.search}
+          placeholder={placeholder ?? t.search}
+          aria-label={placeholder ?? t.search}
+          autoFocus={autoFocus}
           aria-controls={listId}
           aria-expanded={showList}
           role="combobox"

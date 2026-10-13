@@ -34,6 +34,10 @@ export const LABEL_LAYERS = [
   'label-peak',
 ] as const;
 
+/** GeoJSON source the app fills with routes; features carry `alt: true` for alternatives. */
+export const ROUTE_SOURCE = 'route';
+export const ROUTE_ALT_LAYER = 'route-alt';
+
 export interface StyleOptions {
   theme: Theme;
   /** UI language; place names prefer `name:<lang>`, roads keep the local name. */
@@ -114,6 +118,9 @@ const lerp = (z0: number, v0: number, z1: number, v1: number): Expr => [
   z1,
   v1,
 ];
+
+const expLerp = (...stops: number[]): Expr =>
+  ['interpolate', ['exponential', 1.5], ['zoom'], ...stops] as unknown as Expr;
 
 const isLine: Expr = ['==', ['geometry-type'], 'LineString'];
 const isPoint: Expr = ['==', ['geometry-type'], 'Point'];
@@ -365,6 +372,38 @@ function roads(p: Palette): LayerSpecification[] {
   ];
 }
 
+function route(p: Palette): LayerSpecification[] {
+  const width = (k: number): Expr => expLerp(8, 3 * k, 13, 6 * k, 18, 16 * k);
+  const isAlt: Expr = ['==', ['get', 'alt'], true];
+  const join = { 'line-cap': 'round', 'line-join': 'round' } as const;
+  return [
+    {
+      id: ROUTE_ALT_LAYER,
+      type: 'line',
+      source: ROUTE_SOURCE,
+      filter: isAlt,
+      layout: join,
+      paint: { 'line-color': p.routeAlt, 'line-width': width(0.8) },
+    },
+    {
+      id: 'route-casing',
+      type: 'line',
+      source: ROUTE_SOURCE,
+      filter: ['!', isAlt],
+      layout: join,
+      paint: { 'line-color': p.routeCasing, 'line-width': width(1.45) },
+    },
+    {
+      id: 'route-line',
+      type: 'line',
+      source: ROUTE_SOURCE,
+      filter: ['!', isAlt],
+      layout: join,
+      paint: { 'line-color': p.accent, 'line-width': width(1) },
+    },
+  ];
+}
+
 function labels(p: Palette, lang: string): LayerSpecification[] {
   const halo = {
     'text-halo-color': p.halo,
@@ -560,6 +599,7 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
         attribution:
           '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
       },
+      [ROUTE_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
     },
     glyphs: GLYPHS_URL,
     ...(fontFaces ? { 'font-faces': fontFaces } : {}),
@@ -576,6 +616,6 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
     },
     light: { anchor: 'viewport', color: '#ffffff', intensity: p.light, position: [1.2, 210, 35] },
     transition: { duration: 300, delay: 0 },
-    layers: [...base(p), ...roads(p), ...labels(p, lang)],
+    layers: [...base(p), ...roads(p), ...route(p), ...labels(p, lang)],
   };
 }

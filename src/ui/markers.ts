@@ -8,6 +8,13 @@ export function pinMarker(): maplibregl.Marker {
   return new maplibregl.Marker({ element: el, anchor: 'bottom' });
 }
 
+/** Where a route starts when it is not the user's location. */
+export function startMarker(): maplibregl.Marker {
+  const el = document.createElement('div');
+  el.className = 'start-dot';
+  return new maplibregl.Marker({ element: el });
+}
+
 /** The user's dot with an accuracy ring sized in ground metres. */
 export function userMarker(map: maplibregl.Map) {
   const el = document.createElement('div');

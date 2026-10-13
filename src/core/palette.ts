@@ -45,6 +45,10 @@ export interface Palette {
   /** Strength of the directional light on extruded buildings. */
   light: number;
   accent: string;
+  /** Unchosen alternative routes. */
+  routeAlt: string;
+  /** Outline that lifts the route off the roads. */
+  routeCasing: string;
 }
 
 export type Theme = 'light' | 'dark';
@@ -86,6 +90,8 @@ export const palettes: Record<Theme, Palette> = {
     horizon: '#e8edf3',
     light: 0.12,
     accent: '#2f5cff',
+    routeAlt: '#a9b6e3',
+    routeCasing: '#ffffff',
   },
   dark: {
     space: '#05060a',
@@ -123,5 +129,7 @@ export const palettes: Record<Theme, Palette> = {
     horizon: '#1a2233',
     light: 0.1,
     accent: '#6e8bff',
+    routeAlt: '#3b4675',
+    routeCasing: '#0b0d12',
   },
 };

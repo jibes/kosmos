@@ -2,18 +2,21 @@ import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { distance, type LngLat } from './core/geo';
 import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
-import { LABEL_LAYERS } from './core/style';
+import type { Mode } from './core/route';
+import { LABEL_LAYERS, ROUTE_ALT_LAYER, ROUTE_SOURCE } from './core/style';
 import { lang, t } from './i18n';
 import { About } from './ui/About';
 import { Controls } from './ui/Controls';
 import { onLongPress } from './ui/gestures';
-import { pinMarker, userMarker } from './ui/markers';
+import { pinMarker, startMarker, userMarker } from './ui/markers';
 import { isNative } from './ui/native';
 import { PlaceCard } from './ui/PlaceCard';
+import { RouteCard } from './ui/RouteCard';
 import { SearchBar } from './ui/SearchBar';
 import { UpdateToast } from './ui/UpdateToast';
 import { useLocation } from './ui/useLocation';
 import { useMap } from './ui/useMap';
+import { useRoute, type Trip } from './ui/useRoute';
 import { useTheme } from './ui/useTheme';
 
 /** Map labels follow the browser language even where the UI falls back to English. */
@@ -32,6 +35,11 @@ const padding = () =>
   wide()
     ? { top: 48, bottom: 48, left: 440, right: 48 }
     : { top: 96, bottom: 300, left: 32, right: 32 };
+/** Routes leave room for the taller route card. */
+const routePadding = () =>
+  wide()
+    ? { top: 64, bottom: 64, left: 460, right: 64 }
+    : { top: 96, bottom: 380, left: 40, right: 40 };
 
 async function fetchPlaces(url: string): Promise<Place[]> {
   const res = await fetch(url);
@@ -48,6 +56,14 @@ export function App() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [active, setActive] = useState(0);
+  const [pickingStart, setPickingStart] = useState(false);
+  const route = useRoute(trip, fix, lang);
+  const tripRef = useRef(trip);
+  useEffect(() => {
+    tripRef.current = trip;
+  }, [trip]);
   const pending = useRef(0);
   const flyOnFix = useRef(false);
   const lastHold = useRef(0);
@@ -78,6 +94,26 @@ export function App() {
   const clear = useCallback(() => {
     pending.current++;
     setSelection(null);
+    setTrip(null);
+    setPickingStart(false);
+  }, []);
+
+  const openRoute = useCallback(() => {
+    if (!selection) return;
+    start();
+    setActive(0);
+    setFollowing(false);
+    setTrip({ to: selection.place, from: null, mode: 'car' });
+  }, [selection, start]);
+
+  const closeRoute = useCallback(() => {
+    setTrip(null);
+    setPickingStart(false);
+  }, []);
+
+  const setMode = useCallback((mode: Mode) => {
+    setActive(0);
+    setTrip((tr) => (tr ? { ...tr, mode } : tr));
   }, []);
 
   // Pin: the selected place.
@@ -98,6 +134,18 @@ export function App() {
     if (!map) return;
     const onClick = (e: maplibregl.MapMouseEvent) => {
       if (Date.now() - lastHold.current < 700) return;
+      if (tripRef.current) {
+        const { x, y } = e.point;
+        const [alt] = map.queryRenderedFeatures(
+          [
+            [x - 8, y - 8],
+            [x + 8, y + 8],
+          ],
+          { layers: [ROUTE_ALT_LAYER] },
+        );
+        if (alt) setActive(Number(alt.properties.index));
+        return;
+      }
       const layers = LABEL_LAYERS.filter((id) => map.getLayer(id));
       const { x, y } = e.point;
       const [f] = map.queryRenderedFeatures(
@@ -124,6 +172,7 @@ export function App() {
       });
     };
     const offHold = onLongPress(map, (at) => {
+      if (tripRef.current) return;
       lastHold.current = Date.now();
       const here = { lng: at.lng, lat: at.lat };
       select({ name: t.droppedPin, detail: '', ...here }, async () => {
@@ -148,6 +197,12 @@ export function App() {
   const pick = useCallback(
     (place: Place) => {
       if (!map) return;
+      if (tripRef.current) {
+        setPickingStart(false);
+        setActive(0);
+        setTrip({ ...tripRef.current, from: place });
+        return;
+      }
       setFollowing(false);
       select(place);
       const [w, s, e, n] = place.bbox ?? [0, 0, 0, 0];
@@ -192,6 +247,54 @@ export function App() {
     }
   }, [map, fix]);
 
+  // Route: alternatives under the chosen one; refit only when the trip itself changes.
+  const shown = route.routes;
+  const chosen = Math.min(active, Math.max(0, shown.length - 1));
+  useEffect(() => {
+    const src = map?.getSource(ROUTE_SOURCE) as maplibregl.GeoJSONSource | undefined;
+    if (!src) return;
+    const order = shown.map((_, i) => i).sort((a, b) => (a === chosen ? 1 : b === chosen ? -1 : 0));
+    src.setData({
+      type: 'FeatureCollection',
+      features: order.map((i) => ({
+        type: 'Feature',
+        properties: { index: i, alt: i !== chosen },
+        geometry: { type: 'LineString', coordinates: shown[i].coords },
+      })),
+    });
+  }, [map, shown, chosen]);
+
+  const fitted = useRef('');
+  useEffect(() => {
+    if (!map || route.status !== 'ready' || fitted.current === route.key) return;
+    fitted.current = route.key;
+    const [w, s, e, n] = shown.reduce(
+      (b, r) => [
+        Math.min(b[0], r.bbox[0]),
+        Math.min(b[1], r.bbox[1]),
+        Math.max(b[2], r.bbox[2]),
+        Math.max(b[3], r.bbox[3]),
+      ],
+      [180, 90, -180, -90],
+    );
+    map.fitBounds([w, s, e, n], { padding: routePadding(), maxZoom: 17, duration: 1200 });
+  }, [map, route.status, route.key, shown]);
+  useEffect(() => {
+    if (!trip) fitted.current = '';
+  }, [trip]);
+
+  // A chosen start gets its own marker; "my location" already has the dot.
+  const startPin = useRef<maplibregl.Marker | null>(null);
+  const from = trip?.from;
+  useEffect(() => {
+    if (!map || !from) {
+      startPin.current?.remove();
+      return;
+    }
+    startPin.current ??= startMarker();
+    startPin.current.setLngLat([from.lng, from.lat]).addTo(map);
+  }, [map, from]);
+
   const locate = () => {
     if (status === 'denied') {
       showToast(t.locationDenied);
@@ -208,33 +311,61 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) clear();
+      if (e.key !== 'Escape' || e.target instanceof HTMLInputElement) return;
+      if (tripRef.current) closeRoute();
+      else clear();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [clear]);
+  }, [clear, closeRoute]);
 
   return (
     <>
       <div ref={mapEl} className="map" />
       <main className="ui">
         <div className="panel">
-          {selection && (
+          {trip && !pickingStart && (
+            <RouteCard
+              to={trip.to}
+              from={trip.from}
+              mode={trip.mode}
+              routes={shown}
+              active={chosen}
+              status={route.status}
+              lang={lang}
+              onMode={setMode}
+              onActive={setActive}
+              onChangeStart={() => setPickingStart(true)}
+              onUseMyLocation={() => {
+                start();
+                setTrip({ ...trip, from: null });
+              }}
+              onRetry={route.retry}
+              onClose={closeRoute}
+            />
+          )}
+          {selection && !trip && (
             <PlaceCard
               key={`${selection.place.lng},${selection.place.lat}`}
               place={selection.place}
               loading={selection.loading}
               onClose={clear}
               onToast={showToast}
+              onRoute={openRoute}
             />
           )}
-          <SearchBar
-            lang={lang}
-            bias={bias}
-            onPick={pick}
-            collapsed={!!selection}
-            onFocus={clear}
-          />
+          {(!trip || pickingStart) && (
+            <SearchBar
+              key={pickingStart ? 'start' : 'place'}
+              lang={lang}
+              bias={bias}
+              onPick={pick}
+              collapsed={!!selection && !pickingStart}
+              onFocus={pickingStart ? () => undefined : clear}
+              placeholder={pickingStart ? t.searchStart : undefined}
+              autoFocus={pickingStart}
+            />
+          )}
         </div>
         <Controls map={map} status={status} following={following} onLocate={locate} />
         <button type="button" className="credit" onClick={() => setAbout(true)}>
