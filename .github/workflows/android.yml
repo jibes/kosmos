@@ -81,7 +81,8 @@ jobs:
         if: steps.key.outputs.signed == 'true'
         run: |
           expected=$(sed -n 's/^SHA-256 (release certificate): //p' README.md | tr -d ': ' | tr 'A-F' 'a-f')
-          actual=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signer.txt)
+          # apksigner prefixes lines with "Signer #1" or "V2 Signer" depending on schemes present.
+          actual=$(grep -m1 -oE 'certificate SHA-256 digest: [0-9a-f]{64}' signer.txt | awk '{print $NF}')
           echo "expected $expected"; echo "actual   $actual"
           [ -n "$expected" ] && [ "$expected" = "$actual" ]
 
