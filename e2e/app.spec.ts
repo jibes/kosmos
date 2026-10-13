@@ -109,6 +109,11 @@ test.describe('map', () => {
     await shot(page, info, 'city-3d');
   });
 
+  test('renders labels with diacritics', async ({ page }, info) => {
+    await jump(page, { lng: 30, lat: 42, zoom: 3.6 });
+    await shot(page, info, 'diacritics');
+  });
+
   test('searches and selects a place', async ({ page }, info) => {
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');
@@ -298,7 +303,7 @@ test.describe('map', () => {
     context,
   }) => {
     await context.grantPermissions(['geolocation', 'accelerometer', 'gyroscope', 'magnetometer']);
-    await context.setGeolocation({ latitude: CENTER.lat, longitude: CENTER.lng, accuracy: 10 });
+    await context.setGeolocation({ latitude: CENTER.lat, longitude: CENTER.lng, accuracy: 80 });
     /** Points the "phone" east (heading 90°): absolute alpha runs counter-clockwise. */
     const face = (heading: number) =>
       page.evaluate((alpha) => {
@@ -326,8 +331,30 @@ test.describe('map', () => {
 
     await locate.click();
     await expect(locate).toHaveAttribute('data-follow', 'position');
-    await face(90);
+    await face(0);
     await expect(page.locator('.me.facing')).toHaveCount(1);
+    await idle(page);
+
+    // The dot sits on the location and the beam starts at the dot, however large the
+    // accuracy ring (a grid layout once pushed the dot off by the ring's radius).
+    const geometry = await page.evaluate(
+      ([lng, lat]) => {
+        const p = window.kosmos!.project([lng, lat]);
+        const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+        const dot = r('.me-dot');
+        const beam = r('.me-beam');
+        return {
+          dot: [dot.left + dot.width / 2 - p.x, dot.top + dot.height / 2 - p.y],
+          apex: [beam.left + beam.width / 2 - p.x, beam.bottom - p.y],
+          ring: r('.me-ring').width,
+        };
+      },
+      [CENTER.lng, CENTER.lat],
+    );
+    expect(geometry.ring).toBeGreaterThan(40);
+    for (const v of [...geometry.dot, ...geometry.apex]) expect(Math.abs(v)).toBeLessThan(2);
+
+    await face(90);
 
     await locate.click();
     await expect(locate).toHaveAttribute('data-follow', 'compass');

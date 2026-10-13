@@ -524,28 +524,27 @@ button {
 }
 
 .me {
-  display: grid;
-  place-items: center;
+  position: relative;
   width: 22px;
   height: 22px;
   pointer-events: none;
 }
 
-.me {
-  position: relative;
-}
-
+/* Every layer is centred on the marker's centre, which is the location. (A grid here let the
+   accuracy ring grow the cell and pushed the dot off the location by the ring's radius.) */
 .me > * {
-  grid-area: 1 / 1;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
 }
 
 /* The compass beam: a soft cone from the dot towards where the phone points. */
 .me-beam {
-  position: absolute;
-  left: 50%;
+  top: auto;
   bottom: 50%;
-  width: 76px;
-  height: 64px;
+  width: 84px;
+  height: 72px;
   translate: -50% 0;
   clip-path: polygon(50% 100%, 8% 0, 92% 0);
   background: radial-gradient(

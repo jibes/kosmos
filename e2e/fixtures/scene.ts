@@ -198,6 +198,11 @@ function world(): Layers {
       country('Poland', [19.3, 52.1], 2),
       country('Italy', [12.5, 43], 1),
       country('Spain', [-3.7, 40.2], 1),
+      // Names with diacritics, precomposed and decomposed, as tiles may carry either.
+      country('Türkiye', [35, 39], 1),
+      country('Österreich', [14.5, 47.5], 2),
+      country('Česko', [15.5, 49.8], 2),
+      country('Tu\u0308rkiye', [44, 33], 2),
       city('Berlin', [13.388, 52.517], 1),
       city('Paris', [2.35, 48.86], 1),
       city('Hamburg', [10, 53.55], 2),
