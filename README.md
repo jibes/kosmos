@@ -8,14 +8,16 @@ One map, one search field, one location button. Everything else is the map.
 
 ## What it does
 
-Designed from first principles: a map viewer answers four questions, and kOSMos answers each in exactly one way.
+Designed from first principles: a map app answers five questions, and kOSMos answers each in exactly one way.
 
-| Question                | Answer                                                                                                                                          |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| What is the world like? | A vector map, light or dark with the system, a globe when zoomed out, 3D buildings when tilted                                                  |
-| Where is X?             | Search (as you type, biased to what you are looking at)                                                                                         |
-| Where am I?             | The location button: first tap follows you north-up, the second turns the map with the compass; a beam on your dot shows where the phone points |
-| What is here?           | Tap a label, or long-press (right-click) anywhere: name, address, coordinates, share, directions                                                |
+| Question                | Answer                                                                                                                                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What is the world like? | A vector map, light or dark with the system, a globe when zoomed out, 3D buildings when tilted                                                                                                                                                 |
+| Where is X?             | Search (as you type, biased to what you are looking at)                                                                                                                                                                                        |
+| Where am I?             | The location button: first tap follows you north-up, the second turns the map with the compass; a beam on your dot shows where the phone points                                                                                                |
+| What is here?           | Tap a label, or long-press (right-click) anywhere: name, address, coordinates, share, route                                                                                                                                                    |
+| How do I get there?     | Route from the place card: car, bike or walk, with alternatives, steps, changeable start and destination; "Open in…" hands off to another app                                                                                                  |
+| Take me there           | Start: turn-by-turn on the device with spoken prompts, heading-up camera (the compass takes over when walking or standing), current speed and automatic rerouting. Android keeps guiding with the screen off; in the browser keep the app open |
 
 The view is kept between sessions and in the URL (`#map=zoom/lat/lng/bearing/pitch`), so any view is a link.
 
