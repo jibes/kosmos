@@ -650,6 +650,44 @@ test.describe('map', () => {
     expect(lookupRequests.length).toBe(asked + 1);
   });
 
+  test('says so when search does not answer, and Enter asks again', async ({ page, context }) => {
+    test.slow();
+    let answer = false;
+    await context.route(
+      /photon\.komoot\.io\/api\//,
+      (route) => (answer ? route.fallback() : undefined) /* never answers */,
+    );
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    await expect(page.locator('.spinner')).toBeVisible();
+    await expect(page.getByText('Search is not answering')).toBeVisible({ timeout: 12_000 });
+    await expect(page.locator('.spinner')).toHaveCount(0);
+    answer = true;
+    await input.press('Enter');
+    await expect(page.getByRole('option').first()).toHaveText(new RegExp(SEARCH_HIT.name));
+  });
+
+  test('finds a kind of place while the map keeps moving', async ({ page }) => {
+    // Wide enough that the search zooms in, and waits for tiles, while the map keeps turning.
+    await jump(page, { ...CENTER, zoom: 13 });
+    await idle(page);
+    // Like compass mode: the map turns every frame and never rests.
+    await page.evaluate(() => {
+      const m = window.kosmos!;
+      const spin = () => {
+        m.setBearing(m.getBearing() + 0.2);
+        requestAnimationFrame(spin);
+      };
+      spin();
+    });
+    const input = page.getByRole('combobox');
+    await input.fill('restaurant');
+    await input.press('Enter');
+    await expect(page.getByRole('option').first()).toContainText('Zur Letzten Instanz', {
+      timeout: 5000,
+    });
+  });
+
   test('Enter jumps to the first result, even before results load', async ({ page }) => {
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');

@@ -3,6 +3,13 @@ import { nearest, poiFilter, type Category } from '../core/categories';
 import type { Place } from '../core/search';
 import { MAP_SOURCE } from '../core/style';
 
+/** Wait at most this long for tiles: a map that never rests (compass mode turns it every
+ * frame, following eases it on every fix) never fires `idle`, and the search must not hang. */
+const SETTLE_MS = 1500;
+
+const settled = (map: maplibregl.Map) =>
+  Promise.race([map.once('idle'), new Promise((done) => setTimeout(done, SETTLE_MS))]);
+
 /** Below this zoom the tiles carry only the most important places. */
 const POI_ZOOM = 14;
 
@@ -18,9 +25,10 @@ export async function findCategory(
 ): Promise<Place[]> {
   if (zoomIn && map.getZoom() < POI_ZOOM) {
     map.easeTo({ zoom: POI_ZOOM, duration: 700 });
-    await map.once('idle');
+    await new Promise((done) => setTimeout(done, 750));
+    await settled(map);
   } else if (!map.areTilesLoaded()) {
-    await map.once('idle');
+    await settled(map);
   }
   // Loaded tiles reach beyond the screen (and keep earlier views); only what is in view counts.
   const view = map.getBounds();

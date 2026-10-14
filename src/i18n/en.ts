@@ -3,6 +3,7 @@ export const en = {
   clear: 'Clear',
   noResults: 'Nothing found',
   searchOffline: 'Search needs a connection',
+  searchSlow: 'Search is not answering. Try again in a moment.',
   locate: 'Show my location',
   locationDenied: 'Location access is off',
   locationUnavailable: 'Location unavailable',

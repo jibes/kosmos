@@ -5,7 +5,7 @@ import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/sea
 import { t } from '../i18n';
 import { CloseIcon, SearchIcon } from './icons';
 
-type Status = 'idle' | 'loading' | 'done' | 'error';
+type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
 
 interface Props {
   lang: string;
@@ -31,6 +31,8 @@ interface Props {
 const label = (c: Category) => t[`cat_${c}`];
 
 const DEBOUNCE_MS = 200;
+/** A search server that has not answered by now is not going to; say so instead of spinning. */
+const TIMEOUT_MS = 8000;
 const cache = new Map<string, Place[]>();
 
 /** A row of the list: a kind of place to search the map for, or a place found by name. */
@@ -39,7 +41,7 @@ type Item = { cat: Category; place?: undefined } | { place: Place; cat?: undefin
 interface Response {
   key: string;
   places: Place[];
-  status: 'done' | 'error';
+  status: 'done' | 'error' | 'slow';
 }
 
 export function SearchBar({
@@ -61,6 +63,8 @@ export function SearchBar({
   const [focused, setFocused] = useState(false);
   /** A kind of place chosen from the suggestions: its places come from the map, not by name. */
   const [category, setCategory] = useState<Category | null>(null);
+  /** Bumped by Enter after a failed or unanswered search, to ask again. */
+  const [retry, setRetry] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const listId = useId();
   /** Enter pressed before results arrived: jump to the first one when they do. */
@@ -111,7 +115,12 @@ export function SearchBar({
   useEffect(() => {
     if (category || q.length < 2 || cache.has(key)) return;
     const ctrl = new AbortController();
+    let timedOut = false;
     const timer = setTimeout(async () => {
+      const limit = setTimeout(() => {
+        timedOut = true;
+        ctrl.abort();
+      }, TIMEOUT_MS);
       try {
         const res = await fetch(searchUrl(q, lang, bias()), { signal: ctrl.signal });
         if (!res.ok) throw new Error(String(res.status));
@@ -127,16 +136,18 @@ export function SearchBar({
           }
         }
       } catch (e) {
-        if (ctrl.signal.aborted) return;
+        if (ctrl.signal.aborted && !timedOut) return;
         console.warn('search failed', e);
-        setResponse({ key, places: [], status: 'error' });
+        setResponse({ key, places: [], status: timedOut ? 'slow' : 'error' });
+      } finally {
+        clearTimeout(limit);
       }
     }, DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [q, key, lang, bias, category]);
+  }, [q, key, lang, bias, category, retry]);
 
   // "/" focuses search from anywhere, like most of the web.
   useEffect(() => {
@@ -176,6 +187,13 @@ export function SearchBar({
       // Close the list first, so the fit measures the map the user will see.
       input.current?.blur();
       if (results.length) requestAnimationFrame(onShowAll);
+    } else if (
+      e.key === 'Enter' &&
+      (status === 'error' || status === 'slow') &&
+      !suggestions.length
+    ) {
+      setResponse(null);
+      setRetry((n) => n + 1);
     } else if (e.key === 'Enter') {
       // Only rows for exactly this query; stale names from the last query would jump wrong.
       const fresh = current || active < suggestions.length;
@@ -230,6 +248,7 @@ export function SearchBar({
             <li className="r-empty">{category ? t.noneHere : t.noResults}</li>
           )}
           {status === 'error' && <li className="r-empty">{t.searchOffline}</li>}
+          {status === 'slow' && <li className="r-empty">{t.searchSlow}</li>}
           {status === 'loading' && !items.length && <li className="r-empty r-loading" />}
         </ul>
       )}

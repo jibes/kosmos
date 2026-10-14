@@ -5,6 +5,7 @@ export const de = {
   clear: 'Leeren',
   noResults: 'Nichts gefunden',
   searchOffline: 'Suche braucht eine Verbindung',
+  searchSlow: 'Die Suche antwortet nicht. Versuch es gleich noch einmal.',
   locate: 'Meinen Standort zeigen',
   locationDenied: 'Standortzugriff ist aus',
   locationUnavailable: 'Standort nicht verfügbar',
