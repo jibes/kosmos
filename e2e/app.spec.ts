@@ -426,7 +426,10 @@ test.describe('map', () => {
     await expect(lanes.locator('span').nth(2)).toHaveAttribute('data-use', 'best');
     await expect(page.locator('.speed strong')).toHaveText(/^\d+$/);
     await expect(banner.locator('strong')).toHaveText(/m$/);
-    await expect.poll(spoken).toContain('Turn right onto Unter den Linden.');
+    // The router's alert says no distance; the spoken prompt adds it.
+    await expect
+      .poll(async () => (await spoken()).find((w) => w.includes('Unter den Linden')))
+      .toMatch(/^In \d+ meters, turn right onto Unter den Linden\.$/);
     await expect(page.locator('.me.nav')).toHaveCount(1);
     await idle(page);
     await shot(page, info, 'navigating');

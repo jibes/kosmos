@@ -7,6 +7,7 @@ import {
   formatDuration,
   parseValhalla,
   routeUrl,
+  spokenDistance,
   turnOf,
 } from '../src/core/route';
 
@@ -163,5 +164,16 @@ describe('formatting', () => {
     expect(turnOf(26)).toBe('roundabout');
     expect(turnOf(4)).toBe('arrive');
     expect(turnOf(8)).toBe('straight');
+  });
+});
+
+describe('spokenDistance', () => {
+  it('rounds as people say it before a turn', () => {
+    expect(spokenDistance(83)).toEqual({ value: 80, unit: 'm' });
+    expect(spokenDistance(4)).toEqual({ value: 10, unit: 'm' });
+    expect(spokenDistance(487)).toEqual({ value: 500, unit: 'm' });
+    expect(spokenDistance(612)).toEqual({ value: 600, unit: 'm' });
+    expect(spokenDistance(1240)).toEqual({ value: 1.2, unit: 'km' });
+    expect(spokenDistance(2000)).toEqual({ value: 2, unit: 'km' });
   });
 });

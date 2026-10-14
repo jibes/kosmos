@@ -124,6 +124,10 @@ export const en = {
   northUp: 'North up',
   noCompass: 'No compass on this device',
   lanes: 'Lanes',
+  inDistance: 'In {d}, {text}',
+  metersSpoken: '{n} meters',
+  kilometersSpoken: '{n} kilometers',
+  oneKilometerSpoken: 'one kilometer',
   speedUnit: 'km/h',
   hint: 'Long-press anywhere to drop a pin',
 };

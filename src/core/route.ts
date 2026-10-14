@@ -207,6 +207,16 @@ export function formatDistance(m: number, lang: string): string {
   return m < 10_000 ? `${nf(m / 1000, 1)} km` : `${nf(m / 1000, 0)} km`;
 }
 
+/**
+ * A distance as people say it ahead of a turn: tens of metres when close, fifties below a
+ * kilometre, kilometres with one decimal beyond.
+ */
+export function spokenDistance(m: number): { value: number; unit: 'm' | 'km' } {
+  if (m < 200) return { value: Math.max(10, Math.round(m / 10) * 10), unit: 'm' };
+  if (m < 950) return { value: Math.round(m / 50) * 50, unit: 'm' };
+  return { value: Math.round(m / 100) / 10, unit: 'km' };
+}
+
 /** `1 min`, `42 min`, `2 h 05`. */
 export function formatDuration(s: number): string {
   const min = Math.max(1, Math.round(s / 60));

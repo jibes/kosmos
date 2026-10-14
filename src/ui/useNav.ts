@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   initialNav,
   markSpoken,
+  type Prompt,
   prompt,
   step,
   track,
   type NavState,
   type Track,
 } from '../core/nav';
-import type { Mode, Route } from '../core/route';
+import { spokenDistance, type Mode, type Route } from '../core/route';
+import { fill, lang, t } from '../i18n';
 import type { Fix } from './useLocation';
 import type { Voice } from './voice';
 
@@ -25,6 +27,27 @@ interface Options {
   /** Called after every fix with the new state, for the camera and the user's arrow. */
   onStep: (nav: NavState, fix: Fix) => void;
   onReroute: () => void;
+}
+
+/**
+ * What to say for a prompt: the router's words, with "In 500 meters" in front when the prompt
+ * carries a distance. After a comma (English) the instruction goes on in lower case; a colon
+ * (German) keeps its capital, which nouns need.
+ */
+export function promptWords(p: Prompt): string {
+  if (p.distance === undefined) return p.text;
+  const { value, unit } = spokenDistance(p.distance);
+  const n = value.toLocaleString(lang);
+  const d =
+    unit === 'm'
+      ? fill(t.metersSpoken, { n })
+      : value === 1
+        ? t.oneKilometerSpoken
+        : fill(t.kilometersSpoken, { n });
+  const text = /,\s*\{text\}/.test(t.inDistance)
+    ? p.text.charAt(0).toLowerCase() + p.text.slice(1)
+    : p.text;
+  return fill(t.inDistance, { d, text });
 }
 
 /** Runs guidance for the current route on every fix; the router is never polled. */
@@ -61,7 +84,7 @@ export function useNav(o: Options) {
       const p = prompt(tr, nav, mode);
       if (p) {
         nav = markSpoken(nav, p.key);
-        if (!opts.current.muted) opts.current.voice.speak(p.text);
+        if (!opts.current.muted) opts.current.voice.speak(promptWords(p));
       }
       setView({ tr, nav });
       opts.current.onStep(nav, fix);

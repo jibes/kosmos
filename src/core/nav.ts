@@ -216,7 +216,13 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
 export interface Prompt {
   key: string;
   text: string;
+  /** Metres to the maneuver, to say before the text ("In 500 m, turn right …"). The router's
+   * alert carries no distance of its own. */
+  distance?: number;
 }
+
+/** A final instruction this far ahead (fast roads) still says how far. */
+const PRE_WITH_DISTANCE_M = 150;
 
 /** Distances at which a maneuver is announced, by travel mode. */
 const ALERT_M: Record<Mode, number> = { car: 600, bike: 200, foot: 80 };
@@ -240,7 +246,11 @@ export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
   if (!m) return null;
   const preAt = Math.max(PRE_MIN_M[mode], st.speed * PRE_S);
   if (st.toNext <= preAt && !said(`${st.next}:pre`)) {
-    return { key: `${st.next}:pre`, text: m.pre ?? m.instruction };
+    return {
+      key: `${st.next}:pre`,
+      text: m.pre ?? m.instruction,
+      ...(st.toNext >= PRE_WITH_DISTANCE_M ? { distance: st.toNext } : {}),
+    };
   }
   if (
     st.toNext <= ALERT_M[mode] &&
@@ -248,7 +258,7 @@ export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
     !said(`${st.next}:alert`) &&
     m.alert
   ) {
-    return { key: `${st.next}:alert`, text: m.alert };
+    return { key: `${st.next}:alert`, text: m.alert, distance: st.toNext };
   }
   const done = ms[st.next - 1];
   const sinceDone = st.snap.along - tr.at[st.next - 1];

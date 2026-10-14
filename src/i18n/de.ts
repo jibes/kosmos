@@ -126,6 +126,10 @@ export const de = {
   northUp: 'Norden oben',
   noCompass: 'Kein Kompass auf diesem Gerät',
   lanes: 'Fahrspuren',
+  inDistance: 'In {d}: {text}',
+  metersSpoken: '{n} Metern',
+  kilometersSpoken: '{n} Kilometern',
+  oneKilometerSpoken: 'einem Kilometer',
   speedUnit: 'km/h',
   hint: 'Lange tippen, um eine Markierung zu setzen',
 } satisfies Catalogue;

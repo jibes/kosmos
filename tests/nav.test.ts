@@ -67,12 +67,12 @@ const fixAt = ([lng, lat]: [number, number], time: number, speed = 10): Fix => (
 /** Drives the route at 10 m/s, one fix per second, speaking every prompt as it comes. */
 function drive(points: [number, number][]) {
   let st: NavState = initialNav();
-  const said: { text: string; along: number }[] = [];
+  const said: { text: string; along: number; distance?: number }[] = [];
   points.forEach((p, i) => {
     st = step(tr, st, fixAt(p, i * 1000));
     const pr = prompt(tr, st, 'car');
     if (pr) {
-      said.push({ text: pr.text, along: Math.round(st.snap!.along) });
+      said.push({ text: pr.text, along: Math.round(st.snap!.along), distance: pr.distance });
       st = markSpoken(st, pr.key);
     }
   });
@@ -118,6 +118,9 @@ describe('guidance', () => {
     expect(1000 - alert.along).toBeLessThanOrEqual(600);
     expect(1000 - alert.along).toBeGreaterThan(150);
     expect(1000 - pre.along).toBeLessThanOrEqual(80);
+    // The router's alert says no distance; the prompt carries it, the close one does not.
+    expect(alert.distance).toBeCloseTo(1000 - alert.along, -1);
+    expect(pre.distance).toBeUndefined();
     expect(st.arrived).toBe(true);
     expect(st.offRoute).toBe(false);
   });
