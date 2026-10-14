@@ -328,6 +328,21 @@ button {
   height: 46px;
 }
 
+/* After the map moved away from category results: one tap searches where it is now. */
+.search-here {
+  position: absolute;
+  top: calc(var(--gutter) + var(--safe-top));
+  left: 50%;
+  translate: -50% 0;
+  padding: 9px 16px;
+  border-radius: 20px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: drop-in 0.3s var(--ease);
+}
+
 /* Category chips: what the field can find without typing. */
 .chips {
   display: flex;

@@ -64,6 +64,7 @@ export const de = {
   sayBoard: 'Nimm die {line} Richtung {dir}, Abfahrt {time}.',
   sayBoardPlain: 'Nimm die {line}, Abfahrt {time}.',
   sayNext: 'An der nächsten Haltestelle aussteigen: {stop}.',
+  searchHere: 'In diesem Bereich suchen',
   categories: 'Kategorien',
   cat_restaurant: 'Restaurants',
   cat_cafe: 'Cafés',

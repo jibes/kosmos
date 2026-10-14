@@ -22,6 +22,10 @@ interface Props {
   onCancel?: () => void;
   /** Places of a category from the map itself, nearest first; `null` ends the category. */
   onCategory: (c: Category | null) => Promise<Place[]>;
+  /** Bumped to search the category again where the map now is. */
+  categoryRun: number;
+  /** The search key on a category: all its places on the map, none picked. */
+  onShowAll: () => void;
 }
 
 const label = (c: Category) => t[`cat_${c}`];
@@ -45,6 +49,8 @@ export function SearchBar({
   autoFocus,
   onCancel,
   onCategory,
+  categoryRun,
+  onShowAll,
 }: Props) {
   const [query, setQuery] = useState('');
   const [response, setResponse] = useState<Response | null>(null);
@@ -74,7 +80,9 @@ export function SearchBar({
   const status: Status = q.length < 2 ? 'idle' : (current?.status ?? 'loading');
   // While a new query loads, the previous results stay put instead of flickering away.
   const results = current?.places ?? response?.places ?? [];
-  const active = cursor.key === key ? Math.min(cursor.index, results.length - 1) : 0;
+  // A name search offers its best hit for Enter; a category picks nothing until asked.
+  const active =
+    cursor.key === key ? Math.min(cursor.index, results.length - 1) : category ? -1 : 0;
   const setActive = (index: number) => setCursor({ key, index });
 
   // A category asks the map, never the search server; leaving it clears its dots.
@@ -97,7 +105,7 @@ export function SearchBar({
     return () => {
       live = false;
     };
-  }, [category]);
+  }, [category, categoryRun]);
 
   useEffect(() => {
     if (category || q.length < 2 || cache.has(key)) return;
@@ -149,7 +157,15 @@ export function SearchBar({
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const n = results.length;
-      if (n) setActive((active + (e.key === 'ArrowDown' ? 1 : n - 1)) % n);
+      if (n)
+        setActive(
+          (Math.max(active, e.key === 'ArrowDown' ? -1 : 0) + (e.key === 'ArrowDown' ? 1 : n - 1)) %
+            n,
+        );
+    } else if (e.key === 'Enter' && category && active < 0) {
+      // "Restaurants" + search: show them all where they are, without choosing one.
+      if (results.length) onShowAll();
+      input.current?.blur();
     } else if (e.key === 'Enter') {
       // Only results for exactly this query; stale ones from the last query would jump wrong.
       const hit = current?.places[cursor.key === key ? active : 0];

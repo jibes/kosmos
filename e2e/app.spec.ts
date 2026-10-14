@@ -467,7 +467,8 @@ test.describe('map', () => {
     await input.focus();
     const chips = page.getByRole('group', { name: 'Categories' });
     await expect(chips.getByRole('button')).toHaveCount(6);
-    await chips.getByRole('button', { name: 'Restaurants' }).click();
+    // Without moving the pointer: the list appears under it, and hovering would highlight a row.
+    await chips.getByRole('button', { name: 'Restaurants' }).dispatchEvent('click');
     await expect(input).toHaveValue('Restaurants');
 
     const options = page.getByRole('option');
@@ -484,7 +485,45 @@ test.describe('map', () => {
         return data.features.length;
       });
     await expect.poll(dots).toBe(3);
+    // A category preselects nothing: Enter means "show me all of them".
+    await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
     await shot(page, info, 'category');
+    await input.press('Enter');
+    await expect(options).toHaveCount(0);
+    await idle(page);
+    const onScreen = await page.evaluate(() => {
+      const m = window.kosmos!;
+      const { width, height } = m.getCanvas().getBoundingClientRect();
+      return [
+        [13.405 + 60 / 67800, 52.52 + 40 / 111200],
+        [13.405 - 300 / 67800, 52.52 + 200 / 111200],
+        [13.405 + 500 / 67800, 52.52 - 400 / 111200],
+      ].every(([lng, lat]) => {
+        const p = m.project([lng, lat]);
+        return p.x > 0 && p.y > 0 && p.x < width && p.y < height;
+      });
+    });
+    expect(onScreen).toBe(true);
+
+    // A dot on the map opens its place.
+    const borchardt = await page.evaluate(() =>
+      window.kosmos!.project([13.405 + 500 / 67800, 52.52 - 400 / 111200]),
+    );
+    await page.mouse.click(borchardt.x, borchardt.y);
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Borchardt');
+    await page.locator('.card').getByRole('button', { name: /close/i }).click();
+
+    // Moving away offers to search the new area; there is nothing there, back home there is.
+    const here = page.getByRole('button', { name: 'Search this area' });
+    await expect(here).toHaveCount(0);
+    await jump(page, { lng: CENTER.lng + 0.03, lat: CENTER.lat, zoom: 15 });
+    await expect(here).toBeVisible();
+    await here.click();
+    await expect.poll(dots).toBe(0);
+    await expect(here).toHaveCount(0);
+    await jump(page, { ...CENTER, zoom: 15 });
+    await here.click();
+    await expect.poll(dots).toBe(3);
 
     // Typed in German, groceries: supermarket and bakery.
     await input.fill('Lebensmittel');

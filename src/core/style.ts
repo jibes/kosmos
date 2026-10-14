@@ -24,6 +24,8 @@ export const FONT = {
 
 /** Layers whose features can be tapped to select a place. */
 export const LABEL_LAYERS = [
+  'search-names',
+  'search-dots',
   'label-poi',
   'label-village',
   'label-town',
@@ -34,9 +36,9 @@ export const LABEL_LAYERS = [
   'label-peak',
 ] as const;
 
-/** GeoJSON source the app fills with routes; features carry `alt: true` for alternatives. */
 /** The OpenMapTiles vector source. */
 export const MAP_SOURCE = 'omt';
+/** GeoJSON source the app fills with routes; features carry `alt: true` for alternatives. */
 export const ROUTE_SOURCE = 'route';
 /** Places found by category, drawn as dots until the search is cleared. */
 export const SEARCH_SOURCE = 'search';

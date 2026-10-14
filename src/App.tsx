@@ -5,8 +5,7 @@ import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
 import { COMPASS_BELOW_MS, travelHeading } from './core/compass';
 import { navZoom, offRouteLimit, type NavState } from './core/nav';
 import type { Mode, Route, TravelMode } from './core/route';
-import type { Category } from './core/categories';
-import { LABEL_LAYERS, ROUTE_ALT_LAYER, SEARCH_SOURCE } from './core/style';
+import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
 import { lang, t } from './i18n';
 import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
@@ -23,7 +22,7 @@ import { useLocation } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
 import { useMap } from './ui/useMap';
 import { useNav } from './ui/useNav';
-import { findCategory } from './ui/categorySearch';
+import { useCategory } from './ui/useCategory';
 import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useRouteLayer } from './ui/useRouteLayer';
@@ -293,29 +292,7 @@ export function App() {
   );
 
   /** Places of a category, from the map's tiles; their dots stay until the search ends. */
-  const categoryToken = useRef(0);
-  const onCategory = useCallback(
-    async (c: Category | null) => {
-      const token = ++categoryToken.current;
-      const dots = (places: Place[]) =>
-        (map?.getSource(SEARCH_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData({
-          type: 'FeatureCollection',
-          features: places.map((p) => ({
-            type: 'Feature',
-            properties: { name: p.name },
-            geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
-          })),
-        });
-      if (!map || !c) {
-        dots([]);
-        return [];
-      }
-      const places = await findCategory(map, c, LABEL_LANG);
-      if (token === categoryToken.current) dots(places);
-      return places;
-    },
-    [map],
-  );
+  const category = useCategory(map, LABEL_LANG, padding);
 
   const bias = useCallback(() => {
     if (!map) return undefined;
@@ -661,7 +638,9 @@ export function App() {
               lang={lang}
               bias={bias}
               onPick={pick}
-              onCategory={onCategory}
+              onCategory={category.onCategory}
+              categoryRun={category.run}
+              onShowAll={category.showAll}
               collapsed={!!selection && !picking}
               onFocus={picking ? () => undefined : clear}
               placeholder={
@@ -672,6 +651,11 @@ export function App() {
             />
           )}
         </div>
+        {category.offerHere && !navigating && !trip && (
+          <button type="button" className="search-here surface" onClick={category.searchHere}>
+            {t.searchHere}
+          </button>
+        )}
         {!navigating && (
           <Controls
             map={map}

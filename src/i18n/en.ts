@@ -62,6 +62,7 @@ export const en = {
   sayBoard: 'Take the {line} towards {dir}, leaving at {time}.',
   sayBoardPlain: 'Take the {line}, leaving at {time}.',
   sayNext: 'Get off at the next stop, {stop}.',
+  searchHere: 'Search this area',
   categories: 'Categories',
   cat_restaurant: 'Restaurants',
   cat_cafe: 'Cafés',
