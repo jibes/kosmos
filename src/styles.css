@@ -25,10 +25,11 @@
   color-scheme: light dark;
 }
 
-/* Dark follows the system, and navigation forces it after sunset and in tunnels (data-theme,
-   set by App). Keep the two blocks identical. */
+/* Dark follows the system unless navigation follows the sun (data-theme, set by App): light by
+   day even on a dark system, dark after sunset and in tunnels. Keep the two dark blocks
+   identical. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --space: #05060a;
     --surface: #1a1c20;
     --surface-solid: #1f2125;
@@ -42,6 +43,10 @@
       0 0.5px 1px rgb(0 0 0 / 0.4), 0 4px 12px -2px rgb(0 0 0 / 0.35),
       0 16px 40px -8px rgb(0 0 0 / 0.5);
   }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
 }
 
 :root[data-theme='dark'] {

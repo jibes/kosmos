@@ -1,5 +1,6 @@
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Theme } from '../core/palette';
 import { inTunnel, isNight, TUNNEL_HOLD_MS } from '../core/daylight';
 import type { Snap } from '../core/nav';
 import { MAP_SOURCE } from '../core/style';
@@ -26,17 +27,19 @@ function tunnelLines(map: maplibregl.Map): Pt[][] {
 }
 
 /**
- * While navigating the map turns dark after sunset and inside tunnels, whatever the system
- * theme, so it never glares at night. Fed by the guidance on every fix.
+ * While navigating the theme follows the sun, whatever the system says: light by day, dark
+ * after sunset and inside tunnels, so it neither glares at night nor hides the road by day.
+ * Fed by the guidance on every fix; `null` until the first fix, when the system decides.
  */
 export function useNavTheme(active: boolean) {
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState<boolean | null>(null);
   const lastTunnel = useRef(-Infinity);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    if (!active) lastTunnel.current = -Infinity;
-    return () => clearTimeout(timer.current);
+    if (active) return;
+    lastTunnel.current = -Infinity;
+    clearTimeout(timer.current);
   }, [active]);
 
   const update = useCallback((map: maplibregl.Map, s: Snap, time: number) => {
@@ -55,5 +58,6 @@ export function useNavTheme(active: boolean) {
     setDark(isNight(p.lat, p.lng, time));
   }, []);
 
-  return { dark: active && dark, update, updateNight };
+  const theme: Theme | null = active && dark !== null ? (dark ? 'dark' : 'light') : null;
+  return { theme, update, updateNight };
 }

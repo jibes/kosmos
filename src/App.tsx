@@ -89,11 +89,11 @@ export function App() {
   const systemTheme = useTheme();
   const [navigating, setNavigating] = useState(false);
   const {
-    dark: navDark,
+    theme: navTheme,
     update: updateNavTheme,
     updateNight: updateRideTheme,
   } = useNavTheme(navigating);
-  const theme = navDark ? 'dark' : systemTheme;
+  const theme = navTheme ?? systemTheme;
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);

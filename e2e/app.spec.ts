@@ -429,13 +429,19 @@ test.describe('map', () => {
     await expect(page.locator('.card.route')).toBeVisible();
   });
 
-  test('goes dark in a tunnel while navigating', async ({ page, context }) => {
+  test('follows the sun while navigating: light by day on a dark system, dark in a tunnel', async ({
+    page,
+    context,
+  }) => {
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const to = SEARCH_HIT;
     const go = (p: { lng: number; lat: number }) =>
       context.setGeolocation({ latitude: p.lat, longitude: p.lng, accuracy: 5 });
     const west = (x: number) => go({ lng: CENTER.lng + x / 67800, lat: to.lat });
     const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+    // The phone is set to dark; outside navigation that is what shows.
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect.poll(theme).toBe('dark');
     // Midday in Berlin, whenever the test runs; the clock keeps ticking from there.
     await page.evaluate(() => {
       const noon = new Date().setUTCHours(11, 0, 0, 0);
@@ -465,8 +471,11 @@ test.describe('map', () => {
     expect(await page.evaluate(() => window.kosmos!.getStyle().name)).toBe('kOSMos dark');
     await west(-450);
     await expect.poll(theme, { timeout: 8000 }).toBe('light');
+    expect(await page.evaluate(() => window.kosmos!.getStyle().name)).toBe('kOSMos light');
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(bg).toBe('rgb(223, 229, 236)');
     await page.getByRole('button', { name: 'End' }).click();
-    await expect.poll(theme).toBe('light');
+    await expect.poll(theme).toBe('dark');
   });
 
   test('finds places by category from the map, nearest first', async ({ page }, info) => {
