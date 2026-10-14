@@ -45,6 +45,10 @@ export function About({ onClose }: { onClose: () => void }) {
           {t.licence}{' '}
           <a href={SOURCE} target="_blank" rel="noreferrer">
             {t.source}
+          </a>{' '}
+          ·{' '}
+          <a href={`${SOURCE}/blob/main/THIRD_PARTY_NOTICES.md`} target="_blank" rel="noreferrer">
+            {t.sources}
           </a>
           <br />
           {t.version} {__BUILD__.version} · {__BUILD__.sha}

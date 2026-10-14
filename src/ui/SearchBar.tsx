@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { CATEGORY_IDS, categoryFor, type Category } from '../core/categories';
+import { formatDistance } from '../core/route';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
 import { t } from '../i18n';
 import { CloseIcon, SearchIcon } from './icons';
@@ -18,7 +20,11 @@ interface Props {
   autoFocus?: boolean;
   /** Shows a Cancel button; also what Escape does on an empty field. */
   onCancel?: () => void;
+  /** Places of a category from the map itself, nearest first; `null` ends the category. */
+  onCategory: (c: Category | null) => Promise<Place[]>;
 }
+
+const label = (c: Category) => t[`cat_${c}`];
 
 const DEBOUNCE_MS = 200;
 const cache = new Map<string, Place[]>();
@@ -38,6 +44,7 @@ export function SearchBar({
   placeholder,
   autoFocus,
   onCancel,
+  onCategory,
 }: Props) {
   const [query, setQuery] = useState('');
   const [response, setResponse] = useState<Response | null>(null);
@@ -48,13 +55,17 @@ export function SearchBar({
   /** Enter pressed before results arrived: jump to the first one when they do. */
   const jumpFor = useRef<string | null>(null);
   const onPickRef = useRef(onPick);
+  const onCategoryRef = useRef(onCategory);
   useEffect(() => {
     onPickRef.current = onPick;
+    onCategoryRef.current = onCategory;
   });
 
   const q = query.trim();
-  const key = `${lang}|${q}`;
-  const cached = cache.get(key);
+  /** "Restaurant", "Lebensmittel", a chip: places of that kind from the map, not by name. */
+  const category = categoryFor(q);
+  const key = category ? `cat|${category}` : `${lang}|${q}`;
+  const cached = category ? undefined : cache.get(key);
   const current = cached
     ? { places: cached, status: 'done' as const }
     : response?.key === key
@@ -66,8 +77,30 @@ export function SearchBar({
   const active = cursor.key === key ? Math.min(cursor.index, results.length - 1) : 0;
   const setActive = (index: number) => setCursor({ key, index });
 
+  // A category asks the map, never the search server; leaving it clears its dots.
   useEffect(() => {
-    if (q.length < 2 || cache.has(key)) return;
+    let live = true;
+    onCategoryRef
+      .current(category)
+      .then((places) => {
+        if (!live || !category) return;
+        setResponse({ key: `cat|${category}`, places, status: 'done' });
+        if (jumpFor.current === `cat|${category}`) {
+          jumpFor.current = null;
+          if (places[0]) {
+            onPickRef.current(places[0]);
+            input.current?.blur();
+          }
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [category]);
+
+  useEffect(() => {
+    if (category || q.length < 2 || cache.has(key)) return;
     const ctrl = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -94,7 +127,7 @@ export function SearchBar({
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [q, key, lang, bias]);
+  }, [q, key, lang, bias, category]);
 
   // "/" focuses search from anywhere, like most of the web.
   useEffect(() => {
@@ -146,13 +179,33 @@ export function SearchBar({
               onPointerEnter={() => setActive(i)}
             >
               <span className="r-name">{p.name}</span>
-              {p.detail && <span className="r-detail">{p.detail}</span>}
+              {p.distance !== undefined ? (
+                <span className="r-detail">{formatDistance(p.distance, lang)}</span>
+              ) : (
+                p.detail && <span className="r-detail">{p.detail}</span>
+              )}
             </li>
           ))}
-          {status === 'done' && !results.length && <li className="r-empty">{t.noResults}</li>}
+          {status === 'done' && !results.length && (
+            <li className="r-empty">{category ? t.noneHere : t.noResults}</li>
+          )}
           {status === 'error' && <li className="r-empty">{t.searchOffline}</li>}
           {status === 'loading' && !results.length && <li className="r-empty r-loading" />}
         </ul>
+      )}
+      {open && q.length < 2 && (
+        <div className="chips" role="group" aria-label={t.categories}>
+          {CATEGORY_IDS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => setQuery(label(c))}
+            >
+              {label(c)}
+            </button>
+          ))}
+        </div>
       )}
       {open && q.length < 2 && <p className="hint">{t.hint}</p>}
       <label className="bar surface">

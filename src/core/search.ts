@@ -10,6 +10,8 @@ export interface Place extends LngLat {
   detail: string;
   /** [west, south, east, north], when the place has an area worth fitting. */
   bbox?: [number, number, number, number];
+  /** Metres from where the search looked, for places found by category. */
+  distance?: number;
 }
 
 export interface SearchBias extends LngLat {

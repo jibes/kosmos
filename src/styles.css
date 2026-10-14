@@ -303,6 +303,26 @@ button {
   height: 46px;
 }
 
+/* Category chips: what the field can find without typing. */
+.chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 2px 4px;
+  animation: fade 0.3s var(--ease);
+}
+
+.chips button {
+  flex: none;
+  padding: 7px 13px;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .hint {
   margin: 0 auto;
   padding: 6px 14px;

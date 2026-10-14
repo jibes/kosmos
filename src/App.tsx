@@ -5,7 +5,8 @@ import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
 import { COMPASS_BELOW_MS, travelHeading } from './core/compass';
 import { navZoom, offRouteLimit, type NavState } from './core/nav';
 import type { Mode, Route, TravelMode } from './core/route';
-import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
+import type { Category } from './core/categories';
+import { LABEL_LAYERS, ROUTE_ALT_LAYER, SEARCH_SOURCE } from './core/style';
 import { lang, t } from './i18n';
 import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
@@ -22,6 +23,7 @@ import { useLocation } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
 import { useMap } from './ui/useMap';
 import { useNav } from './ui/useNav';
+import { findCategory } from './ui/categorySearch';
 import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useRouteLayer } from './ui/useRouteLayer';
@@ -75,6 +77,13 @@ async function fetchPlaces(url: string): Promise<Place[]> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(String(res.status));
   return parsePhoton(await res.json());
+}
+
+/** The address line for a place known only by name and position (a map label or POI). */
+async function addressOf(name: string, at: LngLat) {
+  const hits = await fetchPlaces(searchUrl(name, lang, { ...at, zoom: 14 }, 3));
+  const hit = hits.find((p) => distance(p, at) < 30_000);
+  return hit ? { detail: hit.detail } : null;
 }
 
 export function App() {
@@ -227,11 +236,7 @@ export function App() {
         f.geometry.type === 'Point'
           ? { lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }
           : e.lngLat;
-      select({ name, detail: '', ...at }, async () => {
-        const hits = await fetchPlaces(searchUrl(name, lang, { ...at, zoom: 14 }, 3));
-        const hit = hits.find((p) => distance(p, at) < 30_000);
-        return hit ? { detail: hit.detail } : null;
-      });
+      select({ name, detail: '', ...at }, () => addressOf(name, at));
     };
     const offHold = onLongPress(map, (at) => {
       if (tripRef.current) return;
@@ -272,7 +277,8 @@ export function App() {
         return;
       }
       setFollow('off');
-      select(place);
+      // A place found by category comes from the map; its address comes from Photon.
+      select(place, place.distance === undefined ? undefined : () => addressOf(place.name, place));
       const [w, s, e, n] = place.bbox ?? [0, 0, 0, 0];
       if (place.bbox && (e - w > 0.002 || n - s > 0.002)) {
         map.fitBounds(place.bbox, { padding: padding(), maxZoom: 17, duration: 1600 });
@@ -282,6 +288,31 @@ export function App() {
       }
     },
     [map, select],
+  );
+
+  /** Places of a category, from the map's tiles; their dots stay until the search ends. */
+  const categoryToken = useRef(0);
+  const onCategory = useCallback(
+    async (c: Category | null) => {
+      const token = ++categoryToken.current;
+      const dots = (places: Place[]) =>
+        (map?.getSource(SEARCH_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData({
+          type: 'FeatureCollection',
+          features: places.map((p) => ({
+            type: 'Feature',
+            properties: { name: p.name },
+            geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+          })),
+        });
+      if (!map || !c) {
+        dots([]);
+        return [];
+      }
+      const places = await findCategory(map, c, LABEL_LANG);
+      if (token === categoryToken.current) dots(places);
+      return places;
+    },
+    [map],
   );
 
   const bias = useCallback(() => {
@@ -628,6 +659,7 @@ export function App() {
               lang={lang}
               bias={bias}
               onPick={pick}
+              onCategory={onCategory}
               collapsed={!!selection && !picking}
               onFocus={picking ? () => undefined : clear}
               placeholder={

@@ -284,6 +284,35 @@ function city(): Layers {
     }),
   );
   layers.water_name.push(point(m(-1250, 1250), { class: 'lake', name: 'Kleiner See' }));
+  // A few places for the category search, at known distances from CENTER.
+  layers.poi.push(
+    point(m(60, 40), {
+      class: 'restaurant',
+      subclass: 'restaurant',
+      name: 'Zur Letzten Instanz',
+      rank: 1,
+    }),
+    point(m(-300, 200), { class: 'fast_food', subclass: 'fast_food', name: 'Curry 36', rank: 2 }),
+    point(m(500, -400), {
+      class: 'restaurant',
+      subclass: 'restaurant',
+      name: 'Borchardt',
+      rank: 3,
+    }),
+    point(m(-120, -90), { class: 'grocery', subclass: 'supermarket', name: 'Kiezmarkt', rank: 1 }),
+    point(m(250, 300), {
+      class: 'grocery',
+      subclass: 'bakery',
+      name: 'Bäckerei Hoffmann',
+      rank: 2,
+    }),
+    point(m(30, -60), {
+      class: 'pharmacy',
+      subclass: 'pharmacy',
+      name: 'Linden-Apotheke',
+      rank: 1,
+    }),
+  );
   layers.landuse.push(poly([rect(-2500, -2500, 2500, 2500)], { class: 'residential' }));
   layers.landcover.push(
     poly([rect(350, 750, 1250, 1500)], { class: 'grass', subclass: 'park' }),

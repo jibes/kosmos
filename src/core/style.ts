@@ -38,6 +38,8 @@ export const LABEL_LAYERS = [
 /** The OpenMapTiles vector source. */
 export const MAP_SOURCE = 'omt';
 export const ROUTE_SOURCE = 'route';
+/** Places found by category, drawn as dots until the search is cleared. */
+export const SEARCH_SOURCE = 'search';
 export const ROUTE_ALT_LAYER = 'route-alt';
 
 export interface StyleOptions {
@@ -429,6 +431,37 @@ function route(p: Palette): LayerSpecification[] {
   ];
 }
 
+/** Category results: a dot and its name, above the map's own labels so neither hides. */
+function searchDots(p: Palette): LayerSpecification[] {
+  return [
+    {
+      id: 'search-dots',
+      type: 'circle',
+      source: SEARCH_SOURCE,
+      paint: {
+        'circle-radius': expLerp(12, 4, 18, 6),
+        'circle-color': p.accent,
+        'circle-stroke-color': p.routeCasing,
+        'circle-stroke-width': 2,
+      },
+    },
+    {
+      id: 'search-names',
+      type: 'symbol',
+      source: SEARCH_SOURCE,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': [FONT.bold],
+        'text-size': 12.5,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.7],
+        'text-max-width': 8,
+      },
+      paint: { 'text-color': p.accent, 'text-halo-color': p.halo, 'text-halo-width': 1.6 },
+    },
+  ];
+}
+
 function labels(p: Palette, lang: string): LayerSpecification[] {
   const halo = {
     'text-halo-color': p.halo,
@@ -625,6 +658,7 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
           '<a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank">OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>',
       },
       [ROUTE_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      [SEARCH_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
     },
     glyphs: GLYPHS_URL,
     ...(fontFaces ? { 'font-faces': fontFaces } : {}),
@@ -641,6 +675,6 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
     },
     light: { anchor: 'viewport', color: '#ffffff', intensity: p.light, position: [1.2, 210, 35] },
     transition: { duration: 300, delay: 0 },
-    layers: [...base(p), ...roads(p), ...route(p), ...labels(p, lang)],
+    layers: [...base(p), ...roads(p), ...route(p), ...labels(p, lang), ...searchDots(p)],
   };
 }

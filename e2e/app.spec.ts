@@ -455,6 +455,43 @@ test.describe('map', () => {
     await expect.poll(theme).toBe('light');
   });
 
+  test('finds places by category from the map, nearest first', async ({ page }, info) => {
+    await jump(page, { ...CENTER, zoom: 13 });
+    await idle(page);
+    const input = page.getByRole('combobox');
+    await input.focus();
+    const chips = page.getByRole('group', { name: 'Categories' });
+    await expect(chips.getByRole('button')).toHaveCount(6);
+    await chips.getByRole('button', { name: 'Restaurants' }).click();
+    await expect(input).toHaveValue('Restaurants');
+
+    const options = page.getByRole('option');
+    await expect(options).toHaveCount(3);
+    await expect(options.first()).toContainText('Zur Letzten Instanz');
+    await expect(options.first()).toContainText(/\d+ m/);
+    await expect(options.nth(2)).toContainText('Borchardt');
+    // Too wide a view holds few places; the search looked closer first.
+    expect(await page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThanOrEqual(14.9);
+    const dots = () =>
+      page.evaluate(async () => {
+        const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
+        const data = (await src.getData()) as GeoJSON.FeatureCollection;
+        return data.features.length;
+      });
+    await expect.poll(dots).toBe(3);
+    await shot(page, info, 'category');
+
+    // Typed in German, groceries: supermarket and bakery.
+    await input.fill('Lebensmittel');
+    await expect(options).toHaveCount(2);
+    await expect(options.first()).toContainText('Kiezmarkt');
+    await options.first().click();
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Kiezmarkt');
+
+    await input.fill('');
+    await expect.poll(dots).toBe(0);
+  });
+
   test('Enter jumps to the first result, even before results load', async ({ page }) => {
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');

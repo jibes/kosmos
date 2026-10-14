@@ -2,7 +2,7 @@ import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { Theme } from '../core/palette';
-import { ROUTE_SOURCE, buildStyle } from '../core/style';
+import { ROUTE_SOURCE, SEARCH_SOURCE, buildStyle } from '../core/style';
 import { DEFAULT_VIEW, VIEW_KEY, parseView, serializeView } from '../core/view';
 import { mapFontFaces } from './fonts';
 
@@ -82,10 +82,14 @@ export function useMap(
     initial.current = { theme, labelLang };
     map.setStyle(buildStyle({ theme, lang: labelLang, fontFaces: mapFontFaces() }), {
       diff: true,
-      // The route lives in the map, not in the style; carry it over a theme swap.
+      // The route and search dots live in the map, not in the style; carry them over a theme swap.
       transformStyle: (prev, next) => {
-        const kept = prev?.sources[ROUTE_SOURCE];
-        return kept ? { ...next, sources: { ...next.sources, [ROUTE_SOURCE]: kept } } : next;
+        const sources = { ...next.sources };
+        for (const id of [ROUTE_SOURCE, SEARCH_SOURCE]) {
+          const kept = prev?.sources[id];
+          if (kept) sources[id] = kept;
+        }
+        return { ...next, sources };
       },
     });
   }, [map, theme, labelLang]);
