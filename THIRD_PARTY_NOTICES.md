@@ -19,6 +19,7 @@ kOSMos is free software under [GPL-3.0-or-later](LICENSE). It holds no data of i
 | Component                                                                         | Licence      |
 | --------------------------------------------------------------------------------- | ------------ |
 | MapLibre GL JS                                                                    | BSD-3-Clause |
+| @mapbox/vector-tile, pbf                                                          | BSD-3-Clause |
 | React, React DOM                                                                  | MIT          |
 | Capacitor and plugins (share, background geolocation, text to speech, keep awake) | MIT          |
 | Workbox (via vite-plugin-pwa)                                                     | MIT          |

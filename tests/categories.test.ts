@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { categoriesFor, nearest, poiFilter } from '../src/core/categories';
+import { categoriesFor, isOf, nearest } from '../src/core/categories';
 
 describe('categories', () => {
   it('reads a kind of place from a query in either language', () => {
@@ -31,8 +31,10 @@ describe('categories', () => {
   });
 
   it('filters named places of the kind', () => {
-    expect(JSON.stringify(poiFilter('pharmacy'))).toContain('"chemist"');
-    expect(JSON.stringify(poiFilter('museum'))).toContain('"gallery"');
+    expect(isOf('pharmacy', { name: 'DM', subclass: 'chemist' })).toBe(true);
+    expect(isOf('museum', { name: 'Galerie', subclass: 'gallery' })).toBe(true);
+    expect(isOf('museum', { subclass: 'museum' })).toBe(false);
+    expect(isOf('museum', { name: 'Kino', subclass: 'cinema' })).toBe(false);
   });
 
   it('lists the nearest first, each place once', () => {

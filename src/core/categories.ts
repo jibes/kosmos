@@ -214,10 +214,9 @@ export function categoriesFor(query: string, limit = 2): Category[] {
   return [...exact, ...begun].slice(0, limit);
 }
 
-/** MapLibre filter for the `poi` source layer: named places of the category. */
-export function poiFilter(c: Category): unknown[] {
-  return ['all', ['has', 'name'], ['in', ['get', 'subclass'], ['literal', TABLE[c].tags]]];
-}
+/** A named place of the category, from a `poi` feature's properties. */
+export const isOf = (c: Category, p: Record<string, unknown>): boolean =>
+  !!p.name && (TABLE[c].tags as readonly unknown[]).includes(p.subclass);
 
 export interface Poi extends LngLat {
   name: string;

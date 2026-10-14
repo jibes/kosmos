@@ -18,7 +18,11 @@ const indexes = Object.entries(scene()).map(
 function tile(z: number, x: number, y: number): Buffer {
   const layers: Record<string, unknown> = {};
   for (const [name, index] of indexes) {
-    const t = index.getTile(z, x, y);
+    let t = index.getTile(z, x, y);
+    // Like OpenMapTiles: below zoom 14 only the most important places.
+    if (t && name === 'poi' && z < 14) {
+      t = { ...t, features: t.features.filter((f) => Number(f.tags?.rank) <= 1) };
+    }
     if (t?.features.length) layers[name] = t;
   }
   return Buffer.from(vtpbf.fromGeojsonVt(layers, { version: 2 }));

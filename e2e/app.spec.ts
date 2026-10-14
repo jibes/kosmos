@@ -495,7 +495,7 @@ test.describe('map', () => {
   });
 
   test('finds places by category from the map, nearest first', async ({ page }, info) => {
-    await jump(page, { ...CENTER, zoom: 13 });
+    await jump(page, { ...CENTER, zoom: 11 });
     await idle(page);
     const input = page.getByRole('combobox');
     // The word offers the kind of place as the top row; Enter takes it.
@@ -510,9 +510,10 @@ test.describe('map', () => {
     await expect(options.first()).toContainText('Zur Letzten Instanz');
     await expect(options.first()).toContainText(/\d+ m/);
     await expect(options.nth(2)).toContainText('Borchardt');
-    // Too wide a view holds few places; the first search looked closer, once.
+    // Found from far out, though the tiles on screen hold only the most important places;
+    // the first search from a very wide view looked closer, once, but not all the way.
     const zoom = () => page.evaluate(() => window.kosmos!.getZoom());
-    expect(await zoom()).toBeCloseTo(14, 1);
+    expect(await zoom()).toBeCloseTo(12, 1);
     const dots = () =>
       page.evaluate(async () => {
         const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
