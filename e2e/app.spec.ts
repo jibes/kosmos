@@ -4,6 +4,7 @@ import { isNight } from '../src/core/daylight';
 import { CENTER } from './fixtures/scene';
 import {
   SEARCH_HIT,
+  lookupRequests,
   offlineWorld,
   routeRequests,
   stopTimesRequests,
@@ -494,6 +495,39 @@ test.describe('map', () => {
 
     await input.fill('');
     await expect.poll(dots).toBe(0);
+  });
+
+  test('shows opening hours and contacts, asking once per place', async ({ page }, info) => {
+    const asked = lookupRequests.length;
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    const card = page.locator('.card');
+    const hours = card.locator('.hours summary');
+    await expect(hours).toHaveText(/^(Open · closes|Closed · opens) /);
+    await expect(card.getByRole('link', { name: '+49 30 1234567' })).toHaveAttribute(
+      'href',
+      'tel:+49301234567',
+    );
+    await expect(card.getByRole('link', { name: 'example.org' })).toHaveAttribute(
+      'href',
+      'https://www.example.org/tor',
+    );
+    await hours.click();
+    await expect(card.locator('.hours li')).toHaveText([
+      'Mo-Fr 09:00-18:00',
+      'Sa 10:00-14:00',
+      'Su off',
+    ]);
+    await shot(page, info, 'hours');
+    expect(lookupRequests.length).toBe(asked + 1);
+    expect(lookupRequests.at(-1)!.get('osm_ids')).toBe('W518071791');
+
+    // Again: from the cache, no second request.
+    await card.getByRole('button', { name: /close/i }).click();
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await expect(page.locator('.card .hours summary')).toBeVisible();
+    expect(lookupRequests.length).toBe(asked + 1);
   });
 
   test('Enter jumps to the first result, even before results load', async ({ page }) => {

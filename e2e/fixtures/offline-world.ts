@@ -173,6 +173,9 @@ function fakePlan(a: Pt, b: Pt, depart: number) {
 /** Departure time of the last plan served, to answer departure checks consistently. */
 let planDepart = 0;
 
+/** Every Nominatim lookup the app made. */
+export const lookupRequests: URLSearchParams[] = [];
+
 /** Every Transitous departure check the app made. */
 export const stopTimesRequests: URLSearchParams[] = [];
 
@@ -213,6 +216,8 @@ export async function offlineWorld(context: BrowserContext) {
             district: 'Mitte',
             city: 'Berlin',
             country: 'Deutschland',
+            osm_type: 'W',
+            osm_id: 518071791,
           }),
           photonPoint(13.0, 52.4, { name: 'Brandenburg an der Havel', country: 'Deutschland' }),
         ]
@@ -260,6 +265,30 @@ export async function offlineWorld(context: BrowserContext) {
           },
         ],
       }),
+    });
+  });
+  await context.route(/nominatim\.openstreetmap\.org\/lookup/, (route) => {
+    const q = new URL(route.request().url()).searchParams;
+    lookupRequests.push(q);
+    const known = q.get('osm_ids') === 'W518071791';
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(
+        known
+          ? [
+              {
+                osm_type: 'way',
+                osm_id: 518071791,
+                extratags: {
+                  opening_hours: 'Mo-Fr 09:00-18:00; Sa 10:00-14:00; Su off',
+                  phone: '+49 30 1234567',
+                  website: 'https://www.example.org/tor',
+                },
+              },
+            ]
+          : [],
+      ),
     });
   });
   await context.route(/photon\.komoot\.io\/reverse/, (route) => {

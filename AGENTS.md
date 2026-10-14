@@ -20,6 +20,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 - MapLibre's worker is bundled with `?url` and set via `setWorkerUrl` (`ui/useMap.ts`); without it the worker 404s after bundling.
 - Compass: `core/compass.ts` (pure: heading from orientation events, circular smoothing, course vs compass by speed) and `ui/useCompass.ts` (streams headings to subscribers, not React state). The location button cycles off → follow → compass (`Follow` in `ui/Controls.tsx`).
 - Category search: `core/categories.ts` (pure: categories as OpenMapTiles `poi` subclasses, words in en/de, nearest first) and `ui/categorySearch.ts`, which reads the loaded tiles (zooming to 15 first when wider); no server. Results are dots and names in the style's `search` source, above labels.
+- Opening hours: `core/hours.ts` (pure: the common `opening_hours` subset; anything else is shown as written, never guessed) and `ui/PlaceDetails.tsx`.
 - Lanes: `core/lanes.ts` (pure: Valhalla `turn_lanes` per maneuver, shown only when some lanes lead the right way and some do not; size by distance and speed). Comes with the same route request.
 - Navigation theme: `core/daylight.ts` (pure: sun elevation, tunnel match against `brunnel=tunnel` lines) and `ui/useNavTheme.ts`, which reads tunnels from the tiles already loaded (Valhalla's native response has no tunnel flag). The override sets `data-theme` on `<html>`; `styles.css` repeats the dark tokens under it.
 - Public transport guidance is `core/ride.ts` (pure, replay-tested like `nav.ts`): walk → wait → ride → arrived from fixes and time; GPS when a fix is fresh, the timetable's arrival times underground. `ui/useRide.ts` also ticks every 3 s so it moves on without fixes; `ui/RideView.tsx` renders it. A missed departure offers a new connection (one request, user-initiated).
@@ -30,7 +31,8 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 ## Invariants
 
 - Storage keys follow `kosmos.<name>.v<N>` (`kosmos.view.v1`). Never rename an existing key: bump the version and migrate.
-- Network calls go only to OpenFreeMap, Photon, the FOSSGIS Valhalla router and Transitous (README → Privacy, CSP in `index.html`).
+- Network calls go only to OpenFreeMap, Photon, the FOSSGIS Valhalla router, Transitous and Nominatim (README → Privacy, CSP in `index.html`).
+- Nominatim (`core/details.ts`, `ui/usePlaceDetails.ts`) follows the OSMF usage policy: one `lookup` by OSM id per place card opened, cached, at most one request a second, never while typing; the app names itself via `ui/http.ts`.
 - Transitous (`core/transit.ts`) is volunteer-run too: one plan request per trip, travel-mode or departure change (the time field settles 800 ms first); while guiding, at most one `stoptimes` check per ride, in the last 10 min before boarding and not within 3 min of planning (`ui/useRide.ts`). Never polled. Requests go through `ui/http.ts`. The Android app names itself with a User-Agent via `CapacitorHttp`; browsers send their Referer. `Mode` (road: Valhalla, turn-by-turn in `core/nav.ts`) vs `TravelMode` (adds `transit`: guided by `core/ride.ts`).
 - The router is a volunteer service under fair use: one request per trip or travel-mode change, re-requested only when the start moves more than 150 m (`ui/useRoute.ts`), and while navigating only on a confirmed off-route, at most every 30 s (`ui/useNav.ts`). Never poll it.
 - A new data source or bundled asset goes into `THIRD_PARTY_NOTICES.md` (linked from About).

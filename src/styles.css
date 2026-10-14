@@ -362,6 +362,60 @@ button {
 
 /* ---------- Place card ---------- */
 
+/* Hours and contacts: one quiet line each, the week one tap away. */
+.place-details {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.hours summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.hours summary::-webkit-details-marker {
+  display: none;
+}
+
+.hours summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.hours summary[data-open='true']::before {
+  background: #2f9e44;
+}
+
+.hours summary[data-open='false']::before {
+  background: #e5484d;
+}
+
+.hours ul {
+  margin: 6px 0 2px 14px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+}
+
+.contacts a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .card {
   padding: 18px 18px 16px;
   border-radius: var(--radius);

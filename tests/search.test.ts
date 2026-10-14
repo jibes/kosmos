@@ -93,4 +93,22 @@ describe('parsePhoton', () => {
     });
     expect(places.map((p) => p.name)).toEqual(['Twice']);
   });
+
+  it('keeps the OSM id for looking up details', () => {
+    const [p] = parsePhoton({
+      features: [
+        {
+          geometry: { coordinates: [13.4, 52.5] },
+          properties: { name: 'Kiezmarkt', osm_type: 'N', osm_id: 42 },
+        },
+      ],
+    });
+    expect(p.osm).toBe('N42');
+    const [q] = parsePhoton({
+      features: [
+        { geometry: { coordinates: [13.4, 52.5] }, properties: { name: 'X', osm_type: 'Q' } },
+      ],
+    });
+    expect(q.osm).toBeUndefined();
+  });
 });

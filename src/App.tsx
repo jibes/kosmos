@@ -83,7 +83,7 @@ async function fetchPlaces(url: string): Promise<Place[]> {
 async function addressOf(name: string, at: LngLat) {
   const hits = await fetchPlaces(searchUrl(name, lang, { ...at, zoom: 14 }, 3));
   const hit = hits.find((p) => distance(p, at) < 30_000);
-  return hit ? { detail: hit.detail } : null;
+  return hit ? { detail: hit.detail, ...(hit.osm ? { osm: hit.osm } : {}) } : null;
 }
 
 export function App() {
@@ -244,7 +244,9 @@ export function App() {
       const here = { lng: at.lng, lat: at.lat };
       select({ name: t.droppedPin, detail: '', ...here }, async () => {
         const [hit] = await fetchPlaces(reverseUrl(here, lang));
-        return hit ? { name: hit.name, detail: hit.detail } : null;
+        return hit
+          ? { name: hit.name, detail: hit.detail, ...(hit.osm ? { osm: hit.osm } : {}) }
+          : null;
       });
     });
     const pointer = () => (map.getCanvas().style.cursor = 'pointer');

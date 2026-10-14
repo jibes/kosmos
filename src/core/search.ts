@@ -12,6 +12,8 @@ export interface Place extends LngLat {
   bbox?: [number, number, number, number];
   /** Metres from where the search looked, for places found by category. */
   distance?: number;
+  /** The OSM object (`N123`, `W456`), when the search knows it; details are looked up by it. */
+  osm?: string;
 }
 
 export interface SearchBias extends LngLat {
@@ -39,6 +41,8 @@ export function reverseUrl({ lng, lat }: LngLat, lang: string): string {
 
 interface PhotonProps {
   name?: string;
+  osm_type?: string;
+  osm_id?: number;
   housenumber?: string;
   street?: string;
   postcode?: string;
@@ -74,6 +78,9 @@ function toPlace(f: PhotonFeature): Place | null {
     p.country !== name ? p.country : undefined,
   ]);
   const place: Place = { name, detail, lng: c[0], lat: c[1] };
+  if (p.osm_type && /^[NWR]$/.test(p.osm_type) && Number.isInteger(p.osm_id)) {
+    place.osm = `${p.osm_type}${p.osm_id}`;
+  }
   if (p.extent?.length === 4 && p.extent.every(Number.isFinite)) {
     // Photon's extent is [minLon, maxLat, maxLon, minLat].
     const [w, n, e, s] = p.extent;

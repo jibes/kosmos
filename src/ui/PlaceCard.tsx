@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
-import { t } from '../i18n';
+import { lang, t } from '../i18n';
 import { CloseIcon, RouteIcon, ShareIcon } from './icons';
 import { copy, share } from './native';
+import { PlaceDetails } from './PlaceDetails';
 import { Sheet } from './Sheet';
+import { usePlaceDetails } from './usePlaceDetails';
 
 interface Props {
   place: Place;
@@ -16,6 +18,7 @@ interface Props {
 
 export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) {
   const [copied, setCopied] = useState(false);
+  const details = usePlaceDetails(place.osm, lang);
 
   const onShare = async () => {
     const result = await share({
@@ -47,6 +50,7 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) 
           <CloseIcon size={16} />
         </button>
       </header>
+      {details && <PlaceDetails details={details} />}
       <button type="button" className="coords" onClick={onCopy} aria-label={t.copy}>
         {copied ? t.copied : formatLngLat(place)}
       </button>

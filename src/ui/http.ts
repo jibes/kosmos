@@ -1,13 +1,15 @@
 import { CapacitorHttp } from '@capacitor/core';
+import { NOMINATIM_URL } from '../core/details';
 import { TRANSIT_URL } from '../core/transit';
 import { isNative } from './native';
 
-/** Transitous asks apps to name themselves; a browser cannot set User-Agent, the app can. */
+/** Transitous and Nominatim ask apps to name themselves; a browser cannot set User-Agent (its
+ * Referer has to do), the app can. */
 const USER_AGENT = `kOSMos/${__BUILD__.version} (+https://github.com/jibes/kosmos)`;
 
 /** GET as JSON; `ok` false on an HTTP error, a throw only when there is no answer at all. */
 export async function getJson(url: string, signal: AbortSignal) {
-  if (isNative && url.startsWith(TRANSIT_URL)) {
+  if (isNative && (url.startsWith(TRANSIT_URL) || url.startsWith(NOMINATIM_URL))) {
     const res = await CapacitorHttp.get({ url, headers: { 'User-Agent': USER_AGENT } });
     return { ok: res.status >= 200 && res.status < 300, status: res.status, json: res.data };
   }
