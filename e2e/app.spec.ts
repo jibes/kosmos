@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
 import { isNight } from '../src/core/daylight';
 import { CENTER } from './fixtures/scene';
 import {
@@ -142,7 +142,8 @@ test.describe('map', () => {
     await expect(page.locator('.pin')).toHaveCount(0);
   });
 
-  test('routes to a place, by mode and from a chosen start', async ({ page, context }, info) => {
+  /** From the user's location (north-east of CENTER) to the search hit, route card open. */
+  async function openRoute(page: Page, context: BrowserContext) {
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
     await page.getByRole('combobox').fill('brandenburger');
@@ -151,8 +152,13 @@ test.describe('map', () => {
       .locator('.card')
       .getByRole('button', { name: /^Route$/ })
       .click();
-
     const card = page.locator('.card.route');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    return card;
+  }
+
+  test('routes to a place, with steps, by travel mode', async ({ page, context }, info) => {
+    const card = await openRoute(page, context);
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     await expect(card.getByRole('radio', { name: 'Car' })).toHaveAttribute('aria-checked', 'true');
     await expect(card.locator('.alts [role=radio]')).toHaveCount(2);
@@ -179,7 +185,10 @@ test.describe('map', () => {
     );
     await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
     await expect.poll(() => routeRequests.at(-1)?.costing).toBe('pedestrian');
+  });
 
+  test('changes the start and the destination of a route', async ({ page, context }) => {
+    const card = await openRoute(page, context);
     await card.locator('.end-btn').first().click();
     const start = page.getByRole('combobox', { name: 'Search start' });
     await expect(start).toBeFocused();
