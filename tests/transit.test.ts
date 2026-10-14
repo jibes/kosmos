@@ -7,6 +7,7 @@ import {
   stopTimesUrl,
   textOn,
   transitUrl,
+  vehicleOf,
   withDeparture,
 } from '../src/core/transit';
 
@@ -244,5 +245,18 @@ describe('departure check', () => {
     expect(cancelled?.legs[0].cancelled).toBe(true);
     expect(withDeparture(transit(), 0, { stopTimes: [] })).toBeNull();
     expect(withDeparture(transit(), 0, null)).toBeNull();
+  });
+});
+
+describe('vehicleOf', () => {
+  it('names the vehicle behind each mode', () => {
+    expect(vehicleOf('TRAM')).toBe('tram');
+    expect(vehicleOf('SUBURBAN')).toBe('train');
+    expect(vehicleOf('METRO')).toBe('subway');
+    expect(vehicleOf('FERRY')).toBe('ferry');
+    expect(vehicleOf('COACH')).toBe('bus');
+    expect(vehicleOf('AERIAL_LIFT')).toBe('cable');
+    expect(vehicleOf('WALK')).toBeNull();
+    expect(vehicleOf('OTHER')).toBeNull();
   });
 });

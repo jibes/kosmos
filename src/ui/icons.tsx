@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { LaneView } from '../core/lanes';
 import type { TravelMode, Turn } from '../core/route';
+import type { Vehicle } from '../core/transit';
 
 const Svg = ({ children, size = 20 }: { children: ReactNode; size?: number }) => (
   <svg
@@ -175,4 +176,29 @@ export const LaneIcon = ({ lane, size }: { lane: LaneView; size: number }) => (
         <path key={arrow} d={LANE_PATHS[arrow]} className={on ? 'on' : 'off'} />
       ))}
   </Svg>
+);
+
+const VEHICLE_PATHS: Record<Vehicle, ReactNode> = {
+  bus: (
+    <path d="M7 3.5h10a2.5 2.5 0 0 1 2.5 2.5v11h-15V6A2.5 2.5 0 0 1 7 3.5ZM4.5 11h15M8 20v-3M16 20v-3" />
+  ),
+  tram: (
+    <path d="M8 6.5h8a2.5 2.5 0 0 1 2.5 2.5v8.5h-13V9A2.5 2.5 0 0 1 8 6.5ZM5.5 12.5h13M9 3h6M12 3v3.5M9 21l1.5-3.5M15 21l-1.5-3.5" />
+  ),
+  subway: (
+    <path d="M9.5 3.5h5a5 5 0 0 1 5 5v8.5h-15V8.5a5 5 0 0 1 5-5ZM4.5 11.5h15M8 21l2-4M16 21l-2-4" />
+  ),
+  train: (
+    <path d="M8.5 3h7A2.5 2.5 0 0 1 18 5.5V17H6V5.5A2.5 2.5 0 0 1 8.5 3ZM6 10.5h12M8 21l2-4M16 21l-2-4" />
+  ),
+  ferry: <path d="M3 18c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0M6 14l1-5h10l1 5M12 9V4" />,
+  cable: <path d="M3 5.5 21 2.5M12 4v4M9 8h6a2 2 0 0 1 2 2v7H7v-7a2 2 0 0 1 2-2ZM7 12.5h10" />,
+  plane: (
+    <path d="M21 15.5 13.5 11V5a1.5 1.5 0 0 0-3 0v6L3 15.5V17l7.5-2.2V19l-2 1.5V22l3.5-1 3.5 1v-1.5l-2-1.5v-4.2L21 17Z" />
+  ),
+};
+
+/** What a line runs with: bus, tram, underground, train, ferry, cable car, plane. */
+export const VehicleIcon = ({ vehicle, size = 14 }: { vehicle: Vehicle; size?: number }) => (
+  <Svg size={size}>{VEHICLE_PATHS[vehicle]}</Svg>
 );

@@ -4,6 +4,7 @@ import type { Transit, TransitLeg } from '../core/transit';
 import { fill, t } from '../i18n';
 import { LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { SoundIcon } from './NavView';
+import { LineChip } from './TransitParts';
 
 interface Props {
   transit: Transit;
@@ -18,15 +19,6 @@ interface Props {
   onNewConnection: () => void;
   onEnd: () => void;
 }
-
-const LineChip = ({ leg }: { leg: TransitLeg }) => (
-  <span
-    className="line"
-    style={leg.color ? { background: leg.color, color: leg.textColor } : undefined}
-  >
-    {leg.line ?? t.transit}
-  </span>
-);
 
 /** Where a leg ends, in words: the last one ends at the destination. */
 const endName = (transit: Transit, i: number, destination: string) =>
@@ -84,12 +76,12 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
     else if (ride)
       sub = `${fill(t.leaves, { line: ride.line ?? t.transit, time: clock(ride.start) })}${platform}`;
   } else if (st.phase === 'wait' && leg) {
-    icon = <LineChip leg={leg} />;
+    icon = <LineChip leg={leg} big />;
     big = when;
     title = leg.headsign ? `→ ${leg.headsign}` : (leg.line ?? t.transit);
     sub = `${fill(t.leaves, { line: leg.line ?? t.transit, time: clock(leg.start) })}${platform}`;
   } else if (st.phase === 'ride' && leg) {
-    icon = <LineChip leg={leg} />;
+    icon = <LineChip leg={leg} big />;
     big = st.stopsLeft === 1 ? t.nextStop : fill(t.stops, { n: st.stopsLeft });
     title = fill(t.getOffAt, { stop: endName(transit, st.leg, destination) });
     sub = `${t.arriveAt} ${clock(leg.end)}`;

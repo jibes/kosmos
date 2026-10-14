@@ -328,3 +328,40 @@ export function withDeparture(transit: Transit, i: number, json: unknown): Trans
   });
   return { ...transit, legs, end: legs[legs.length - 1].end };
 }
+
+export type Vehicle = 'bus' | 'tram' | 'subway' | 'train' | 'ferry' | 'cable' | 'plane';
+
+/** The kind of vehicle a MOTIS mode is, for its symbol; `null` for walking and the unknown. */
+export function vehicleOf(mode: string): Vehicle | null {
+  switch (mode) {
+    case 'BUS':
+    case 'COACH':
+    case 'ODM':
+    case 'FLEX':
+      return 'bus';
+    case 'TRAM':
+      return 'tram';
+    case 'SUBWAY':
+    case 'METRO':
+      return 'subway';
+    case 'RAIL':
+    case 'HIGHSPEED_RAIL':
+    case 'LONG_DISTANCE':
+    case 'NIGHT_RAIL':
+    case 'REGIONAL_FAST_RAIL':
+    case 'REGIONAL_RAIL':
+    case 'SUBURBAN':
+      return 'train';
+    case 'FERRY':
+      return 'ferry';
+    case 'FUNICULAR':
+    case 'AERIAL_LIFT':
+    case 'AREAL_LIFT':
+    case 'CABLE_CAR':
+      return 'cable';
+    case 'AIRPLANE':
+      return 'plane';
+    default:
+      return null;
+  }
+}

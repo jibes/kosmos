@@ -1,21 +1,48 @@
 import { useEffect, useState } from 'react';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
-import { clockValue, departureAt, type Transit } from '../core/transit';
+import { clockValue, departureAt, vehicleOf, type Transit, type TransitLeg } from '../core/transit';
 import { t } from '../i18n';
-import { ModeIcon } from './icons';
+import { ModeIcon, VehicleIcon } from './icons';
 
 const count = (n: number, one: string, many: string) =>
   n === 1 ? one : many.replace('{n}', `${n}`);
 
+/** A line as people know it: its number in its own colour, with the kind of vehicle. */
+export function LineChip({ leg, big }: { leg: TransitLeg; big?: boolean }) {
+  const vehicle = vehicleOf(leg.mode);
+  return (
+    <span
+      className="line"
+      data-big={big || undefined}
+      style={leg.color ? { background: leg.color, color: leg.textColor } : undefined}
+    >
+      {vehicle && <VehicleIcon vehicle={vehicle} size={big ? 18 : 13} />}
+      {leg.line ?? t.transit}
+    </span>
+  );
+}
+
+/** The rides of a connection as chips, or the walk when there is no ride. */
+export function LineChips({ transit }: { transit: Transit }) {
+  const rides = transit.legs.filter((l) => l.ride);
+  if (!rides.length) {
+    return (
+      <span className="chips-row">
+        <ModeIcon mode="foot" size={14} />
+      </span>
+    );
+  }
+  return (
+    <span className="chips-row">
+      {rides.map((l, i) => (
+        <LineChip key={i} leg={l} />
+      ))}
+    </span>
+  );
+}
+
 export const changesText = (transit: Transit) =>
   transit.transfers === 0 ? t.noChange : count(transit.transfers, t.oneChange, t.changes);
-
-/** The lines of a connection, in order: "U2 · M10". */
-export const linesText = (transit: Transit) =>
-  transit.legs
-    .filter((l) => l.ride)
-    .map((l) => l.line ?? t.transit)
-    .join(' · ') || t.walk;
 
 /** When to leave: now, or a time typed or picked; settles before asking the planner. */
 export function DepartTime({
@@ -72,12 +99,7 @@ export function TransitLegs({ transit, lang }: { transit: Transit; lang: string 
       {transit.legs.map((l, i) =>
         l.ride ? (
           <li key={i} className="ride" data-cancelled={l.cancelled || undefined}>
-            <span
-              className="line"
-              style={l.color ? { background: l.color, color: l.textColor } : undefined}
-            >
-              {l.line ?? t.transit}
-            </span>
+            <LineChip leg={l} />
             <div>
               <p>
                 <time data-late={l.delay > 0 || undefined}>{clock(l.start)}</time>

@@ -66,6 +66,31 @@
   box-sizing: border-box;
 }
 
+/* Scrollbars in the theme: thin, quiet, and gone from the layout where the system allows. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 45%, transparent) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+
 html,
 body,
 #root {
@@ -950,7 +975,7 @@ button {
 
 .legs li {
   display: grid;
-  grid-template-columns: 52px 1fr;
+  grid-template-columns: 64px 1fr;
   align-items: start;
   gap: 10px;
   padding: 8px 0;
@@ -966,18 +991,45 @@ button {
   justify-self: center;
 }
 
-.legs .line {
-  justify-self: start;
-  max-width: 52px;
-  padding: 2px 7px;
+/* A line: its number in its own colour, with the vehicle; ink when the timetable has none. */
+.line {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 2px 7px 2px 5px;
   border-radius: 7px;
   background: var(--text);
   color: var(--surface-solid);
   font-weight: 700;
   font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.line svg {
+  flex: none;
+  stroke-width: 2.2;
+}
+
+.legs .line {
+  justify-self: start;
+}
+
+/* The rides of a connection on its tile. */
+.chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 5px 0 3px;
+  font-weight: 700;
+}
+
+.alts button[aria-checked='true'] .line {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .legs p {
@@ -1132,14 +1184,18 @@ button {
 /* Public transport on the way: the line chip in place of the turn arrow. */
 .nav-banner .line {
   flex: none;
+  justify-content: center;
+  gap: 5px;
   min-width: 48px;
   padding: 6px 10px;
   border-radius: 10px;
+  font-size: 18px;
+}
+
+/* Without a line colour the chip reads in the banner's own colours. */
+.nav-banner .line:not([style]) {
   background: var(--accent-text);
   color: var(--accent);
-  font-weight: 700;
-  font-size: 18px;
-  text-align: center;
 }
 
 .nav-banner small {

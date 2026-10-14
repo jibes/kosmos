@@ -14,7 +14,7 @@ import { t } from '../i18n';
 import { CloseIcon, LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { isNative } from './native';
 import { Sheet } from './Sheet';
-import { changesText, DepartTime, linesText, TransitCredit, TransitLegs } from './TransitParts';
+import { changesText, DepartTime, LineChips, TransitCredit, TransitLegs } from './TransitParts';
 import { useNow } from './useNow';
 
 export type RouteStatus = 'locating' | 'loading' | 'ready' | Exclude<RouteError, 'none'> | 'none';
@@ -164,10 +164,9 @@ export function RouteCard(props: Props) {
               onClick={() => props.onActive(i)}
             >
               {r.transit ? clock(r.transit.start) : formatDuration(r.duration)}
+              {r.transit && <LineChips transit={r.transit} />}
               <small>
-                {r.transit
-                  ? `${formatDuration(r.duration)} · ${linesText(r.transit)}`
-                  : formatDistance(r.distance, lang)}
+                {r.transit ? formatDuration(r.duration) : formatDistance(r.distance, lang)}
               </small>
             </button>
           ))}

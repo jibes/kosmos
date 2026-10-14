@@ -233,8 +233,12 @@ test.describe('map', () => {
     await expect(legs.locator('.ride time').first()).toHaveAttribute('data-late');
     await expect(legs.locator('.walk')).toHaveCount(2);
     await expect(card.locator('.summary')).toContainText('No change');
-    // Two connections and walking the whole way.
-    await expect(card.locator('.alts [role=radio]')).toHaveCount(3);
+    // Two connections and walking the whole way; each tile names its lines with their vehicle.
+    const tiles = card.locator('.alts [role=radio]');
+    await expect(tiles).toHaveCount(3);
+    await expect(tiles.first().locator('.line')).toHaveText('U6');
+    await expect(tiles.first().locator('.line svg')).toHaveCount(1);
+    await expect(tiles.nth(2).locator('.line')).toHaveCount(0);
     await expect(card.getByRole('button', { name: 'Start' })).toBeEnabled();
     await expect(card.getByRole('link', { name: 'Timetables via Transitous' })).toBeVisible();
     expect(transitRequests.length).toBe(asked + 1);
