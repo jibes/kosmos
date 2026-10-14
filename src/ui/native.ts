@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Share } from '@capacitor/share';
 
 export const isNative = Capacitor.isNativePlatform();
@@ -39,3 +39,8 @@ export async function copy(text: string): Promise<void> {
     el.remove();
   }
 }
+
+const AppSettings = isNative ? registerPlugin<{ open(): Promise<void> }>('AppSettings') : null;
+
+/** The app's page in the system settings (Android), where location can be allowed again. */
+export const openAppSettings = AppSettings ? () => void AppSettings.open() : null;

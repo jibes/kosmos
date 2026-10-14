@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { RidePrompt, RideState } from '../core/ride';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import type { Transit, TransitLeg } from '../core/transit';
-import { fill, t } from '../i18n';
+import { fill, t, units } from '../i18n';
 import { LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
 import { LineChip, TransitLegs } from './TransitParts';
@@ -68,11 +68,11 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
     if (st.turn) {
       // The next turn leads, as in road navigation; the stop and its distance follow.
       icon = <TurnIcon turn={st.turn.turn} size={40} />;
-      big = formatDistance(st.turn.in, lang);
+      big = formatDistance(st.turn.in, lang, units);
       title = st.turn.street ?? walkTo;
-      goal = `${walkTo} · ${formatDistance(st.toGo, lang)}`;
+      goal = `${walkTo} · ${formatDistance(st.toGo, lang, units)}`;
     } else {
-      big = formatDistance(st.toGo, lang);
+      big = formatDistance(st.toGo, lang, units);
       title = walkTo;
     }
     if (ride && st.missed) sub = fill(t.hasLeft, { line: ride.line ?? t.transit });
@@ -87,7 +87,7 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
     icon = <LineChip leg={leg} big />;
     big = st.stopsLeft === 1 ? t.nextStop : fill(t.stops, { n: st.stopsLeft });
     title = fill(t.getOffAt, { stop: endName(transit, st.leg, destination) });
-    sub = `${t.arriveAt} ${clock(leg.end)}`;
+    sub = fill(t.arriveAt, { time: clock(leg.end) });
   } else if (st.phase === 'arrived') {
     icon = <ModeIcon mode="transit" size={40} />;
   }
@@ -101,25 +101,21 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
       <div className="ride-top">
         <section
           className="nav-banner ride"
-          aria-live="polite"
           data-state={st.phase === 'arrived' ? 'arrived' : st.missed ? 'rerouting' : 'go'}
           data-phase={st.phase}
-          role="button"
-          tabIndex={0}
-          aria-expanded={open}
-          aria-label={t.showTrip}
-          onClick={() => setOpen((o) => !o)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setOpen((o) => !o);
-            }
-          }}
         >
+          {/* The whole banner opens the trip; the button inside says so to a screen reader. */}
+          <button
+            type="button"
+            className="ride-toggle"
+            aria-expanded={open}
+            aria-label={t.showTrip}
+            onClick={() => setOpen((o) => !o)}
+          />
           {icon}
           <div>
             {big && <strong>{big}</strong>}
-            <p>{title}</p>
+            <p aria-live="polite">{title}</p>
             {goal && <small>{goal}</small>}
             {sub && <small>{sub}</small>}
           </div>

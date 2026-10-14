@@ -10,7 +10,7 @@ import {
   type Track,
 } from '../core/nav';
 import { spokenDistance, type Mode, type Route } from '../core/route';
-import { fill, lang, t } from '../i18n';
+import { fill, lang, t, units } from '../i18n';
 import type { Fix } from './useLocation';
 import type { Voice } from './voice';
 
@@ -36,14 +36,16 @@ interface Options {
  */
 export function promptWords(p: Prompt): string {
   if (p.distance === undefined) return p.text;
-  const { value, unit } = spokenDistance(p.distance);
+  const { value, unit } = spokenDistance(p.distance, units);
   const n = value.toLocaleString(lang);
-  const d =
-    unit === 'm'
-      ? fill(t.metersSpoken, { n })
-      : value === 1
-        ? t.oneKilometerSpoken
-        : fill(t.kilometersSpoken, { n });
+  const words = {
+    m: [t.metersSpoken, t.metersSpoken],
+    km: [t.oneKilometerSpoken, t.kilometersSpoken],
+    ft: [t.feetSpoken, t.feetSpoken],
+    yd: [t.yardsSpoken, t.yardsSpoken],
+    mi: [t.oneMileSpoken, t.milesSpoken],
+  }[unit];
+  const d = fill(value === 1 ? words[0] : words[1], { n });
   const text = /,\s*\{text\}/.test(t.inDistance)
     ? p.text.charAt(0).toLowerCase() + p.text.slice(1)
     : p.text;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import { clockValue, departureAt, vehicleOf, type Transit, type TransitLeg } from '../core/transit';
-import { t } from '../i18n';
+import { t, units } from '../i18n';
 import { ModeIcon, TurnIcon, VehicleIcon } from './icons';
 
 const count = (n: number, one: string, many: string) =>
@@ -200,12 +200,12 @@ export function TransitLegs({ transit, lang, current, passed = 0, destination }:
                   onClick={() => toggle(i)}
                 >
                   {t.walk} {formatDuration((l.end - l.start) / 1000)} ·{' '}
-                  {formatDistance(l.distance, lang)}
+                  {formatDistance(l.distance, lang, units)}
                 </button>
               ) : (
                 <span>
                   {t.walk} {formatDuration((l.end - l.start) / 1000)} ·{' '}
-                  {formatDistance(l.distance, lang)}
+                  {formatDistance(l.distance, lang, units)}
                 </span>
               )}
               {shown && (
@@ -214,7 +214,7 @@ export function TransitLegs({ transit, lang, current, passed = 0, destination }:
                     <li key={k}>
                       <TurnIcon turn={st.turn} size={16} />
                       <span>{st.street ?? ''}</span>
-                      <small>{formatDistance(st.at, lang)}</small>
+                      <small>{formatDistance(st.at, lang, units)}</small>
                     </li>
                   ))}
                 </ol>

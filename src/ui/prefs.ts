@@ -1,0 +1,30 @@
+import type { TravelMode } from '../core/route';
+
+/** Small choices the app remembers on this device. */
+export const MUTED_KEY = 'kosmos.muted.v1';
+export const MODE_KEY = 'kosmos.mode.v1';
+export const HINTED_KEY = 'kosmos.hinted.v1';
+
+export const stored = (key: string) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+export const store = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Not remembered; still applies for this session.
+  }
+};
+
+export const storedMuted = () => stored(MUTED_KEY) === '1';
+
+/** Routes open in the travel mode used last: walkers and riders should not switch every time. */
+export const storedMode = (): TravelMode => {
+  const m = stored(MODE_KEY);
+  return m === 'bike' || m === 'foot' || m === 'transit' ? m : 'car';
+};

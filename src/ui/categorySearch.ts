@@ -1,3 +1,4 @@
+import { motion } from './motion';
 import { VectorTile } from '@mapbox/vector-tile';
 import type * as maplibregl from 'maplibre-gl';
 import { PbfReader } from 'pbf';
@@ -48,8 +49,8 @@ export async function findCategory(
   zoomIn: boolean,
 ): Promise<Place[]> {
   if (zoomIn && map.getZoom() < SEARCH_ZOOM) {
-    map.easeTo({ zoom: SEARCH_ZOOM, duration: 700 });
-    await new Promise((done) => setTimeout(done, 750));
+    map.easeTo({ zoom: SEARCH_ZOOM, duration: motion(700) });
+    await new Promise((done) => setTimeout(done, motion(700) + 50));
   }
   const template = (map.getSource(MAP_SOURCE) as maplibregl.VectorTileSource | undefined)
     ?.tiles?.[0];

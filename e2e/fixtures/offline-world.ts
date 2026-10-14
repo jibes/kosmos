@@ -194,6 +194,10 @@ export const routeRequests: { costing: string; from: Pt; to: Pt }[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
 export async function offlineWorld(context: BrowserContext) {
+  // The first-visit hint is a note over the map; only the test that asks for it (?hint) sees it.
+  await context.addInitScript(() => {
+    if (!location.search.includes('hint')) localStorage.setItem('kosmos.hinted.v1', '1');
+  });
   await context.route('https://tiles.openfreemap.org/planet', (route) =>
     route.fulfill({
       contentType: 'application/json',

@@ -1,3 +1,4 @@
+import { motion } from './motion';
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Category } from '../core/categories';
@@ -107,6 +108,7 @@ export function useCategory(
         center: [places[0].lng, places[0].lat],
         zoom: Math.max(map.getZoom(), 16),
         padding: padding(),
+        duration: motion(1200),
       });
       return;
     }
@@ -115,7 +117,7 @@ export function useCategory(
     map.fitBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)], {
       padding: padding(),
       maxZoom: 17,
-      duration: 900,
+      duration: motion(900),
     });
   }, [map, padding]);
 

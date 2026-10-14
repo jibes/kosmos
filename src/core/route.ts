@@ -54,14 +54,25 @@ export interface Route {
   transit?: Transit;
 }
 
-export function routeUrl(from: LngLat, to: LngLat, mode: Mode, lang: string, alternates = 2) {
+export function routeUrl(
+  from: LngLat,
+  to: LngLat,
+  mode: Mode,
+  lang: string,
+  alternates = 2,
+  units: Units = 'metric',
+) {
   const body = {
     locations: [
       { lat: +from.lat.toFixed(6), lon: +from.lng.toFixed(6) },
       { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
     ],
     costing: COSTING[mode],
-    directions_options: { units: 'kilometers', language: LANGS.has(lang) ? lang : 'en' },
+    directions_options: {
+      // The router's own words ("Continue for 2 miles") in the units the app shows.
+      units: units === 'metric' ? 'kilometers' : 'miles',
+      language: LANGS.has(lang) ? lang : 'en',
+    },
     alternates,
     turn_lanes: true,
   };
@@ -198,24 +209,67 @@ export function classifyError(status: number): RouteError {
   return 'failed';
 }
 
-/** `850 m`, `4.2 km`, `37 km`. */
-export function formatDistance(m: number, lang: string): string {
+/**
+ * Road distances by country: metric almost everywhere; miles with feet in the US (also Liberia,
+ * Myanmar), miles with yards in the UK.
+ */
+export type Units = 'metric' | 'us' | 'uk';
+
+export function unitsFor(locale: string): Units {
+  const region = locale.split(/[-_]/)[1]?.toUpperCase();
+  if (region === 'US' || region === 'LR' || region === 'MM') return 'us';
+  if (region === 'GB') return 'uk';
+  return 'metric';
+}
+
+const MILE = 1609.344;
+const FOOT = 0.3048;
+const YARD = 0.9144;
+
+/** `850 m`, `4.2 km`, `37 km`; `500 ft`, `0.3 mi`; `300 yd`. */
+export function formatDistance(m: number, lang: string, units: Units = 'metric'): string {
   const nf = (v: number, d: number) =>
     v.toLocaleString(lang, { maximumFractionDigits: d, minimumFractionDigits: d });
+  if (units !== 'metric') {
+    if (m < MILE / 10) {
+      const [size, unit] = units === 'us' ? [FOOT, 'ft'] : [YARD, 'yd'];
+      const v = m / size;
+      const step = v < 300 ? 10 : 50;
+      return `${Math.max(0, Math.round(v / step) * step)} ${unit}`;
+    }
+    return `${nf(m / MILE, m < 10 * MILE ? 1 : 0)} mi`;
+  }
   if (m < 50) return `${Math.max(0, Math.round(m / 5) * 5)} m`;
   if (m < 1000) return `${Math.round(m / 10) * 10} m`;
   return m < 10_000 ? `${nf(m / 1000, 1)} km` : `${nf(m / 1000, 0)} km`;
 }
 
+export type SpokenUnit = 'm' | 'km' | 'ft' | 'yd' | 'mi';
+
 /**
  * A distance as people say it ahead of a turn: tens of metres when close, fifties below a
- * kilometre, kilometres with one decimal beyond.
+ * kilometre, kilometres with one decimal beyond (feet or yards, then miles, where those are used).
  */
-export function spokenDistance(m: number): { value: number; unit: 'm' | 'km' } {
+export function spokenDistance(
+  m: number,
+  units: Units = 'metric',
+): { value: number; unit: SpokenUnit } {
+  if (units !== 'metric') {
+    if (m < MILE / 10) {
+      const [size, unit] = units === 'us' ? [FOOT, 'ft' as const] : [YARD, 'yd' as const];
+      return { value: Math.max(50, Math.round(m / size / 50) * 50), unit };
+    }
+    return { value: Math.round((m / MILE) * 10) / 10, unit: 'mi' };
+  }
   if (m < 200) return { value: Math.max(10, Math.round(m / 10) * 10), unit: 'm' };
   if (m < 950) return { value: Math.round(m / 50) * 50, unit: 'm' };
   return { value: Math.round(m / 100) / 10, unit: 'km' };
 }
+
+/** Speed in the country's road unit. */
+export const speedIn = (mps: number, units: Units) =>
+  Math.round(units === 'metric' ? mps * 3.6 : mps * 2.236936);
+export const speedLabel = (units: Units) => (units === 'metric' ? 'km/h' : 'mph');
 
 /** `1 min`, `42 min`, `2 h 05`. */
 export function formatDuration(s: number): string {

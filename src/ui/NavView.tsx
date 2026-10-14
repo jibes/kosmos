@@ -4,11 +4,13 @@ import {
   formatClock,
   formatDistance,
   formatDuration,
+  speedIn,
+  speedLabel,
   turnOf,
   type Mode,
   type Route,
 } from '../core/route';
-import { t } from '../i18n';
+import { t, units } from '../i18n';
 import { LaneIcon, LocateIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
 import { useNow } from './useNow';
@@ -27,8 +29,11 @@ interface Props {
   onEnd: () => void;
 }
 
-/** Above this the speed is a GPS jump, not driving. */
-const MAX_KMH = 300;
+/** A turn this close after the next one is shown with it. */
+const THEN_M = 150;
+
+/** Above this (m/s, about 300 km/h) the speed is a GPS jump, not driving. */
+const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
 export function NavView({ route, mode, nav, lang, muted, following, reroute, ...on }: Props) {
@@ -37,13 +42,17 @@ export function NavView({ route, mode, nav, lang, muted, following, reroute, ...
   const m = route.maneuvers[started ? nav.next : 0];
   const eta = started ? nav.eta : route.duration;
   const remaining = started ? nav.remaining : route.distance;
-  const kmh = Math.round(nav.speed * 3.6);
+  const speed = speedIn(nav.speed, units);
 
   // Only while off the route: back on it, guidance carries on whatever the router said.
   const rerouting = nav.offRoute;
   const guiding = started && !nav.arrived && !rerouting;
   const lanes = guiding && lanesNeeded(m?.lanes) ? m.lanes : undefined;
   const size = lanes ? laneSize(nav.toNext, nav.speed, mode) : 'none';
+
+  // Two turns close together: the second one shows under the first, so it is no surprise.
+  const after = route.maneuvers[nav.next + 1];
+  const then = guiding && m && after && m.distance <= THEN_M ? after : undefined;
 
   let title = m?.instruction ?? '';
   let turn = m ? turnOf(m.type) : 'straight';
@@ -58,13 +67,20 @@ export function NavView({ route, mode, nav, lang, muted, following, reroute, ...
     <>
       <section
         className="nav-banner"
-        aria-live="polite"
         data-state={nav.arrived ? 'arrived' : rerouting ? 'rerouting' : 'go'}
       >
         <TurnIcon turn={turn} size={40} />
         <div>
-          {guiding && <strong>{formatDistance(nav.toNext, lang)}</strong>}
-          <p>{title}</p>
+          {guiding && <strong>{formatDistance(nav.toNext, lang, units)}</strong>}
+          {/* Only the instruction is announced: the distance changes with every fix. */}
+          <p aria-live="polite">{title}</p>
+          {then && (
+            <p className="nav-then">
+              {t.then}
+              <TurnIcon turn={turnOf(then.type)} size={18} />
+              <span>{then.instruction}</span>
+            </p>
+          )}
         </div>
         {lanes && size !== 'none' && (
           <div className="nav-lanes" data-size={size} role="img" aria-label={t.lanes}>
@@ -84,17 +100,17 @@ export function NavView({ route, mode, nav, lang, muted, following, reroute, ...
         </button>
       )}
 
-      {started && !nav.arrived && mode === 'car' && kmh <= MAX_KMH && (
-        <div className="speed surface" role="img" aria-label={`${kmh} ${t.speedUnit}`}>
-          <strong>{kmh}</strong>
-          <small>{t.speedUnit}</small>
+      {started && !nav.arrived && mode === 'car' && nav.speed <= MAX_MS && (
+        <div className="speed surface" role="img" aria-label={`${speed} ${speedLabel(units)}`}>
+          <strong>{speed}</strong>
+          <small>{speedLabel(units)}</small>
         </div>
       )}
 
       <NavBar muted={muted} arrived={nav.arrived} onMute={on.onMute} onEnd={on.onEnd}>
         <strong>{formatClock(new Date(now + eta * 1000), lang)}</strong>
         <span>
-          {formatDuration(eta)} · {formatDistance(remaining, lang)}
+          {formatDuration(eta)} · {formatDistance(remaining, lang, units)}
         </span>
       </NavBar>
     </>

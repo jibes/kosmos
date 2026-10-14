@@ -10,7 +10,7 @@ import {
 } from '../core/route';
 import { directionsUrl, geoUri } from '../core/geo';
 import type { Place } from '../core/search';
-import { t } from '../i18n';
+import { fill, t, units } from '../i18n';
 import { CloseIcon, LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { isNative } from './native';
 import { Sheet } from './Sheet';
@@ -69,7 +69,7 @@ export function RouteCard(props: Props) {
   const span = (r: Route) =>
     r.transit
       ? `${clock(r.transit.start)}–${clock(r.transit.end)}`
-      : formatDistance(r.distance, lang);
+      : formatDistance(r.distance, lang, units);
 
   return (
     <Sheet
@@ -148,16 +148,33 @@ export function RouteCard(props: Props) {
           <span>
             {transit
               ? `${span(route)} · ${changesText(transit)}`
-              : `${formatDistance(route.distance, lang)} · ${t.arriveAt} ${arrival}`}
+              : `${formatDistance(route.distance, lang, units)} · ${fill(t.arriveAt, { time: arrival ?? '' })}`}
           </span>
         </div>
       ) : (
-        <p className="route-msg" data-status={stuck ? 'stuck' : status}>
+        <p className="route-msg" role="status" data-status={stuck ? 'stuck' : status}>
           {message}
           {stuck && (
             <button type="button" onClick={props.onChangeStart}>
               {t.chooseStart}
             </button>
+          )}
+          {status === 'none' && (
+            // No way by this mode (a car-free zone, a ferry-only island): offer the others.
+            <span className="route-try" role="group" aria-label={t.tryOther}>
+              {t.tryOther}
+              {TRAVEL_MODES.filter((m) => m !== mode).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-label={t[m]}
+                  title={t[m]}
+                  onClick={() => props.onMode(m)}
+                >
+                  <ModeIcon mode={m} />
+                </button>
+              ))}
+            </span>
           )}
           {(status === 'busy' || status === 'failed') && (
             <button type="button" onClick={props.onRetry}>
@@ -180,7 +197,7 @@ export function RouteCard(props: Props) {
               {r.transit ? clock(r.transit.start) : formatDuration(r.duration)}
               {r.transit && <LineChips transit={r.transit} />}
               <small>
-                {r.transit ? formatDuration(r.duration) : formatDistance(r.distance, lang)}
+                {r.transit ? formatDuration(r.duration) : formatDistance(r.distance, lang, units)}
               </small>
             </button>
           ))}
@@ -199,7 +216,7 @@ export function RouteCard(props: Props) {
               <li key={i}>
                 <TurnIcon turn={turnOf(m.type)} size={18} />
                 <span>{m.instruction}</span>
-                {m.distance > 0 && <small>{formatDistance(m.distance, lang)}</small>}
+                {m.distance > 0 && <small>{formatDistance(m.distance, lang, units)}</small>}
               </li>
             ))}
           </ol>

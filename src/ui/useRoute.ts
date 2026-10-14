@@ -10,6 +10,7 @@ import {
 } from '../core/route';
 import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
+import { units } from '../i18n';
 import { getJson } from './http';
 import type { RouteStatus } from './RouteCard';
 
@@ -92,7 +93,7 @@ export function useRoute(
             ...r,
             routes: r.ok ? parseMotis(r.json) : [],
           }))
-        : getJson(routeUrl(from, trip.to, trip.mode, lang), ctrl.signal).then((r) => ({
+        : getJson(routeUrl(from, trip.to, trip.mode, lang, 2, units), ctrl.signal).then((r) => ({
             ...r,
             routes: r.ok ? parseValhalla(r.json) : [],
           }));

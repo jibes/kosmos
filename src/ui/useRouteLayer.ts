@@ -1,3 +1,4 @@
+import { motion } from './motion';
 import type * as maplibregl from 'maplibre-gl';
 import { useEffect, useRef } from 'react';
 import type { Route } from '../core/route';
@@ -90,7 +91,7 @@ export function useRouteLayer(map: maplibregl.Map | null, o: Options) {
     // the fit's own; together they can exceed the screen and the fit is silently dropped.
     map.stop();
     map.setPadding(NO_PADDING);
-    map.fitBounds([w, s, e, n], { padding: padding(), maxZoom: 17, duration: 1200 });
+    map.fitBounds([w, s, e, n], { padding: padding(), maxZoom: 17, duration: motion(1200) });
   }, [map, navigating, ready, tripKey, routes, padding]);
   useEffect(() => {
     if (!hasTrip) fitted.current = '';

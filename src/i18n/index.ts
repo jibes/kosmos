@@ -1,5 +1,6 @@
 import { de } from './de';
 import { en, type Catalogue } from './en';
+import { unitsFor } from '../core/route';
 
 const catalogues: Record<string, Catalogue> = { en, de };
 
@@ -14,6 +15,8 @@ export function pickLang(preferred: readonly string[]): string {
 
 export const lang = pickLang(typeof navigator === 'undefined' ? [] : navigator.languages);
 export const t: Catalogue = catalogues[lang];
+/** Road units follow the region (en-US: miles), whatever the UI language. */
+export const units = unitsFor(typeof navigator === 'undefined' ? '' : navigator.language);
 
 /** Fills `{name}` placeholders: `fill(t.walkTo, { stop: 'Hbf' })`. */
 export const fill = (s: string, vars: Record<string, string | number>) =>

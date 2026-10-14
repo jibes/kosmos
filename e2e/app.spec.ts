@@ -762,7 +762,13 @@ test.describe('map', () => {
     );
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');
-    await expect(page.getByText('Search is not answering')).toBeVisible({ timeout: 12_000 });
+    await expect(page.locator('.r-empty')).toHaveText(/Search is not answering/, {
+      timeout: 12_000,
+    });
+    // Said to a screen reader too, not only shown.
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Search is not answering' }),
+    ).toHaveCount(1);
     await expect(page.locator('.spinner')).toHaveCount(0);
     answer = true;
     await input.press('Enter');
@@ -826,11 +832,99 @@ test.describe('map', () => {
     await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
   });
 
-  test('keeps the location button above the compass', async ({ page }) => {
-    const order = await page
-      .locator('.controls > button')
-      .evaluateAll((els) => els.map((e) => e.classList.contains('compass')));
-    expect(order).toEqual([false, true]);
+  test('keeps the map buttons low, just above the panel', async ({ page }) => {
+    const locate = (await page.locator('.controls > button').first().boundingBox())!;
+    const compass = (await page.locator('.controls .compass').boundingBox())!;
+    // The location button nearest the thumb, the compass above it.
+    expect(compass.y).toBeLessThan(locate.y);
+    const view = page.viewportSize()!;
+    expect(locate.y).toBeGreaterThan(view.height * 0.5);
+    if (view.width < 600) {
+      const bar = (await page.locator('.bar').boundingBox())!;
+      expect(locate.y + locate.height).toBeLessThanOrEqual(bar.y);
+    }
+  });
+
+  test('shows the location on opening where it is already allowed', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat, longitude: CENTER.lng, accuracy: 20 });
+    await page.evaluate(() => localStorage.removeItem('kosmos.view.v1'));
+    await page.goto('./');
+    await expect(page.locator('.me')).toBeVisible();
+    // From the globe it flies there; the button is not switched to following.
+    await expect.poll(() => page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThan(14);
+    await expect(page.locator('.controls > button').first()).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  test('says how to drop a pin once, on the first visit', async ({ page }) => {
+    await page.evaluate(() => localStorage.removeItem('kosmos.hinted.v1'));
+    await page.goto('./?hint');
+    const note = page.locator('.toast');
+    await expect(note).toHaveText(/(Long-press|Right-click) anywhere to drop a pin/);
+    await page.reload();
+    await idle(page);
+    await page.waitForTimeout(2000);
+    await expect(note).toHaveCount(0);
+  });
+
+  test('a point on the map becomes the destination of an open route', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await idle(page);
+    const at = await screenAt(page, CENTER.lng, CENTER.lat);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    await page.locator('.toast').getByRole('button', { name: 'Go here' }).click();
+    await expect(card.locator('.ends')).not.toContainText('Brandenburger Tor');
+    await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(CENTER.lng, 3);
+  });
+
+  test('offers another way when there is no route', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) =>
+      route.request().url().includes('auto')
+        ? route.fulfill({ status: 400, body: '{}' })
+        : route.fallback(),
+    );
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    const other = card.getByRole('group', { name: 'Try another way' });
+    await expect(other).toBeVisible();
+    await other.getByRole('button', { name: 'Walk' }).click();
+    await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+  });
+
+  test('keeps a place card on screen with a phone held sideways', async ({ page }) => {
+    await page.setViewportSize({ width: 915, height: 412 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    const card = page.locator('.card');
+    await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    const close = (await card.getByRole('button', { name: /close/i }).boundingBox())!;
+    expect(close.y).toBeGreaterThanOrEqual(0);
+    const box = (await card.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(412);
+    // Side by side: the card on the left, the pin to its right.
+    await expect
+      .poll(async () => (await page.locator('.pin').boundingBox())!.x, { timeout: 8000 })
+      .toBeGreaterThan(box.x + box.width);
   });
 
   test('follows the compass on the second tap of the location button', async ({
@@ -988,4 +1082,22 @@ test('works offline after the first visit', async ({ context, page }) => {
   await page.reload();
   await expect(page.getByRole('combobox')).toBeVisible();
   await expect(page.locator('canvas.maplibregl-canvas')).toBeVisible();
+});
+
+test.describe('in the US', () => {
+  test.use({ locale: 'en-US' });
+
+  test('shows and says distances in miles and feet', async ({ context, page }) => {
+    await offlineWorld(context);
+    await page.goto('./');
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary span')).toContainText(' mi');
+  });
 });

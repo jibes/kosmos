@@ -14,7 +14,8 @@ export default defineConfig({
       executablePath,
       args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
     },
-    locale: 'en-US',
+    // Plain English: metric units (a test switches to en-US for miles).
+    locale: 'en',
   },
   webServer: {
     command: 'npm run preview -- --port 4173 --strictPort',

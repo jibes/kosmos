@@ -52,7 +52,6 @@ export function Sheet({ className, peek, children, busy }: Props) {
       data-min={min || undefined}
       data-dragging={dy !== 0 || undefined}
       style={dy ? { transform: `translateY(${dy}px)` } : undefined}
-      aria-live="polite"
       aria-busy={busy}
     >
       <button

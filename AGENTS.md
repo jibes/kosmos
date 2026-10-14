@@ -28,6 +28,8 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 - Heading while navigating: `NavState.moving` (hysteresis 3 → 1.5 m/s; progress counts only beyond GPS jitter, max(6 m, accuracy/2)) picks the route's course over the compass; standing still never flips it.
 - Guidance UI: `ui/NavBar.tsx` (time left, mute, End with a second tap; Done on arrival, which also ends guidance after 60 s). A failed reroute keeps the old route (`useRoute` reports `kept`), and the banner says so only while still off the route.
 - Guidance is `core/nav.ts`: pure, fed fixes and time, covered by replay tests. The UI only subscribes it to location (`useLocation().subscribe`) and renders `NavState`.
+- Layout: `ui/layout.ts` (the side layout for wide screens and phones held sideways, same query as `styles.css`; camera paddings), `ui/usePanel.ts` (publishes the panel height as `--panel-h` so the map buttons sit just above it; keeps a selected pin clear of its card; starts location on opening only when already granted), `ui/prefs.ts` (remembered choices), `ui/motion.ts` (camera moves honour reduced motion).
+- Units: `core/route.ts` `unitsFor` (region of the locale: US miles/feet, UK miles/yards, else metric) for display, speech, speed and the router's own instructions; `units` in `i18n`.
 - Keep each file under 800 lines; split before adding to it.
 
 ## Invariants
@@ -45,6 +47,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 
 - `android/` is a committed Capacitor project; `npx cap sync android` copies `dist/` in (ignored by git).
 - Icons are vector adaptive icons in `res/drawable` + `res/mipmap-anydpi`; web PNGs come from `npm run icons` (set `CHROMIUM_PATH` in cloud sessions).
+- `AppSettingsPlugin.java` (in `MainActivity`) opens the app's system settings, offered when location was refused (`openAppSettings` in `ui/native.ts`).
 - Back button: `ui/useBack.ts` (`@capacitor/app`) and Escape share one ladder in `App.tsx` (About → picker → navigation, which needs a second press → route → place); with nothing left back minimises the app instead of quitting.
 - Navigation on Android: `useLocation().background(true)` moves location to the background-geolocation plugin's foreground service; speech uses the system engine (`ui/voice.ts`), keep-awake the native plugin (`ui/wakeLock.ts`). The web build falls back to Web Speech and Screen Wake Lock.
 - CI boots an Android 14 emulator after the build and runs `scripts/android-smoke.sh` (install, launch, no crash, no web errors, `kosmos:ready` logged once the map loads; `loggingBehavior: 'production'` forwards the web console to logcat in release builds) before any release. Its artifact `android-smoke` holds a screenshot with real tiles and the logcat; the latest screenshot is also force-pushed to the `ci-smoke` branch.

@@ -11,7 +11,7 @@ import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
 import { onLongPress } from './ui/gestures';
 import { pinMarker, userMarker } from './ui/markers';
-import { isNative } from './ui/native';
+import { isNative, openAppSettings } from './ui/native';
 import { NavView } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
 import { RideView, rideWords } from './ui/RideView';
@@ -26,6 +26,18 @@ import { useCategory } from './ui/useCategory';
 import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useRouteLayer } from './ui/useRouteLayer';
+import { motion } from './ui/motion';
+import { NO_PADDING, navPadding, padding, routePadding, touch } from './ui/layout';
+import {
+  HINTED_KEY,
+  MODE_KEY,
+  MUTED_KEY,
+  store,
+  stored,
+  storedMode,
+  storedMuted,
+} from './ui/prefs';
+import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
 import { useNavTheme } from './ui/useNavTheme';
 import { useOffline } from './ui/useOffline';
@@ -38,59 +50,24 @@ const LABEL_LANG = (typeof navigator === 'undefined' ? 'en' : navigator.language
   .split('-')[0]
   .toLowerCase();
 
+/** Status bar colours, as in index.html. */
+const STATUS_BAR = { light: '#f5f3ef', dark: '#121417' } as const;
+
+interface Toast {
+  text: string;
+  /** Buttons in the note: a choice to make now, gone with the note. */
+  actions?: { label: string; run: () => void }[];
+}
+
 interface Selection {
   place: Place;
   loading: boolean;
 }
 
-const wide = () => matchMedia('(min-width: 900px)').matches;
-/** Keeps a selected place clear of the panel that describes it. */
-const padding = () =>
-  wide()
-    ? { top: 48, bottom: 48, left: 440, right: 48 }
-    : { top: 96, bottom: 300, left: 32, right: 32 };
-/** While navigating, the user sits low on screen so more of the road ahead shows. */
-const navPadding = () =>
-  wide()
-    ? { top: 260, bottom: 60, left: 0, right: 0 }
-    : { top: Math.round(innerHeight * 0.42), bottom: 110, left: 0, right: 0 };
-
-const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
-
-const MUTED_KEY = 'kosmos.muted.v1';
-const MODE_KEY = 'kosmos.mode.v1';
-const stored = (key: string) => {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-};
-const store = (key: string, value: string) => {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Not remembered; still applies for this session.
-  }
-};
-const storedMuted = () => stored(MUTED_KEY) === '1';
-/** Routes open in the travel mode used last: walkers and riders should not switch every time. */
-const storedMode = (): TravelMode => {
-  const m = stored(MODE_KEY);
-  return m === 'bike' || m === 'foot' || m === 'transit' ? m : 'car';
-};
 /** After arriving, guidance (screen on, background location) ends by itself. */
 const ARRIVED_END_MS = 60_000;
 /** A second back press within this ends navigation. */
 const BACK_TWICE_MS = 3000;
-
-/** Fits a route, or category results, into the map area the panel leaves free, measured. */
-const routePadding = () => {
-  const panel = document.querySelector('.panel')?.getBoundingClientRect();
-  if (wide()) return { top: 64, bottom: 64, left: (panel?.right ?? 420) + 48, right: 96 };
-  const bottom = panel && panel.height ? innerHeight - panel.top + 24 : 380;
-  return { top: 96, bottom: Math.min(bottom, innerHeight - 220), left: 40, right: 80 };
-};
 
 async function fetchPlaces(url: string): Promise<Place[]> {
   const res = await fetch(url);
@@ -117,6 +94,13 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  // The phone's status bar follows the navigation theme too, not only the system's.
+  useEffect(() => {
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      meta.dataset.system ??= meta.content;
+      meta.content = navTheme ? STATUS_BAR[navTheme] : meta.dataset.system;
+    }
+  }, [navTheme]);
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useMap(mapEl, theme, LABEL_LANG);
   const { fix, status, start, subscribe, background } = useLocation();
@@ -125,7 +109,7 @@ export function App() {
   const compass = useCompass();
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   const [trip, setTrip] = useState<Trip | null>(null);
   const [active, setActive] = useState(0);
   /** Which end of the route the search bar is choosing, if any. */
@@ -162,11 +146,15 @@ export function App() {
     followRef.current = follow;
   }, [follow]);
 
-  const showToast = useCallback((msg: string) => setToast(msg), []);
+  const showToast = useCallback(
+    (text: string, actions?: Toast['actions']) => setToast({ text, actions }),
+    [],
+  );
   useEffect(() => {
     if (!toast) return;
-    // Long enough to read: a short note goes quickly, a sentence stays a while.
-    const id = setTimeout(() => setToast(null), Math.max(2200, toast.length * 70));
+    // Long enough to read: a short note goes quickly, a sentence stays a while, a choice longer.
+    const ms = Math.max(toast.actions ? 6000 : 2200, toast.text.length * 70);
+    const id = setTimeout(() => setToast(null), ms);
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -261,15 +249,35 @@ export function App() {
       select({ name, detail: '', ...at }, () => addressOf(name, at));
     };
     const offHold = onLongPress(map, (at) => {
-      if (tripRef.current) return;
       lastHold.current = Date.now();
       const here = { lng: at.lng, lat: at.lat };
-      select({ name: t.droppedPin, detail: '', ...here }, async () => {
+      const lookup = async (): Promise<Partial<Place>> => {
         const [hit] = await fetchPlaces(reverseUrl(here, lang));
         return hit
           ? { name: hit.name, detail: hit.detail, ...(hit.osm ? { osm: hit.osm } : {}) }
-          : null;
-      });
+          : { detail: t.noAddress };
+      };
+      // With a route open, a point on the map becomes its start or its destination.
+      if (tripRef.current) {
+        const set = (end: 'from' | 'to') => {
+          const pin: Place = { name: t.droppedPin, detail: '', ...here };
+          setActive(0);
+          setTrip((tr) => (tr ? { ...tr, [end]: pin } : tr));
+          void lookup()
+            .catch(() => null)
+            .then((extra) =>
+              setTrip((tr) =>
+                tr && tr[end] === pin ? { ...tr, [end]: { ...pin, ...extra } } : tr,
+              ),
+            );
+        };
+        showToast(t.droppedPin, [
+          { label: t.startHere, run: () => set('from') },
+          { label: t.goHere, run: () => set('to') },
+        ]);
+        return;
+      }
+      select({ name: t.droppedPin, detail: '', ...here }, lookup);
     });
     const pointer = () => (map.getCanvas().style.cursor = 'pointer');
     const grab = () => (map.getCanvas().style.cursor = '');
@@ -283,7 +291,7 @@ export function App() {
       map.off('mouseenter', layers, pointer);
       map.off('mouseleave', layers, grab);
     };
-  }, [map, select, clear]);
+  }, [map, select, clear, showToast]);
 
   const pick = useCallback(
     (place: Place) => {
@@ -305,10 +313,15 @@ export function App() {
       select(place, place.distance === undefined ? undefined : () => addressOf(place.name, place));
       const [w, s, e, n] = place.bbox ?? [0, 0, 0, 0];
       if (place.bbox && (e - w > 0.002 || n - s > 0.002)) {
-        map.fitBounds(place.bbox, { padding: padding(), maxZoom: 17, duration: 1600 });
+        map.fitBounds(place.bbox, { padding: padding(), maxZoom: 17, duration: motion(1600) });
       } else {
         const zoom = Math.max(map.getZoom(), 16);
-        map.flyTo({ center: [place.lng, place.lat], zoom, padding: padding(), duration: 1600 });
+        map.flyTo({
+          center: [place.lng, place.lat],
+          zoom,
+          padding: padding(),
+          duration: motion(1600),
+        });
       }
     },
     [map, select],
@@ -352,11 +365,15 @@ export function App() {
     me.current?.update(fix);
     if (flyOnFix.current) {
       flyOnFix.current = false;
-      map.flyTo({ center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: 1800 });
+      map.flyTo({
+        center: [fix.lng, fix.lat],
+        zoom: Math.max(map.getZoom(), 15),
+        duration: motion(1800),
+      });
     } else if (followRef.current === 'position') {
       // Never cut short a running camera move (the fly-in after tapping locate would stop at
       // globe zoom); catch up when it ends, since underground no further fix may come.
-      const follow = () => map.easeTo({ center: [fix.lng, fix.lat], duration: 800 });
+      const follow = () => map.easeTo({ center: [fix.lng, fix.lat], duration: motion(800) });
       if (!map.isMoving()) follow();
       else {
         map.once('moveend', () => {
@@ -511,7 +528,7 @@ export function App() {
         pitch: 0,
         bearing: 0,
         padding: NO_PADDING,
-        duration: 800,
+        duration: motion(800),
       });
       return;
     }
@@ -521,14 +538,14 @@ export function App() {
     setNavigating(true);
     setNavFollow(true);
     if (!isNative) showToast(t.keepOpen);
-    map?.easeTo({ pitch: 55, zoom: Math.max(map.getZoom(), 16), duration: 800 });
+    map?.easeTo({ pitch: 55, zoom: Math.max(map.getZoom(), 16), duration: motion(800) });
   };
   const endNav = useCallback(() => {
     setNavigating(false);
     setRerouteAt(null);
     voice.stop();
     me.current?.heading(null);
-    map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: 800 });
+    map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: motion(800) });
   }, [map, voice]);
   const toggleMute = () => {
     setMuted((v) => {
@@ -550,7 +567,10 @@ export function App() {
   const locate = () => {
     if (status === 'denied') {
       // Ask again: the user may have allowed it in the settings since.
-      showToast(t.locationDenied);
+      showToast(
+        t.locationDenied,
+        openAppSettings ? [{ label: t.settings, run: openAppSettings }] : undefined,
+      );
       start();
       return;
     }
@@ -564,12 +584,16 @@ export function App() {
     }
     if (follow === 'compass') {
       setFollow('position');
-      map?.easeTo({ bearing: 0, duration: 500 });
+      map?.easeTo({ bearing: 0, duration: motion(500) });
       return;
     }
     setFollow('position');
     if (fix && map) {
-      map.flyTo({ center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: 1400 });
+      map.flyTo({
+        center: [fix.lng, fix.lat],
+        zoom: Math.max(map.getZoom(), 15),
+        duration: motion(1400),
+      });
     } else {
       flyOnFix.current = true;
     }
@@ -600,6 +624,20 @@ export function App() {
   });
   const offline = useOffline(map);
 
+  useAutoLocate(map, start, flyOnFix);
+
+  // The one gesture nothing on screen shows: said once, on the first visit.
+  useEffect(() => {
+    if (!map || stored(HINTED_KEY)) return;
+    const id = setTimeout(() => {
+      store(HINTED_KEY, '1');
+      showToast(touch() ? t.hint : t.hintMouse);
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [map, showToast]);
+
+  const panelRef = usePanel(map, sel && !trip && !navigating ? sel : null, selection?.loading);
+
   return (
     <>
       <div ref={mapEl} className="map" />
@@ -615,7 +653,7 @@ export function App() {
             onMute={toggleMute}
             onRecenter={() => {
               setFollow('position');
-              if (fix) map?.easeTo({ center: [fix.lng, fix.lat], duration: 600 });
+              if (fix) map?.easeTo({ center: [fix.lng, fix.lat], duration: motion(600) });
             }}
             onNewConnection={() => {
               setActive(0);
@@ -642,62 +680,71 @@ export function App() {
             onEnd={endNav}
           />
         )}
-        <div className="panel" hidden={navigating}>
-          {trip && !picking && (
-            <RouteCard
-              to={trip.to}
-              from={trip.from}
-              mode={trip.mode}
-              routes={shown}
-              active={chosen}
-              status={route.status}
-              location={status}
-              lang={lang}
-              onMode={setMode}
-              onActive={setActive}
-              onChangeStart={() => setPicking('start')}
-              onChangeEnd={() => setPicking('end')}
-              onUseMyLocation={() => {
-                start();
-                setTrip({ ...trip, from: null });
-              }}
-              onRetry={route.retry}
-              onClose={closeRoute}
-              onStart={startNav}
-              at={trip.at ?? null}
-              onDepart={(at) => {
-                setActive(0);
-                setTrip({ ...trip, at });
-              }}
-            />
-          )}
-          {selection && !trip && (
-            <PlaceCard
-              key={`${selection.place.lng},${selection.place.lat}`}
-              place={selection.place}
-              loading={selection.loading}
-              onClose={clear}
-              onToast={showToast}
-              onRoute={openRoute}
-            />
-          )}
-          {(!trip || picking) && (
-            <SearchBar
-              key={picking ?? 'place'}
-              lang={lang}
-              bias={bias}
-              onPick={pick}
-              onCategory={category.onCategory}
-              categoryRun={category.run}
-              onShowAll={category.showAll}
-              collapsed={!!selection && !picking}
-              onFocus={picking ? () => undefined : clear}
-              placeholder={
-                picking === 'start' ? t.searchStart : picking === 'end' ? t.searchEnd : undefined
-              }
-              autoFocus={!!picking}
-              onCancel={picking ? () => setPicking(null) : undefined}
-            />
+        <div className="panel" ref={panelRef} hidden={navigating}>
+          {/* Nothing in it renders while guiding: every fix would redraw it for nobody. */}
+          {!navigating && (
+            <>
+              {trip && !picking && (
+                <RouteCard
+                  to={trip.to}
+                  from={trip.from}
+                  mode={trip.mode}
+                  routes={shown}
+                  active={chosen}
+                  status={route.status}
+                  location={status}
+                  lang={lang}
+                  onMode={setMode}
+                  onActive={setActive}
+                  onChangeStart={() => setPicking('start')}
+                  onChangeEnd={() => setPicking('end')}
+                  onUseMyLocation={() => {
+                    start();
+                    setTrip({ ...trip, from: null });
+                  }}
+                  onRetry={route.retry}
+                  onClose={closeRoute}
+                  onStart={startNav}
+                  at={trip.at ?? null}
+                  onDepart={(at) => {
+                    setActive(0);
+                    setTrip({ ...trip, at });
+                  }}
+                />
+              )}
+              {selection && !trip && (
+                <PlaceCard
+                  key={`${selection.place.lng},${selection.place.lat}`}
+                  place={selection.place}
+                  loading={selection.loading}
+                  onClose={clear}
+                  onToast={showToast}
+                  onRoute={openRoute}
+                />
+              )}
+              {(!trip || picking) && (
+                <SearchBar
+                  key={picking ?? 'place'}
+                  lang={lang}
+                  bias={bias}
+                  onPick={pick}
+                  onCategory={category.onCategory}
+                  categoryRun={category.run}
+                  onShowAll={category.showAll}
+                  collapsed={!!selection && !picking}
+                  onFocus={picking ? () => undefined : clear}
+                  placeholder={
+                    picking === 'start'
+                      ? t.searchStart
+                      : picking === 'end'
+                        ? t.searchEnd
+                        : undefined
+                  }
+                  autoFocus={!!picking}
+                  onCancel={picking ? () => setPicking(null) : undefined}
+                />
+              )}
+            </>
           )}
         </div>
         {offline && !navigating && (
@@ -718,7 +765,7 @@ export function App() {
             onLocate={locate}
             onNorth={() => {
               if (follow === 'compass') setFollow('position');
-              map?.easeTo({ bearing: 0, pitch: 0, duration: 500 });
+              map?.easeTo({ bearing: 0, pitch: 0, duration: motion(500) });
             }}
           />
         )}
@@ -729,7 +776,19 @@ export function App() {
       {about && <About onClose={() => setAbout(false)} />}
       {toast && (
         <div className="toast surface" role="status">
-          {toast}
+          <span>{toast.text}</span>
+          {toast.actions?.map((a) => (
+            <button
+              key={a.label}
+              type="button"
+              onClick={() => {
+                setToast(null);
+                a.run();
+              }}
+            >
+              {a.label}
+            </button>
+          ))}
         </div>
       )}
       {!isNative && <UpdateToast />}

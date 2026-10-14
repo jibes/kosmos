@@ -4,7 +4,8 @@ import { formatDistance } from '../core/route';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
 import { getJson, nominatimSlot } from './http';
-import { t } from '../i18n';
+import { fill, t, units } from '../i18n';
+import { touch } from './layout';
 import { CloseIcon, SearchIcon } from './icons';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
@@ -227,6 +228,17 @@ export function SearchBar({
     }
   };
 
+  /** What the list has to say instead of results; also read out to a screen reader. */
+  const note =
+    status === 'done' && !items.length
+      ? category
+        ? t.noneHere
+        : t.noResults
+      : status === 'error'
+        ? t.searchOffline
+        : status === 'slow'
+          ? t.searchSlow
+          : '';
   const open = !collapsed && focused;
   const showList = open && (status !== 'idle' || suggestions.length > 0);
 
@@ -238,6 +250,7 @@ export function SearchBar({
             <li
               key={it.cat ? `cat|${it.cat}` : `${it.place.name}${it.place.lat}${it.place.lng}`}
               role="option"
+              id={`${listId}-${i}`}
               className={it.cat ? 'r-cat' : undefined}
               aria-selected={i === active}
               onPointerDown={(e) => e.preventDefault()}
@@ -254,7 +267,9 @@ export function SearchBar({
                 <>
                   <span className="r-name">{it.place.name}</span>
                   {it.place.distance !== undefined ? (
-                    <span className="r-detail">{formatDistance(it.place.distance, lang)}</span>
+                    <span className="r-detail">
+                      {formatDistance(it.place.distance, lang, units)}
+                    </span>
                   ) : (
                     it.place.detail && <span className="r-detail">{it.place.detail}</span>
                   )}
@@ -262,15 +277,18 @@ export function SearchBar({
               )}
             </li>
           ))}
-          {status === 'done' && !items.length && (
-            <li className="r-empty">{category ? t.noneHere : t.noResults}</li>
+          {note && (
+            <li className="r-empty" role="presentation">
+              {note}
+            </li>
           )}
-          {status === 'error' && <li className="r-empty">{t.searchOffline}</li>}
-          {status === 'slow' && <li className="r-empty">{t.searchSlow}</li>}
           {status === 'loading' && !items.length && <li className="r-empty r-loading" />}
         </ul>
       )}
-      {open && q.length < 2 && <p className="hint">{t.hint}</p>}
+      {open && q.length < 2 && <p className="hint">{touch() ? t.hint : t.hintMouse}</p>}
+      <p className="sr-only" role="status">
+        {showList ? note || (items.length ? fill(t.resultsCount, { n: items.length }) : '') : ''}
+      </p>
       <label className="bar surface">
         <SearchIcon />
         <input
@@ -284,6 +302,7 @@ export function SearchBar({
           autoFocus={autoFocus}
           aria-controls={listId}
           aria-expanded={showList}
+          aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
           role="combobox"
           value={query}
           onChange={(e) => {

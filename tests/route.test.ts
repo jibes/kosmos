@@ -7,8 +7,10 @@ import {
   formatDuration,
   parseValhalla,
   routeUrl,
+  speedIn,
   spokenDistance,
   turnOf,
+  unitsFor,
 } from '../src/core/route';
 
 describe('polyline', () => {
@@ -53,6 +55,11 @@ describe('routeUrl', () => {
     const body = JSON.parse(url.searchParams.get('json')!);
     expect(body.directions_options.language).toBe('en');
     expect(body.costing).toBe('pedestrian');
+  });
+
+  it('asks for miles where they are used', () => {
+    const url = new URL(routeUrl({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, 'car', 'en', 2, 'us'));
+    expect(JSON.parse(url.searchParams.get('json')!).directions_options.units).toBe('miles');
   });
 });
 
@@ -175,5 +182,34 @@ describe('spokenDistance', () => {
     expect(spokenDistance(612)).toEqual({ value: 600, unit: 'm' });
     expect(spokenDistance(1240)).toEqual({ value: 1.2, unit: 'km' });
     expect(spokenDistance(2000)).toEqual({ value: 2, unit: 'km' });
+  });
+});
+
+describe('units', () => {
+  it('follows the region of the locale', () => {
+    expect(unitsFor('en-US')).toBe('us');
+    expect(unitsFor('en-GB')).toBe('uk');
+    expect(unitsFor('en')).toBe('metric');
+    expect(unitsFor('de-DE')).toBe('metric');
+  });
+
+  it('writes miles with feet or yards', () => {
+    expect(formatDistance(30, 'en', 'us')).toBe('100 ft');
+    expect(formatDistance(120, 'en', 'us')).toBe('400 ft');
+    expect(formatDistance(150, 'en', 'us')).toBe('500 ft');
+    expect(formatDistance(120, 'en', 'uk')).toBe('130 yd');
+    expect(formatDistance(1609, 'en', 'us')).toBe('1.0 mi');
+    expect(formatDistance(30_000, 'en', 'uk')).toBe('19 mi');
+  });
+
+  it('says miles and feet ahead of a turn', () => {
+    expect(spokenDistance(150, 'us')).toEqual({ value: 500, unit: 'ft' });
+    expect(spokenDistance(480, 'us')).toEqual({ value: 0.3, unit: 'mi' });
+    expect(spokenDistance(100, 'uk')).toEqual({ value: 100, unit: 'yd' });
+  });
+
+  it('gives speed in mph where miles are used', () => {
+    expect(speedIn(13.4112, 'us')).toBe(30);
+    expect(speedIn(10, 'metric')).toBe(36);
   });
 });

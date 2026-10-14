@@ -20,7 +20,11 @@ export function Controls({ map, status, follow, onLocate, onNorth }: Props) {
 
   useEffect(() => {
     if (!map) return;
-    const sync = () => setCamera({ bearing: map.getBearing(), pitch: map.getPitch() });
+    // Whole degrees: compass mode turns the map every frame, the button need not redraw as often.
+    const sync = () => {
+      const next = { bearing: Math.round(map.getBearing()), pitch: Math.round(map.getPitch()) };
+      setCamera((c) => (c.bearing === next.bearing && c.pitch === next.pitch ? c : next));
+    };
     map.on('rotate', sync);
     map.on('pitch', sync);
     sync();
@@ -69,6 +73,7 @@ export function Controls({ map, status, follow, onLocate, onNorth }: Props) {
         type="button"
         className="ctl surface compass"
         data-hidden={!tilted || undefined}
+        aria-hidden={!tilted || undefined}
         aria-label={t.resetNorth}
         tabIndex={tilted ? 0 : -1}
         onClick={onNorth}
