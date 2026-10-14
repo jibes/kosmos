@@ -64,7 +64,7 @@ const storedMuted = () => {
   }
 };
 
-/** Fits a route into the map area the route card leaves free, measured, not guessed. */
+/** Fits a route, or category results, into the map area the panel leaves free, measured. */
 const routePadding = () => {
   const panel = document.querySelector('.panel')?.getBoundingClientRect();
   if (wide()) return { top: 64, bottom: 64, left: (panel?.right ?? 420) + 48, right: 96 };
@@ -292,7 +292,7 @@ export function App() {
   );
 
   /** Places of a category, from the map's tiles; their dots stay until the search ends. */
-  const category = useCategory(map, LABEL_LANG, padding);
+  const category = useCategory(map, LABEL_LANG, routePadding);
 
   const bias = useCallback(() => {
     if (!map) return undefined;

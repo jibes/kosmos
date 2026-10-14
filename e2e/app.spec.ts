@@ -485,8 +485,9 @@ test.describe('map', () => {
     await expect(options.first()).toContainText('Zur Letzten Instanz');
     await expect(options.first()).toContainText(/\d+ m/);
     await expect(options.nth(2)).toContainText('Borchardt');
-    // Too wide a view holds few places; the search looked closer first.
-    expect(await page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThanOrEqual(14.9);
+    // Too wide a view holds few places; the first search looked closer, once.
+    const zoom = () => page.evaluate(() => window.kosmos!.getZoom());
+    expect(await zoom()).toBeCloseTo(14, 1);
     const dots = () =>
       page.evaluate(async () => {
         const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
@@ -500,19 +501,24 @@ test.describe('map', () => {
     await input.press('Enter');
     await expect(options).toHaveCount(0);
     await idle(page);
-    const onScreen = await page.evaluate(() => {
+    // All of them on screen, centred in the map the search bar leaves free, not crowded at the top.
+    const spread = await page.evaluate(() => {
       const m = window.kosmos!;
-      const { width, height } = m.getCanvas().getBoundingClientRect();
-      return [
+      const { height } = m.getCanvas().getBoundingClientRect();
+      // On a phone the search bar sits at the bottom; on a wide screen the panel is at the side.
+      const free = matchMedia('(min-width: 900px)').matches
+        ? height
+        : document.querySelector('.panel')!.getBoundingClientRect().top;
+      const ys = [
         [13.405 + 60 / 67800, 52.52 + 40 / 111200],
         [13.405 - 300 / 67800, 52.52 + 200 / 111200],
         [13.405 + 500 / 67800, 52.52 - 400 / 111200],
-      ].every(([lng, lat]) => {
-        const p = m.project([lng, lat]);
-        return p.x > 0 && p.y > 0 && p.x < width && p.y < height;
-      });
+      ].map(([lng, lat]) => m.project([lng, lat]).y);
+      return { top: Math.min(...ys) / free, bottom: Math.max(...ys) / free, height };
     });
-    expect(onScreen).toBe(true);
+    expect(spread.top).toBeGreaterThan(0.05);
+    expect(spread.bottom).toBeLessThan(0.97);
+    expect((spread.top + spread.bottom) / 2).toBeGreaterThan(0.35);
 
     // A dot on the map opens its place.
     const borchardt = await page.evaluate(() =>
@@ -522,19 +528,8 @@ test.describe('map', () => {
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Borchardt');
     await page.locator('.card').getByRole('button', { name: /close/i }).click();
 
-    // Moving away offers to search the new area; there is nothing there, back home there is.
-    const here = page.getByRole('button', { name: 'Search this area' });
-    await expect(here).toHaveCount(0);
-    await jump(page, { lng: CENTER.lng + 0.03, lat: CENTER.lat, zoom: 15 });
-    await expect(here).toBeVisible();
-    await here.click();
-    await expect.poll(dots).toBe(0);
-    await expect(here).toHaveCount(0);
+    // Typed in German, groceries: supermarket and bakery in view.
     await jump(page, { ...CENTER, zoom: 15 });
-    await here.click();
-    await expect.poll(dots).toBe(3);
-
-    // Typed in German, groceries: supermarket and bakery.
     await input.fill('Lebensmittel');
     await expect(options).toHaveCount(2);
     await expect(options.first()).toContainText('Kiezmarkt');
@@ -543,6 +538,66 @@ test.describe('map', () => {
 
     await input.fill('');
     await expect.poll(dots).toBe(0);
+  });
+
+  test('offers to search a new area only after the user moves the map', async ({
+    page,
+    context,
+  }) => {
+    // Real drags with the map settling after each: slow on the emulated phone.
+    test.slow();
+    await jump(page, { ...CENTER, zoom: 14 });
+    await idle(page);
+    const input = page.getByRole('combobox');
+    await input.fill('Restaurants');
+    await expect(page.getByRole('option')).toHaveCount(3);
+    const zoom = () => page.evaluate(() => window.kosmos!.getZoom());
+    const dots = () =>
+      page.evaluate(async () => {
+        const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
+        const data = (await src.getData()) as GeoJSON.FeatureCollection;
+        return data.features.length;
+      });
+    await expect.poll(dots).toBe(3);
+    await input.blur();
+
+    // The app's own camera moves (here: locate) do not count as looking elsewhere.
+    const here = page.getByRole('button', { name: 'Search this area' });
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.03, longitude: CENTER.lng });
+    await page.locator('.controls > button').first().click();
+    await idle(page);
+    await expect(here).toHaveCount(0);
+
+    // Dragging the map away offers to search the new area, without changing the zoom; there
+    // is nothing there, and back home there is again.
+    await jump(page, { ...CENTER, zoom: 14 });
+    await idle(page);
+    const drag = async (dx: number) => {
+      const box = (await page.locator('canvas.maplibregl-canvas').boundingBox())!;
+      // Inside the canvas from edge to edge: a release outside the window never arrives.
+      const y = box.y + box.height * 0.3;
+      const [from, to] = dx < 0 ? [0.9, 0.1] : [0.1, 0.9];
+      for (let i = 0; i < 2; i++) {
+        await page.mouse.move(box.x + box.width * from, y);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * 0.5, y, { steps: 6 });
+        await page.mouse.move(box.x + box.width * to, y, { steps: 6 });
+        await page.mouse.up();
+        await idle(page);
+      }
+    };
+    await expect(here).toHaveCount(0);
+    await drag(-1);
+    await expect(here).toBeVisible();
+    const before = await zoom();
+    await here.click();
+    await expect.poll(dots).toBe(0);
+    await expect(here).toHaveCount(0);
+    expect(await zoom()).toBeCloseTo(before, 3);
+    await drag(1);
+    await here.click();
+    await expect.poll(dots).toBe(3);
   });
 
   test('shows opening hours and contacts, asking once per place', async ({ page }, info) => {

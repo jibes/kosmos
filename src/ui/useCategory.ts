@@ -26,8 +26,10 @@ export function useCategory(
   const searched = useRef<{ places: Place[]; center: maplibregl.LngLat; zoom: number } | null>(
     null,
   );
-  /** Our own camera moves (show all) re-anchor the search instead of counting as moving away. */
-  const ownMove = useRef(false);
+  /** Only the user's own panning and zooming moves away from results; the app's camera moves
+   * (locate, follow, show all) re-anchor them instead. */
+  const userMove = useRef(false);
+  const last = useRef<Category | null>(null);
 
   const dots = useCallback(
     (places: Place[]) =>
@@ -48,11 +50,15 @@ export function useCategory(
       setActive(c);
       setMoved(false);
       if (!map || !c) {
+        last.current = null;
         searched.current = null;
         dots([]);
         return [];
       }
-      const places = await findCategory(map, c, lang);
+      // A new category may zoom in from a wide view; the same one again searches in place.
+      const fresh = c !== last.current;
+      last.current = c;
+      const places = await findCategory(map, c, lang, fresh);
       if (mine === token.current) {
         dots(places);
         searched.current = { places, center: map.getCenter(), zoom: map.getZoom() };
@@ -64,11 +70,15 @@ export function useCategory(
 
   useEffect(() => {
     if (!map) return;
+    const onMoveStart = (e: { originalEvent?: Event }) => {
+      if (e.originalEvent) userMove.current = true;
+    };
     const onMoveEnd = () => {
       const s = searched.current;
+      const byUser = userMove.current;
+      userMove.current = false;
       if (!s) return;
-      if (ownMove.current) {
-        ownMove.current = false;
+      if (!byUser) {
         searched.current = { ...s, center: map.getCenter(), zoom: map.getZoom() };
         return;
       }
@@ -80,8 +90,10 @@ export function useCategory(
       const away = distance(s.center, map.getCenter()) > width * MOVED_SHARE;
       setMoved(away || Math.abs(map.getZoom() - s.zoom) >= ZOOMED);
     };
+    map.on('movestart', onMoveStart);
     map.on('moveend', onMoveEnd);
     return () => {
+      map.off('movestart', onMoveStart);
       map.off('moveend', onMoveEnd);
     };
   }, [map]);
@@ -90,7 +102,6 @@ export function useCategory(
   const showAll = useCallback(() => {
     const places = searched.current?.places;
     if (!map || !places?.length) return;
-    ownMove.current = true;
     if (places.length === 1) {
       map.flyTo({
         center: [places[0].lng, places[0].lat],

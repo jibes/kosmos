@@ -164,8 +164,9 @@ export function SearchBar({
         );
     } else if (e.key === 'Enter' && category && active < 0) {
       // "Restaurants" + search: show them all where they are, without choosing one.
-      if (results.length) onShowAll();
+      // Close the list first, so the fit measures the map the user will see.
       input.current?.blur();
+      if (results.length) requestAnimationFrame(onShowAll);
     } else if (e.key === 'Enter') {
       // Only results for exactly this query; stale ones from the last query would jump wrong.
       const hit = current?.places[cursor.key === key ? active : 0];
