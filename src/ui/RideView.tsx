@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import type { RidePrompt, RideState } from '../core/ride';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import type { Transit, TransitLeg } from '../core/transit';
 import { fill, t } from '../i18n';
 import { LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { SoundIcon } from './NavView';
-import { LineChip } from './TransitParts';
+import { LineChip, TransitLegs } from './TransitParts';
 
 interface Props {
   transit: Transit;
@@ -46,6 +47,8 @@ export function rideWords(transit: Transit, p: RidePrompt, destination: string, 
 
 /** On the way by public transport: one line saying what to do now, the arrival at the bottom. */
 export function RideView({ transit, st, destination, lang, muted, following, ...on }: Props) {
+  /** The whole connection, every stop and turn, under the banner. */
+  const [open, setOpen] = useState(false);
   const clock = (ms: number) => formatClock(new Date(ms), lang);
   const leg = transit.legs[st.leg] as TransitLeg | undefined;
   const next = transit.legs[st.leg + 1];
@@ -89,27 +92,62 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
     icon = <ModeIcon mode="transit" size={40} />;
   }
 
+  // Of the current ride's stops (those passed through, then the one to get off at), how many
+  // are behind the rider.
+  const passed = st.phase === 'ride' && leg ? leg.via.length + 1 - st.stopsLeft : 0;
+
   return (
     <>
-      <section
-        className="nav-banner ride"
-        aria-live="polite"
-        data-state={st.phase === 'arrived' ? 'arrived' : st.missed ? 'rerouting' : 'go'}
-        data-phase={st.phase}
-      >
-        {icon}
-        <div>
-          {big && <strong>{big}</strong>}
-          <p>{title}</p>
-          {goal && <small>{goal}</small>}
-          {sub && <small>{sub}</small>}
-        </div>
-        {st.missed && (
-          <button type="button" className="ride-new" onClick={on.onNewConnection}>
-            {t.newConnection}
-          </button>
+      <div className="ride-top">
+        <section
+          className="nav-banner ride"
+          aria-live="polite"
+          data-state={st.phase === 'arrived' ? 'arrived' : st.missed ? 'rerouting' : 'go'}
+          data-phase={st.phase}
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          aria-label={t.showTrip}
+          onClick={() => setOpen((o) => !o)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setOpen((o) => !o);
+            }
+          }}
+        >
+          {icon}
+          <div>
+            {big && <strong>{big}</strong>}
+            <p>{title}</p>
+            {goal && <small>{goal}</small>}
+            {sub && <small>{sub}</small>}
+          </div>
+          {st.missed && (
+            <button
+              type="button"
+              className="ride-new"
+              onClick={(e) => {
+                e.stopPropagation();
+                on.onNewConnection();
+              }}
+            >
+              {t.newConnection}
+            </button>
+          )}
+        </section>
+        {open && (
+          <section className="ride-details surface">
+            <TransitLegs
+              transit={transit}
+              lang={lang}
+              current={Math.min(st.leg, transit.legs.length - 1)}
+              passed={passed}
+              destination={destination}
+            />
+          </section>
         )}
-      </section>
+      </div>
 
       {!following && (
         <button type="button" className="recenter surface" onClick={on.onRecenter}>

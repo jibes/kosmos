@@ -240,6 +240,9 @@ test.describe('map', () => {
     await expect(legs.locator('.line').first()).toHaveText('U6');
     await expect(legs).toContainText('Platform 2');
     await expect(legs).toContainText('→ Alt-Tegel · 3 stops · +2 min late');
+    // A ride opens to every stop with its time.
+    await legs.getByRole('button', { name: /Alt-Tegel/ }).click();
+    await expect(legs.locator('.stops li')).toHaveText([/Französische Straße/, /Friedrichstraße/]);
     await expect(legs.locator('.ride time').first()).toHaveAttribute('data-late');
     await expect(legs.locator('.walk')).toHaveCount(2);
     await expect(card.locator('.summary')).toContainText('No change');
@@ -354,7 +357,16 @@ test.describe('map', () => {
     await minutes(16);
     await expect(banner).toContainText('2 stops', { timeout: 10_000 });
     await expect(banner).toContainText('Get off at Unter den Linden');
+    // Tapping the banner shows the whole trip: this ride open, the stop behind dimmed.
+    await banner.click();
+    const trip = page.locator('.ride-details');
+    await expect(trip.locator('[data-current]')).toContainText('U6');
+    await expect(trip.locator('.stops li').first()).toHaveAttribute('data-passed', 'true');
+    await expect(trip.locator('.stops li').nth(1)).not.toHaveAttribute('data-passed');
+    await expect(trip.locator('.walk').first()).toHaveAttribute('data-done', 'true');
     await shot(page, info, 'riding');
+    await banner.click();
+    await expect(trip).toHaveCount(0);
     await minutes(20);
     await expect(banner).toContainText('Next stop', { timeout: 10_000 });
     await expect.poll(spoken).toContain('Get off at the next stop, Unter den Linden.');

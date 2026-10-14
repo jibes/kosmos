@@ -60,6 +60,7 @@ export const de = {
   departsNow: 'jetzt',
   nextStop: 'Nächster Halt',
   getOffAt: 'Aussteigen: {stop}',
+  showTrip: 'Ganze Fahrt zeigen',
   newConnection: 'Neue Verbindung',
   sayWalk: 'Geh zu {stop}.',
   sayBoard: 'Nimm die {line} Richtung {dir}, Abfahrt {time}.',

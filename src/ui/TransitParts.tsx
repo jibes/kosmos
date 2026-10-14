@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import { clockValue, departureAt, vehicleOf, type Transit, type TransitLeg } from '../core/transit';
 import { t } from '../i18n';
-import { ModeIcon, VehicleIcon } from './icons';
+import { ModeIcon, TurnIcon, VehicleIcon } from './icons';
 
 const count = (n: number, one: string, many: string) =>
   n === 1 ? one : many.replace('{n}', `${n}`);
@@ -91,52 +91,138 @@ export function DepartTime({
   );
 }
 
-/** The connection leg by leg: walks as one line, each ride with its line, stops and times. */
-export function TransitLegs({ transit, lang }: { transit: Transit; lang: string }) {
+interface LegsProps {
+  transit: Transit;
+  lang: string;
+  /** While riding: the leg the rider is on, opened, with the stops behind them dimmed. */
+  current?: number;
+  /** Stops of the current ride already passed (of `via` plus the last). */
+  passed?: number;
+  /** The destination's own name for the last leg; the planner calls it "END". */
+  destination?: string;
+}
+
+/**
+ * The connection leg by leg. Each ride and each walk opens to its detail: every stop with its
+ * time, every turn with its street.
+ */
+export function TransitLegs({ transit, lang, current, passed = 0, destination }: LegsProps) {
   const clock = (ms: number) => formatClock(new Date(ms), lang);
+  const [open, setOpen] = useState<Set<number>>(
+    () => new Set(current === undefined ? [] : [current]),
+  );
+  const toggle = (i: number) =>
+    setOpen((o) => {
+      const next = new Set(o);
+      if (!next.delete(i)) next.add(i);
+      return next;
+    });
+  const last = transit.legs.length - 1;
   return (
     <ol className="legs">
-      {transit.legs.map((l, i) =>
-        l.ride ? (
-          <li key={i} className="ride" data-cancelled={l.cancelled || undefined}>
-            <LineChip leg={l} />
-            <div>
-              <p>
-                <time data-late={l.delay > 0 || undefined}>{clock(l.start)}</time>
-                <span>{l.from.name}</span>
-                {l.from.track && (
-                  <small>
-                    {t.platform} {l.from.track}
-                  </small>
+      {transit.legs.map((l, i) => {
+        const here = i === current;
+        const shown = open.has(i);
+        if (l.ride) {
+          const summary = l.cancelled
+            ? t.cancelled
+            : [
+                l.headsign && `→ ${l.headsign}`,
+                count(l.stops + 1, t.oneStop, t.stops),
+                l.delay > 0 && `+${l.delay} min ${t.late}`,
+              ]
+                .filter(Boolean)
+                .join(' · ');
+          return (
+            <li
+              key={i}
+              className="ride"
+              data-cancelled={l.cancelled || undefined}
+              data-current={here || undefined}
+              data-done={(current !== undefined && i < current) || undefined}
+            >
+              <LineChip leg={l} />
+              <div>
+                <p>
+                  <time data-late={l.delay > 0 || undefined}>{clock(l.start)}</time>
+                  <span>{l.from.name}</span>
+                  {l.from.track && (
+                    <small>
+                      {t.platform} {l.from.track}
+                    </small>
+                  )}
+                </p>
+                {l.via.length > 0 ? (
+                  <button
+                    type="button"
+                    className="via"
+                    aria-expanded={shown}
+                    onClick={() => toggle(i)}
+                  >
+                    {summary}
+                  </button>
+                ) : (
+                  <small className="via">{summary}</small>
                 )}
-              </p>
-              <small className="via">
-                {l.cancelled
-                  ? t.cancelled
-                  : [
-                      l.headsign && `→ ${l.headsign}`,
-                      count(l.stops + 1, t.oneStop, t.stops),
-                      l.delay > 0 && `+${l.delay} min ${t.late}`,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-              </small>
-              <p>
-                <time>{clock(l.end)}</time>
-                <span>{l.to.name}</span>
-              </p>
+                {shown && (
+                  <ol className="stops">
+                    {l.via.map((v, k) => (
+                      <li key={k} data-passed={(here && k < passed) || undefined}>
+                        <time>{v.arrival ? clock(v.arrival) : ''}</time>
+                        <span>{v.name}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                <p>
+                  <time>{clock(l.end)}</time>
+                  <span>{i === last && destination ? destination : l.to.name}</span>
+                </p>
+              </div>
+            </li>
+          );
+        }
+        const turns = l.steps.filter((st) => st.turn !== 'depart' && st.turn !== 'straight');
+        return (
+          <li
+            key={i}
+            className="walk"
+            data-current={here || undefined}
+            data-done={(current !== undefined && i < current) || undefined}
+          >
+            <ModeIcon mode="foot" size={18} />
+            <div>
+              {turns.length > 0 ? (
+                <button
+                  type="button"
+                  className="via"
+                  aria-expanded={shown}
+                  onClick={() => toggle(i)}
+                >
+                  {t.walk} {formatDuration((l.end - l.start) / 1000)} ·{' '}
+                  {formatDistance(l.distance, lang)}
+                </button>
+              ) : (
+                <span>
+                  {t.walk} {formatDuration((l.end - l.start) / 1000)} ·{' '}
+                  {formatDistance(l.distance, lang)}
+                </span>
+              )}
+              {shown && (
+                <ol className="stops turns">
+                  {turns.map((st, k) => (
+                    <li key={k}>
+                      <TurnIcon turn={st.turn} size={16} />
+                      <span>{st.street ?? ''}</span>
+                      <small>{formatDistance(st.at, lang)}</small>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </div>
           </li>
-        ) : (
-          <li key={i} className="walk">
-            <ModeIcon mode="foot" size={18} />
-            <span>
-              {t.walk} {formatDuration((l.end - l.start) / 1000)} ·{' '}
-              {formatDistance(l.distance, lang)}
-            </span>
-          </li>
-        ),
-      )}
+        );
+      })}
     </ol>
   );
 }

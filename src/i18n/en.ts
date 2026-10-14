@@ -58,6 +58,7 @@ export const en = {
   departsNow: 'now',
   nextStop: 'Next stop',
   getOffAt: 'Get off at {stop}',
+  showTrip: 'Show the whole trip',
   newConnection: 'New connection',
   sayWalk: 'Walk to {stop}.',
   sayBoard: 'Take the {line} towards {dir}, leaving at {time}.',
