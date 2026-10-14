@@ -173,6 +173,9 @@ function fakePlan(a: Pt, b: Pt, depart: number) {
 /** Departure time of the last plan served, to answer departure checks consistently. */
 let planDepart = 0;
 
+/** Every Nominatim search the app made (only as a fallback when Photon fails). */
+export const nominatimSearches: URLSearchParams[] = [];
+
 /** Every Nominatim lookup the app made. */
 export const lookupRequests: URLSearchParams[] = [];
 
@@ -265,6 +268,29 @@ export async function offlineWorld(context: BrowserContext) {
           },
         ],
       }),
+    });
+  });
+  await context.route(/nominatim\.openstreetmap\.org\/search/, (route) => {
+    const q = new URL(route.request().url()).searchParams;
+    nominatimSearches.push(q);
+    const hit = /brandenburg/i.test(q.get('q') ?? '');
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(
+        hit
+          ? [
+              {
+                name: SEARCH_HIT.name,
+                display_name: `${SEARCH_HIT.name}, Pariser Platz, Mitte, Berlin, Deutschland`,
+                lat: String(SEARCH_HIT.lat),
+                lon: String(SEARCH_HIT.lng),
+                osm_type: 'way',
+                osm_id: 518071791,
+              },
+            ]
+          : [],
+      ),
     });
   });
   await context.route(/nominatim\.openstreetmap\.org\/lookup/, (route) => {

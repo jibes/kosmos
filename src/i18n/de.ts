@@ -23,7 +23,7 @@ export const de = {
     '© OpenStreetMap-Mitwirkende, ODbL. Kacheln von OpenFreeMap, Schema von OpenMapTiles, Suche mit Photon (komoot), Routen mit Valhalla auf FOSSGIS-Servern, öffentliche Verkehrsmittel mit Transitous (MOTIS) aus offenen Fahrplänen, Öffnungszeiten von Nominatim (OSM Foundation), Darstellung mit MapLibre.',
   privacy: 'Datenschutz',
   privacyText:
-    'Kein Konto, kein Tracking. Dein Standort bleibt auf dem Gerät, außer du planst eine Route ab dort. Kartenkacheln gehen an OpenFreeMap, Suchen an Photon, Start und Ziel einer angefragten Route an den FOSSGIS-Routenserver, bei öffentlichen Verkehrsmitteln samt Abfahrtszeit an Transitous; eine geöffnete Ortskarte fragt Nominatim nach Öffnungszeiten.',
+    'Kein Konto, kein Tracking. Dein Standort bleibt auf dem Gerät, außer du planst eine Route ab dort. Kartenkacheln gehen an OpenFreeMap, Suchen an Photon, Start und Ziel einer angefragten Route an den FOSSGIS-Routenserver, bei öffentlichen Verkehrsmitteln samt Abfahrtszeit an Transitous; eine geöffnete Ortskarte fragt Nominatim nach Öffnungszeiten, und Nominatim beantwortet eine Suche, wenn Photon nicht antwortet.',
   licence: 'Freie Software unter GPL-3.0-or-later.',
   source: 'Quellcode',
   sources: 'Quellen und Lizenzen',

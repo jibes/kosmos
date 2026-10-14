@@ -16,3 +16,16 @@ export async function getJson(url: string, signal: AbortSignal) {
   const res = await fetch(url, { signal });
   return { ok: res.ok, status: res.status, json: res.ok ? await res.json() : null };
 }
+
+let nominatimNext = 0;
+
+/**
+ * Reserves the next Nominatim slot and returns the milliseconds to wait for it. One request a
+ * second across the whole app (place details and the search fallback), as the OSMF asks.
+ */
+export function nominatimSlot(): number {
+  const now = Date.now();
+  const at = Math.max(now, nominatimNext);
+  nominatimNext = at + 1100;
+  return at - now;
+}

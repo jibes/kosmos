@@ -102,6 +102,16 @@ export interface Fix extends LngLat {
   time: number;
 }
 
+/** Device speeds below this are a phone at rest. */
+const STILL_MS = 0.5;
+/** Progress shorter than this is GPS noise: half the accuracy, at least 6 m. */
+const jitterM = (accuracy: number) => Math.max(6, accuracy * 0.5);
+/** After this long, small progress is a slow crawl or standing, not noise to wait out. */
+const CRAWL_S = 8;
+/** The route's direction takes over the heading above 3 m/s and gives it back below 1.5. */
+const MOVING_ON_MS = 3;
+const MOVING_OFF_MS = 1.5;
+
 export interface NavState {
   snap: Snap | null;
   /** Index of the maneuver ahead. */
@@ -118,6 +128,13 @@ export interface NavState {
   spoken: string[];
   /** m/s, smoothed. */
   speed: number;
+  /**
+   * Travelling fast enough for the route's direction to be the heading; below it the compass
+   * says where the user faces. With hysteresis, so standing at a light does not flip it.
+   */
+  moving: boolean;
+  /** Where speed was last measured from: progress only counts once it beats GPS jitter. */
+  anchor: { along: number; time: number } | null;
   time: number;
 }
 
@@ -132,6 +149,8 @@ export const initialNav = (): NavState => ({
   arrived: false,
   spoken: [],
   speed: 0,
+  moving: false,
+  anchor: null,
   time: 0,
 });
 
@@ -159,15 +178,23 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
   const legLen = Math.max(1, tr.at[next] - tr.at[cur]);
   const eta = tr.timeLeft[cur] + tr.route.maneuvers[cur].duration * Math.min(1, toNext / legLen);
 
-  // Speed from the device, else from progress since the last fix, smoothed.
-  const dt = (fix.time - prev.time) / 1000;
-  const measured =
-    fix.speed != null && fix.speed >= 0
-      ? fix.speed
-      : prev.snap && dt > 0.5
-        ? Math.max(0, along - prev.snap.along) / dt
-        : prev.speed;
+  // Speed from the device, else from progress along the route. Standing still, a fix wanders
+  // by metres; that only counts as movement once it beats the jitter (or enough time passed
+  // to measure a crawl).
+  let anchor = prev.anchor ?? { along, time: fix.time };
+  let measured = prev.speed;
+  if (fix.speed != null && fix.speed >= 0) {
+    measured = fix.speed < STILL_MS ? 0 : fix.speed;
+  } else {
+    const moved = along - anchor.along;
+    const dt = (fix.time - anchor.time) / 1000;
+    if ((Math.abs(moved) >= jitterM(fix.accuracy) || dt >= CRAWL_S) && dt > 0.5) {
+      measured = Math.abs(moved) < jitterM(fix.accuracy) ? 0 : Math.max(0, moved) / dt;
+      anchor = { along, time: fix.time };
+    }
+  }
   const speed = prev.snap ? prev.speed * 0.5 + measured * 0.5 : measured;
+  const moving = prev.moving ? speed > MOVING_OFF_MS : speed > MOVING_ON_MS;
 
   return {
     snap: { ...s, along },
@@ -180,6 +207,8 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
     arrived: total - along < ARRIVE_M && s.offset < 50,
     spoken: prev.spoken,
     speed,
+    moving,
+    anchor,
     time: fix.time,
   };
 }

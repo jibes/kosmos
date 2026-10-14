@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { categoriesFor, type Category } from '../core/categories';
 import { formatDistance } from '../core/route';
+import { nominatimSearchUrl, parseNominatim } from '../core/details';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
+import { getJson, nominatimSlot } from './http';
 import { t } from '../i18n';
 import { CloseIcon, SearchIcon } from './icons';
 
@@ -32,7 +34,7 @@ const label = (c: Category) => t[`cat_${c}`];
 
 const DEBOUNCE_MS = 200;
 /** A search server that has not answered by now is not going to; say so instead of spinning. */
-const TIMEOUT_MS = 8000;
+const TIMEOUT_MS = 5000;
 const cache = new Map<string, Place[]>();
 
 /** A row of the list: a kind of place to search the map for, or a place found by name. */
@@ -115,7 +117,27 @@ export function SearchBar({
   useEffect(() => {
     if (category || q.length < 2 || cache.has(key)) return;
     const ctrl = new AbortController();
+    const fallback = new AbortController();
     let timedOut = false;
+    const done = (places: Place[]) => {
+      if (cache.size > 64) cache.delete(cache.keys().next().value as string);
+      cache.set(key, places);
+      setResponse({ key, places, status: 'done' });
+      if (jumpFor.current === key) {
+        jumpFor.current = null;
+        if (places[0]) {
+          onPickRef.current(places[0]);
+          input.current?.blur();
+        }
+      }
+    };
+    /** Photon failed or hung: ask Nominatim once for this settled query (never as-you-type). */
+    const viaNominatim = async () => {
+      await new Promise((go) => setTimeout(go, nominatimSlot()));
+      if (fallback.signal.aborted) return null;
+      const r = await getJson(nominatimSearchUrl(q, lang, bias()), fallback.signal);
+      return r.ok ? parseNominatim(r.json) : null;
+    };
     const timer = setTimeout(async () => {
       const limit = setTimeout(() => {
         timedOut = true;
@@ -124,21 +146,14 @@ export function SearchBar({
       try {
         const res = await fetch(searchUrl(q, lang, bias()), { signal: ctrl.signal });
         if (!res.ok) throw new Error(String(res.status));
-        const places = parsePhoton(await res.json());
-        if (cache.size > 64) cache.delete(cache.keys().next().value as string);
-        cache.set(key, places);
-        setResponse({ key, places, status: 'done' });
-        if (jumpFor.current === key) {
-          jumpFor.current = null;
-          if (places[0]) {
-            onPickRef.current(places[0]);
-            input.current?.blur();
-          }
-        }
+        done(parsePhoton(await res.json()));
       } catch (e) {
         if (ctrl.signal.aborted && !timedOut) return;
         console.warn('search failed', e);
-        setResponse({ key, places: [], status: timedOut ? 'slow' : 'error' });
+        const places = q.length >= 3 ? await viaNominatim().catch(() => null) : null;
+        if (fallback.signal.aborted) return;
+        if (places) done(places);
+        else setResponse({ key, places: [], status: timedOut ? 'slow' : 'error' });
       } finally {
         clearTimeout(limit);
       }
@@ -146,6 +161,7 @@ export function SearchBar({
     return () => {
       clearTimeout(timer);
       ctrl.abort();
+      fallback.abort();
     };
   }, [q, key, lang, bias, category, retry]);
 

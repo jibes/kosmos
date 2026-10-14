@@ -38,7 +38,7 @@ No account, no analytics, no tracking. Your location leaves the device only as t
 | [Photon](https://photon.komoot.io) by komoot                           | Search, address lookup                  | Search text, map centre; the point you long-press                                                                                           |
 | [Valhalla](https://valhalla1.openstreetmap.de) by FOSSGIS              | Routing                                 | Route start (your location, when you ask for a route), destination and travel mode                                                          |
 | [Transitous](https://transitous.org)                                   | Public transport                        | Start, destination and departure time of a public transport route you ask for; while you follow it, the boarding stop for a departure check |
-| [Nominatim](https://nominatim.openstreetmap.org) by the OSM Foundation | Opening hours, phone, website           | The OpenStreetMap id of the place card you open                                                                                             |
+| [Nominatim](https://nominatim.openstreetmap.org) by the OSM Foundation | Opening hours, phone, website           | The OpenStreetMap id of the place card you open; a search's text only when Photon does not answer                                           |
 
 ## Android permissions
 

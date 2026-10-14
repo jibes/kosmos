@@ -49,3 +49,82 @@ export function parseLookup(json: unknown): Details {
   if (website && /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}/i.test(website)) out.website = website;
   return out;
 }
+
+/**
+ * A finished query to Nominatim's search, for when Photon does not answer. Never as-you-type:
+ * the OSMF policy forbids that; one request per query the user settled on is fine.
+ */
+export function nominatimSearchUrl(
+  query: string,
+  lang: string,
+  near?: { lng: number; lat: number; zoom: number },
+): string {
+  const q = new URLSearchParams({
+    q: query.trim(),
+    format: 'jsonv2',
+    limit: '7',
+    'accept-language': lang,
+  });
+  if (near) {
+    // Prefer what is around the view, a few times its size, without excluding the rest.
+    const d = Math.min(20, 360 / 2 ** Math.max(0, near.zoom - 1));
+    q.set(
+      'viewbox',
+      [near.lng - d, near.lat + d / 2, near.lng + d, near.lat - d / 2]
+        .map((v) => v.toFixed(4))
+        .join(','),
+    );
+  }
+  return `${NOMINATIM_URL}/search?${q}`;
+}
+
+interface NomPlace {
+  name?: string;
+  display_name?: string;
+  lat?: string;
+  lon?: string;
+  osm_type?: string;
+  osm_id?: number;
+  boundingbox?: [string, string, string, string];
+}
+
+/** Nominatim search results as places: name, the rest of its address, OSM id, extent. */
+export function parseNominatim(json: unknown): {
+  name: string;
+  detail: string;
+  lng: number;
+  lat: number;
+  osm?: string;
+  bbox?: [number, number, number, number];
+}[] {
+  if (!Array.isArray(json)) return [];
+  return (json as NomPlace[]).flatMap((p) => {
+    const lng = Number(p.lon);
+    const lat = Number(p.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return [];
+    const parts = (p.display_name ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const name = p.name || parts[0];
+    if (!name) return [];
+    const detail = parts
+      .filter((s) => s !== name)
+      .slice(0, 4)
+      .join(', ');
+    const type = { node: 'N', way: 'W', relation: 'R' }[p.osm_type ?? ''];
+    const [s, n, w, e] = (p.boundingbox ?? []).map(Number);
+    return [
+      {
+        name,
+        detail,
+        lng,
+        lat,
+        ...(type && Number.isInteger(p.osm_id) ? { osm: `${type}${p.osm_id}` } : {}),
+        ...([s, n, w, e].every(Number.isFinite)
+          ? { bbox: [w, s, e, n] as [number, number, number, number] }
+          : {}),
+      },
+    ];
+  });
+}

@@ -21,7 +21,7 @@ export const en = {
     '© OpenStreetMap contributors, ODbL. Tiles by OpenFreeMap, schema by OpenMapTiles, search by Photon (komoot), routes by Valhalla on FOSSGIS servers, public transport by Transitous (MOTIS) from open timetables, opening hours from Nominatim (OSM Foundation), rendering by MapLibre.',
   privacy: 'Privacy',
   privacyText:
-    'No account, no tracking. Your location stays on this device unless you route from it. Map tiles go to OpenFreeMap, searches to Photon, the start and end of a route you ask for to the FOSSGIS route server, or for public transport, with the departure time, to Transitous; an opened place card asks Nominatim for its opening hours.',
+    'No account, no tracking. Your location stays on this device unless you route from it. Map tiles go to OpenFreeMap, searches to Photon, the start and end of a route you ask for to the FOSSGIS route server, or for public transport, with the departure time, to Transitous; an opened place card asks Nominatim for its opening hours, and Nominatim also answers a search when Photon does not.',
   licence: 'Free software under GPL-3.0-or-later.',
   source: 'Source code',
   sources: 'Sources and licences',

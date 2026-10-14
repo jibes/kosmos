@@ -40,15 +40,15 @@ export function smoothHeading(prev: number | null, next: number, k = 0.25): numb
   return norm(prev + angleDiff(prev, next) * k);
 }
 
-/** Below this speed GPS course is noise; the compass says where the user faces. */
-export const COMPASS_BELOW_MS = 2.5;
-
-/** Direction to show while moving: GPS/route course when fast enough, else the compass. */
+/**
+ * Direction to show: the route's course while moving (see `NavState.moving`), else the
+ * compass, since standing or walking slowly GPS course is noise.
+ */
 export function travelHeading(
   course: number | null,
   compass: number | null,
-  speed: number,
+  moving: boolean,
 ): number | null {
-  if (speed >= COMPASS_BELOW_MS && course != null) return course;
+  if (moving && course != null) return course;
   return compass ?? course;
 }

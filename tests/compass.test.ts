@@ -31,10 +31,10 @@ describe('compass', () => {
     expect(h).toBe(0);
   });
 
-  it('uses the compass when slow and the course when moving', () => {
-    expect(travelHeading(90, 180, 0.5)).toBe(180);
-    expect(travelHeading(90, 180, 10)).toBe(90);
-    expect(travelHeading(null, 180, 10)).toBe(180);
-    expect(travelHeading(90, null, 0)).toBe(90);
+  it('uses the compass when not moving and the course when moving', () => {
+    expect(travelHeading(90, 180, false)).toBe(180);
+    expect(travelHeading(90, 180, true)).toBe(90);
+    expect(travelHeading(null, 180, true)).toBe(180);
+    expect(travelHeading(90, null, false)).toBe(90);
   });
 });

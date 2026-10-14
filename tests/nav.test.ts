@@ -166,4 +166,36 @@ describe('guidance', () => {
     expect(navZoom(3)).toBeGreaterThan(navZoom(15));
     expect(navZoom(15)).toBeGreaterThan(navZoom(35));
   });
+
+  it('stands still without GPS jitter turning into speed or heading changes', () => {
+    // No device speed; the fix wanders up to 5 m around one spot for a minute.
+    let st = initialNav();
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 10 - 5;
+    for (let t = 0; t <= 60; t++) {
+      const f = { ...fixAt(m(rand(), 300 + rand()), t * 1000), speed: null, accuracy: 10 };
+      st = step(tr, st, f);
+      expect(st.moving).toBe(false);
+    }
+    expect(st.speed).toBeLessThan(1);
+  });
+
+  it('counts as moving above 3 m/s and stops below 1.5, not in between', () => {
+    let st = initialNav();
+    let along = 0;
+    const drive = (mps: number, seconds: number) => {
+      for (let i = 0; i < seconds; i++) {
+        along += mps;
+        st = step(tr, st, { ...fixAt(m(0, along), st.time + 1000), speed: null, accuracy: 5 });
+      }
+    };
+    drive(10, 10);
+    expect(st.moving).toBe(true);
+    // Slowing to 2 m/s keeps the route's heading (hysteresis) ...
+    drive(2, 20);
+    expect(st.moving).toBe(true);
+    // ... down to a crawl hands it to the compass.
+    drive(0.5, 30);
+    expect(st.moving).toBe(false);
+  });
 });

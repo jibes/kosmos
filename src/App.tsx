@@ -2,7 +2,7 @@ import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { distance, type LngLat } from './core/geo';
 import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
-import { COMPASS_BELOW_MS, travelHeading } from './core/compass';
+import { travelHeading } from './core/compass';
 import { navZoom, offRouteLimit, type NavState } from './core/nav';
 import type { Mode, Route, TravelMode } from './core/route';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
@@ -340,7 +340,7 @@ export function App() {
   }, [map, fix, compass]);
 
   // Compass: the beam on the dot always; in compass mode the map turns with the phone.
-  const lastNavSpeed = useRef(0);
+  const lastNavMoving = useRef(false);
   useEffect(() => {
     if (!map) return;
     let frame = 0;
@@ -349,7 +349,7 @@ export function App() {
       latest = h;
       if (roadNavRef.current) {
         // Slow or standing: GPS course is noise, so the arrow shows where the phone faces.
-        if (lastNavSpeed.current < COMPASS_BELOW_MS) me.current?.heading(h);
+        if (!lastNavMoving.current) me.current?.heading(h);
         return;
       }
       me.current?.facing(h);
@@ -402,7 +402,7 @@ export function App() {
       if (!map || !nav.snap) return;
       map.easeTo({
         center: nav.snap.point,
-        bearing: travelHeading(nav.snap.bearing, compass.current(), nav.speed) ?? nav.snap.bearing,
+        bearing: travelHeading(nav.snap.bearing, compass.current(), nav.moving) ?? nav.snap.bearing,
         pitch: 55,
         zoom: navZoom(nav.speed),
         padding: navPadding(),
@@ -417,8 +417,8 @@ export function App() {
       const s = nav.snap;
       const onLine = s && s.offset < offRouteLimit(f.accuracy);
       me.current?.update(onLine ? { lng: s.point[0], lat: s.point[1], accuracy: f.accuracy } : f);
-      lastNavSpeed.current = nav.speed;
-      me.current?.heading(s ? travelHeading(s.bearing, compass.current(), nav.speed) : null);
+      lastNavMoving.current = nav.moving;
+      me.current?.heading(s ? travelHeading(s.bearing, compass.current(), nav.moving) : null);
       lastSnap.current = s;
       if (s && map) updateNavTheme(map, s, nav.time);
       if (navFollowRef.current) followCamera(nav, 1000);

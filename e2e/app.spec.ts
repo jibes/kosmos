@@ -5,6 +5,7 @@ import { CENTER } from './fixtures/scene';
 import {
   SEARCH_HIT,
   lookupRequests,
+  nominatimSearches,
   offlineWorld,
   routeRequests,
   stopTimesRequests,
@@ -671,21 +672,40 @@ test.describe('map', () => {
     expect(lookupRequests.length).toBe(asked + 1);
   });
 
-  test('says so when search does not answer, and Enter asks again', async ({ page, context }) => {
+  test('falls back to Nominatim when Photon does not answer', async ({ page, context }) => {
     test.slow();
-    let answer = false;
-    await context.route(
-      /photon\.komoot\.io\/api\//,
-      (route) => (answer ? route.fallback() : undefined) /* never answers */,
-    );
+    // Photon hangs.
+    await context.route(/photon\.komoot\.io\/api\//, () => undefined);
+    const asked = nominatimSearches.length;
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');
     await expect(page.locator('.spinner')).toBeVisible();
+    // After Photon's time limit, one Nominatim search for the settled query answers.
+    const hit = page.getByRole('option').first();
+    await expect(hit).toContainText(SEARCH_HIT.name, { timeout: 10_000 });
+    await expect(hit).toContainText('Pariser Platz');
+    expect(nominatimSearches.length).toBe(asked + 1);
+    expect(nominatimSearches.at(-1)!.get('q')).toBe('brandenburger');
+    await hit.click();
+    await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+  });
+
+  test('says so when no search answers, and Enter asks again', async ({ page, context }) => {
+    test.slow();
+    let answer = false;
+    await context.route(/photon\.komoot\.io\/api\//, (route) =>
+      answer ? route.fallback() : undefined,
+    );
+    await context.route(/nominatim\.openstreetmap\.org\/search/, (route) =>
+      answer ? route.fallback() : route.abort(),
+    );
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
     await expect(page.getByText('Search is not answering')).toBeVisible({ timeout: 12_000 });
     await expect(page.locator('.spinner')).toHaveCount(0);
     answer = true;
     await input.press('Enter');
-    await expect(page.getByRole('option').first()).toHaveText(new RegExp(SEARCH_HIT.name));
+    await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name);
   });
 
   test('finds a kind of place while the map keeps moving', async ({ page }) => {
