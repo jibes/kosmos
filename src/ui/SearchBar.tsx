@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { CATEGORY_IDS, categoryFor, type Category } from '../core/categories';
+import { categoriesFor, type Category } from '../core/categories';
 import { formatDistance } from '../core/route';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
 import { t } from '../i18n';
@@ -33,6 +33,9 @@ const label = (c: Category) => t[`cat_${c}`];
 const DEBOUNCE_MS = 200;
 const cache = new Map<string, Place[]>();
 
+/** A row of the list: a kind of place to search the map for, or a place found by name. */
+type Item = { cat: Category; place?: undefined } | { place: Place; cat?: undefined };
+
 interface Response {
   key: string;
   places: Place[];
@@ -56,6 +59,8 @@ export function SearchBar({
   const [response, setResponse] = useState<Response | null>(null);
   const [cursor, setCursor] = useState({ key: '', index: 0 });
   const [focused, setFocused] = useState(false);
+  /** A kind of place chosen from the suggestions: its places come from the map, not by name. */
+  const [category, setCategory] = useState<Category | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const listId = useId();
   /** Enter pressed before results arrived: jump to the first one when they do. */
@@ -68,8 +73,6 @@ export function SearchBar({
   });
 
   const q = query.trim();
-  /** "Restaurant", "Lebensmittel", a chip: places of that kind from the map, not by name. */
-  const category = categoryFor(q);
   const key = category ? `cat|${category}` : `${lang}|${q}`;
   const cached = category ? undefined : cache.get(key);
   const current = cached
@@ -80,9 +83,14 @@ export function SearchBar({
   const status: Status = q.length < 2 ? 'idle' : (current?.status ?? 'loading');
   // While a new query loads, the previous results stay put instead of flickering away.
   const results = current?.places ?? response?.places ?? [];
-  // A name search offers its best hit for Enter; a category picks nothing until asked.
-  const active =
-    cursor.key === key ? Math.min(cursor.index, results.length - 1) : category ? -1 : 0;
+  /** "museum", "Lebensm…": the kinds of place the text may mean, offered above the names. */
+  const suggestions = category ? [] : categoriesFor(q);
+  const items: Item[] = [
+    ...suggestions.map((cat) => ({ cat })),
+    ...results.map((place) => ({ place })),
+  ];
+  // A name search offers its top row for Enter; a category picks nothing until asked.
+  const active = cursor.key === key ? Math.min(cursor.index, items.length - 1) : category ? -1 : 0;
   const setActive = (index: number) => setCursor({ key, index });
 
   // A category asks the map, never the search server; leaving it clears its dots.
@@ -93,13 +101,6 @@ export function SearchBar({
       .then((places) => {
         if (!live || !category) return;
         setResponse({ key: `cat|${category}`, places, status: 'done' });
-        if (jumpFor.current === `cat|${category}`) {
-          jumpFor.current = null;
-          if (places[0]) {
-            onPickRef.current(places[0]);
-            input.current?.blur();
-          }
-        }
       })
       .catch(() => undefined);
     return () => {
@@ -153,10 +154,18 @@ export function SearchBar({
     input.current?.blur();
   };
 
+  /** Search the map for a kind of place; the field shows its name. */
+  const choose = (c: Category) => {
+    setCategory(c);
+    setQuery(label(c));
+  };
+
+  const choice = (it: Item) => (it.cat ? choose(it.cat) : pick(it.place));
+
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      const n = results.length;
+      const n = items.length;
       if (n)
         setActive(
           (Math.max(active, e.key === 'ArrowDown' ? -1 : 0) + (e.key === 'ArrowDown' ? 1 : n - 1)) %
@@ -168,61 +177,61 @@ export function SearchBar({
       input.current?.blur();
       if (results.length) requestAnimationFrame(onShowAll);
     } else if (e.key === 'Enter') {
-      // Only results for exactly this query; stale ones from the last query would jump wrong.
-      const hit = current?.places[cursor.key === key ? active : 0];
-      if (hit) pick(hit);
+      // Only rows for exactly this query; stale names from the last query would jump wrong.
+      const fresh = current || active < suggestions.length;
+      const it = fresh ? items[active] : undefined;
+      if (it) choice(it);
       else if (q.length >= 2 && status === 'loading') jumpFor.current = key;
     } else if (e.key === 'Escape') {
-      if (query) setQuery('');
-      else if (onCancel) onCancel();
+      if (query) {
+        setQuery('');
+        setCategory(null);
+      } else if (onCancel) onCancel();
       else input.current?.blur();
     }
   };
 
   const open = !collapsed && focused;
-  const showList = open && status !== 'idle';
+  const showList = open && (status !== 'idle' || suggestions.length > 0);
 
   return (
     <div className="search" data-open={showList || undefined}>
       {showList && (
         <ul className="results surface" id={listId} role="listbox">
-          {results.map((p, i) => (
+          {items.map((it, i) => (
             <li
-              key={`${p.name}${p.lat}${p.lng}`}
+              key={it.cat ? `cat|${it.cat}` : `${it.place.name}${it.place.lat}${it.place.lng}`}
               role="option"
+              className={it.cat ? 'r-cat' : undefined}
               aria-selected={i === active}
               onPointerDown={(e) => e.preventDefault()}
-              onClick={() => pick(p)}
+              onClick={() => choice(it)}
               onPointerEnter={() => setActive(i)}
             >
-              <span className="r-name">{p.name}</span>
-              {p.distance !== undefined ? (
-                <span className="r-detail">{formatDistance(p.distance, lang)}</span>
+              {it.cat ? (
+                <>
+                  <SearchIcon />
+                  <span className="r-name">{label(it.cat)}</span>
+                  <span className="r-detail">{t.catHint}</span>
+                </>
               ) : (
-                p.detail && <span className="r-detail">{p.detail}</span>
+                <>
+                  <span className="r-name">{it.place.name}</span>
+                  {it.place.distance !== undefined ? (
+                    <span className="r-detail">{formatDistance(it.place.distance, lang)}</span>
+                  ) : (
+                    it.place.detail && <span className="r-detail">{it.place.detail}</span>
+                  )}
+                </>
               )}
             </li>
           ))}
-          {status === 'done' && !results.length && (
+          {status === 'done' && !items.length && (
             <li className="r-empty">{category ? t.noneHere : t.noResults}</li>
           )}
           {status === 'error' && <li className="r-empty">{t.searchOffline}</li>}
-          {status === 'loading' && !results.length && <li className="r-empty r-loading" />}
+          {status === 'loading' && !items.length && <li className="r-empty r-loading" />}
         </ul>
-      )}
-      {open && q.length < 2 && (
-        <div className="chips" role="group" aria-label={t.categories}>
-          {CATEGORY_IDS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onPointerDown={(e) => e.preventDefault()}
-              onClick={() => setQuery(label(c))}
-            >
-              {label(c)}
-            </button>
-          ))}
-        </div>
       )}
       {open && q.length < 2 && <p className="hint">{t.hint}</p>}
       <label className="bar surface">
@@ -240,7 +249,11 @@ export function SearchBar({
           aria-expanded={showList}
           role="combobox"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            // Editing the name of a chosen category goes back to searching by name.
+            setCategory(null);
+          }}
           onKeyDown={onKeyDown}
           onFocus={() => {
             setFocused(true);
@@ -256,6 +269,7 @@ export function SearchBar({
             onPointerDown={(e) => e.preventDefault()}
             onClick={() => {
               setQuery('');
+              setCategory(null);
               input.current?.focus();
             }}
           >

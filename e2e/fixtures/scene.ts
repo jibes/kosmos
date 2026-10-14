@@ -312,6 +312,7 @@ function city(): Layers {
       name: 'Linden-Apotheke',
       rank: 1,
     }),
+    point(m(-400, 350), { class: 'museum', subclass: 'museum', name: 'Pergamonmuseum', rank: 1 }),
   );
   layers.landuse.push(poly([rect(-2500, -2500, 2500, 2500)], { class: 'residential' }));
   layers.landcover.push(

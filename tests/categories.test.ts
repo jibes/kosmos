@@ -1,27 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { categoryFor, nearest, poiFilter } from '../src/core/categories';
+import { categoriesFor, nearest, poiFilter } from '../src/core/categories';
 
 describe('categories', () => {
-  it('reads a category from a query in either language', () => {
-    expect(categoryFor('Restaurant')).toBe('restaurant');
-    expect(categoryFor('lebensmittel')).toBe('groceries');
-    expect(categoryFor('Lebens')).toBe('groceries');
-    expect(categoryFor('Bäckerei')).toBe('groceries');
-    expect(categoryFor('Café')).toBe('cafe');
-    expect(categoryFor('apotheke')).toBe('pharmacy');
-    expect(categoryFor('Tankstelle')).toBe('fuel');
+  it('reads a kind of place from a query in either language', () => {
+    expect(categoriesFor('Restaurant')).toEqual(['restaurant']);
+    expect(categoriesFor('lebensmittel')).toEqual(['groceries']);
+    expect(categoriesFor('Bäckerei')).toEqual(['groceries']);
+    expect(categoriesFor('Café')).toEqual(['cafe']);
+    expect(categoriesFor('Museum')).toEqual(['museum']);
+    expect(categoriesFor('Museen')).toEqual(['museum']);
+    expect(categoriesFor('Geldautomat')).toEqual(['bank']);
+    expect(categoriesFor('Spielplatz')).toEqual(['playground']);
+    expect(categoriesFor('Kino')).toEqual(['theatre']);
   });
 
-  it('leaves names and short fragments to the place search', () => {
-    expect(categoryFor('Brandenburger Tor')).toBeNull();
-    expect(categoryFor('re')).toBeNull();
-    // Three letters only match a whole word.
-    expect(categoryFor('bar')).toBe('bar');
-    expect(categoryFor('res')).toBeNull();
+  it('offers what a beginning may mean, exact words first, at most two', () => {
+    expect(categoriesFor('Lebens')).toEqual(['groceries']);
+    expect(categoriesFor('bar')[0]).toBe('bar');
+    expect(categoriesFor('ba')).toEqual([]);
+    expect(categoriesFor('kir')).toEqual(['worship']);
+    expect(categoriesFor('ba', 5)).toEqual([]);
+    expect(categoriesFor('bank', 5)).toEqual(['bank']);
+    expect(categoriesFor('sch', 5).length).toBeGreaterThan(1);
+    expect(categoriesFor('sch').length).toBe(2);
   });
 
-  it('filters named places of the category', () => {
+  it('leaves names to the place search', () => {
+    expect(categoriesFor('Brandenburger Tor')).toEqual([]);
+    expect(categoriesFor('Alexanderplatz')).toEqual([]);
+  });
+
+  it('filters named places of the kind', () => {
     expect(JSON.stringify(poiFilter('pharmacy'))).toContain('"chemist"');
+    expect(JSON.stringify(poiFilter('museum'))).toContain('"gallery"');
   });
 
   it('lists the nearest first, each place once', () => {

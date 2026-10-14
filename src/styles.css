@@ -343,24 +343,21 @@ button {
   animation: drop-in 0.3s var(--ease);
 }
 
-/* Category chips: what the field can find without typing. */
-.chips {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding: 2px 2px 4px;
-  animation: fade 0.3s var(--ease);
+/* A kind of place offered above the names it matched, in the accent. */
+.results li.r-cat {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  column-gap: 10px;
+  align-items: center;
 }
 
-.chips button {
-  flex: none;
-  padding: 7px 13px;
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  font-size: 14px;
-  font-weight: 500;
+.r-cat svg {
+  grid-row: span 2;
+  color: var(--accent);
+}
+
+.r-cat .r-name {
+  color: var(--accent);
 }
 
 .hint {

@@ -473,14 +473,14 @@ test.describe('map', () => {
     await jump(page, { ...CENTER, zoom: 13 });
     await idle(page);
     const input = page.getByRole('combobox');
-    await input.focus();
-    const chips = page.getByRole('group', { name: 'Categories' });
-    await expect(chips.getByRole('button')).toHaveCount(6);
-    // Without moving the pointer: the list appears under it, and hovering would highlight a row.
-    await chips.getByRole('button', { name: 'Restaurants' }).dispatchEvent('click');
+    // The word offers the kind of place as the top row; Enter takes it.
+    await input.fill('restaurant');
+    const options = page.getByRole('option');
+    await expect(options.first()).toHaveText(/Restaurants/);
+    await expect(options.first()).toHaveAttribute('aria-selected', 'true');
+    await input.press('Enter');
     await expect(input).toHaveValue('Restaurants');
 
-    const options = page.getByRole('option');
     await expect(options).toHaveCount(3);
     await expect(options.first()).toContainText('Zur Letzten Instanz');
     await expect(options.first()).toContainText(/\d+ m/);
@@ -531,6 +531,7 @@ test.describe('map', () => {
     // Typed in German, groceries: supermarket and bakery in view.
     await jump(page, { ...CENTER, zoom: 15 });
     await input.fill('Lebensmittel');
+    await options.filter({ hasText: 'Groceries' }).click();
     await expect(options).toHaveCount(2);
     await expect(options.first()).toContainText('Kiezmarkt');
     await options.first().click();
@@ -538,6 +539,21 @@ test.describe('map', () => {
 
     await input.fill('');
     await expect.poll(dots).toBe(0);
+  });
+
+  test('offers a kind of place above the names, chosen by tap', async ({ page }) => {
+    await jump(page, { ...CENTER, zoom: 14 });
+    await idle(page);
+    const input = page.getByRole('combobox');
+    await input.fill('Muse');
+    const suggestion = page.getByRole('option', { name: /Museums and galleries/ });
+    await expect(suggestion).toContainText('Places in view');
+    await suggestion.click();
+    await expect(input).toHaveValue('Museums and galleries');
+    await expect(page.getByRole('option')).toHaveText([/Pergamonmuseum/]);
+    // Editing the text searches by name again.
+    await input.fill('Muse');
+    await expect(suggestion).toBeVisible();
   });
 
   test('offers to search a new area only after the user moves the map', async ({
@@ -550,6 +566,7 @@ test.describe('map', () => {
     await idle(page);
     const input = page.getByRole('combobox');
     await input.fill('Restaurants');
+    await input.press('Enter');
     await expect(page.getByRole('option')).toHaveCount(3);
     const zoom = () => page.evaluate(() => window.kosmos!.getZoom());
     const dots = () =>
