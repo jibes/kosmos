@@ -4,7 +4,7 @@ import { distance, type LngLat } from './core/geo';
 import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
 import { travelHeading } from './core/compass';
 import { navZoom, offRouteLimit, type NavState } from './core/nav';
-import type { Mode, Route, TravelMode } from './core/route';
+import type { Mode, TravelMode } from './core/route';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
 import { lang, t } from './i18n';
 import { About } from './ui/About';
@@ -26,7 +26,9 @@ import { useCategory } from './ui/useCategory';
 import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useRouteLayer } from './ui/useRouteLayer';
+import { useBack } from './ui/useBack';
 import { useNavTheme } from './ui/useNavTheme';
+import { useOffline } from './ui/useOffline';
 import { useTheme } from './ui/useTheme';
 import { systemVoice } from './ui/voice';
 import { keepAwake } from './ui/wakeLock';
@@ -56,13 +58,31 @@ const navPadding = () =>
 const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
 
 const MUTED_KEY = 'kosmos.muted.v1';
-const storedMuted = () => {
+const MODE_KEY = 'kosmos.mode.v1';
+const stored = (key: string) => {
   try {
-    return localStorage.getItem(MUTED_KEY) === '1';
+    return localStorage.getItem(key);
   } catch {
-    return false;
+    return null;
   }
 };
+const store = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Not remembered; still applies for this session.
+  }
+};
+const storedMuted = () => stored(MUTED_KEY) === '1';
+/** Routes open in the travel mode used last: walkers and riders should not switch every time. */
+const storedMode = (): TravelMode => {
+  const m = stored(MODE_KEY);
+  return m === 'bike' || m === 'foot' || m === 'transit' ? m : 'car';
+};
+/** After arriving, guidance (screen on, background location) ends by itself. */
+const ARRIVED_END_MS = 60_000;
+/** A second back press within this ends navigation. */
+const BACK_TWICE_MS = 3000;
 
 /** Fits a route, or category results, into the map area the panel leaves free, measured. */
 const routePadding = () => {
@@ -116,7 +136,8 @@ export function App() {
   }, [picking]);
   const [navFollow, setNavFollow] = useState(true);
   const [muted, setMuted] = useState(storedMuted);
-  const [rerouteFrom, setRerouteFrom] = useState<Route | null>(null);
+  /** The router answer count when a reroute was asked for; `null` when none is pending. */
+  const [rerouteAt, setRerouteAt] = useState<number | null>(null);
   const route = useRoute(trip, fix, lang, navigating);
   const voice = useMemo(() => systemVoice(navigator.language || lang), []);
   const navRef = useRef(false);
@@ -144,7 +165,8 @@ export function App() {
   const showToast = useCallback((msg: string) => setToast(msg), []);
   useEffect(() => {
     if (!toast) return;
-    const id = setTimeout(() => setToast(null), 2200);
+    // Long enough to read: a short note goes quickly, a sentence stays a while.
+    const id = setTimeout(() => setToast(null), Math.max(2200, toast.length * 70));
     return () => clearTimeout(id);
   }, [toast]);
 
@@ -172,7 +194,7 @@ export function App() {
     start();
     setActive(0);
     setFollow('off');
-    setTrip({ to: selection.place, from: null, mode: 'car' });
+    setTrip({ to: selection.place, from: null, mode: storedMode() });
   }, [selection, start]);
 
   const closeRoute = useCallback(() => {
@@ -183,6 +205,7 @@ export function App() {
 
   const setMode = useCallback((mode: TravelMode) => {
     setActive(0);
+    store(MODE_KEY, mode);
     setTrip((tr) => (tr ? { ...tr, mode } : tr));
   }, []);
 
@@ -310,10 +333,17 @@ export function App() {
       setFollow('off');
       if (navRef.current) setNavFollow(false);
     };
+    // While navigating, a pinch or twist to look around holds the camera too (Re-centre returns).
+    const lookAround = (e: { originalEvent?: Event }) => {
+      if (e.originalEvent && navRef.current) setNavFollow(false);
+    };
+    const looks = ['zoomstart', 'rotatestart', 'pitchstart'] as const;
     map.on('dragstart', stopFollowing);
+    for (const ev of looks) map.on(ev, lookAround);
     return () => {
       m.remove();
       map.off('dragstart', stopFollowing);
+      for (const ev of looks) map.off(ev, lookAround);
     };
   }, [map]);
 
@@ -426,10 +456,16 @@ export function App() {
     [followCamera, compass, map, updateNavTheme],
   );
   const reroute = useCallback(() => {
-    setRerouteFrom(route.routes[chosen] ?? null);
+    setRerouteAt(route.settled);
     setActive(0);
     route.retry();
-  }, [route, chosen]);
+  }, [route]);
+  const rerouteState =
+    rerouteAt === null || (route.settled !== rerouteAt && !route.kept)
+      ? 'idle'
+      : route.settled === rerouteAt
+        ? 'asking'
+        : 'failed';
   /** Public transport has no turn-by-turn yet, so guidance only ever sees a road mode. */
   const roadMode: Mode = trip && trip.mode !== 'transit' ? trip.mode : 'car';
   const { nav } = useNav({
@@ -489,18 +525,14 @@ export function App() {
   };
   const endNav = useCallback(() => {
     setNavigating(false);
-    setRerouteFrom(null);
+    setRerouteAt(null);
     voice.stop();
     me.current?.heading(null);
     map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: 800 });
   }, [map, voice]);
   const toggleMute = () => {
     setMuted((v) => {
-      try {
-        localStorage.setItem(MUTED_KEY, v ? '0' : '1');
-      } catch {
-        // Not remembered; still toggles for this session.
-      }
+      store(MUTED_KEY, v ? '0' : '1');
       if (!v) voice.stop();
       return !v;
     });
@@ -517,7 +549,9 @@ export function App() {
 
   const locate = () => {
     if (status === 'denied') {
+      // Ask again: the user may have allowed it in the settings since.
       showToast(t.locationDenied);
+      start();
       return;
     }
     start();
@@ -541,16 +575,30 @@ export function App() {
     }
   };
 
+  const arrived = navigating && (riding ? ride?.st.phase === 'arrived' : nav.arrived);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.target instanceof HTMLInputElement) return;
-      if (navRef.current) endNav();
-      else if (tripRef.current) closeRoute();
-      else clear();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [clear, closeRoute, endNav]);
+    if (!arrived) return;
+    const id = setTimeout(endNav, ARRIVED_END_MS);
+    return () => clearTimeout(id);
+  }, [arrived, endNav]);
+
+  // Back (Android) and Escape close one layer at a time; navigation needs a second press.
+  const backAt = useRef(0);
+  useBack(() => {
+    if (about) setAbout(false);
+    else if (navigating) {
+      if (arrived || Date.now() - backAt.current < BACK_TWICE_MS) endNav();
+      else {
+        backAt.current = Date.now();
+        showToast(t.backToEnd);
+      }
+    } else if (picking) setPicking(null);
+    else if (trip) closeRoute();
+    else if (selection) clear();
+    else return false;
+    return true;
+  });
+  const offline = useOffline(map);
 
   return (
     <>
@@ -585,7 +633,7 @@ export function App() {
             lang={lang}
             muted={muted}
             following={navFollow}
-            rerouting={rerouteFrom !== null && rerouteFrom === shown[chosen]}
+            reroute={rerouteState}
             onMute={toggleMute}
             onRecenter={() => {
               setNavFollow(true);
@@ -603,6 +651,7 @@ export function App() {
               routes={shown}
               active={chosen}
               status={route.status}
+              location={status}
               lang={lang}
               onMode={setMode}
               onActive={setActive}
@@ -651,7 +700,12 @@ export function App() {
             />
           )}
         </div>
-        {category.offerHere && !navigating && !trip && (
+        {offline && !navigating && (
+          <div className="offline surface" role="status">
+            {t.mapOffline}
+          </div>
+        )}
+        {category.offerHere && !navigating && !trip && !offline && (
           <button type="button" className="search-here surface" onClick={category.searchHere}>
             {t.searchHere}
           </button>

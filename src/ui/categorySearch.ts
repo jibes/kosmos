@@ -62,6 +62,8 @@ export async function findCategory(
     center,
   );
   const got = await Promise.allSettled(tiles.map((t) => places(tileUrl(template, t), t)));
+  // Not one tile came back: offline or the tile server is down, not an empty area.
+  if (tiles.length && got.every((r) => r.status === 'rejected')) throw new Error('no tiles');
   // Tiles reach beyond the screen; only what is in view counts.
   const pois = got.flatMap((r) =>
     r.status === 'fulfilled'

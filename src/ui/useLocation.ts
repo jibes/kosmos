@@ -74,6 +74,28 @@ export function useLocation() {
     );
   }, [stop]);
 
+  // Allowed in the settings after a refusal: pick up without a reload, where the browser tells.
+  useEffect(() => {
+    if (status !== 'denied' || !navigator.permissions) return;
+    let perm: PermissionStatus | null = null;
+    let live = true;
+    const onChange = () => {
+      if (perm?.state === 'granted') start();
+    };
+    navigator.permissions
+      .query({ name: 'geolocation' })
+      .then((p) => {
+        if (!live) return;
+        perm = p;
+        p.addEventListener('change', onChange);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+      perm?.removeEventListener('change', onChange);
+    };
+  }, [status, start]);
+
   /**
    * Android only: hand location to a foreground service with a notification, so guidance keeps
    * going with the screen off or another app in front. The browser cannot do this.

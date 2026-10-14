@@ -4,7 +4,7 @@ import { formatClock, formatDistance, formatDuration } from '../core/route';
 import type { Transit, TransitLeg } from '../core/transit';
 import { fill, t } from '../i18n';
 import { LocateIcon, ModeIcon, TurnIcon } from './icons';
-import { SoundIcon } from './NavView';
+import { NavBar } from './NavBar';
 import { LineChip, TransitLegs } from './TransitParts';
 
 interface Props {
@@ -156,26 +156,12 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
         </button>
       )}
 
-      <section className="nav-bar surface">
-        <div className="nav-eta">
-          <strong>{clock(transit.end)}</strong>
-          <span>
-            {formatDuration(Math.max(0, (transit.end - st.time) / 1000))} · {destination}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="icon-btn round big"
-          aria-label={muted ? t.unmute : t.mute}
-          aria-pressed={muted}
-          onClick={on.onMute}
-        >
-          <SoundIcon off={muted} />
-        </button>
-        <button type="button" className="nav-end" onClick={on.onEnd}>
-          {t.end}
-        </button>
-      </section>
+      <NavBar muted={muted} arrived={st.phase === 'arrived'} onMute={on.onMute} onEnd={on.onEnd}>
+        <strong>{clock(transit.end)}</strong>
+        <span>
+          {formatDuration(Math.max(0, (transit.end - st.time) / 1000))} · {destination}
+        </span>
+      </NavBar>
     </>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from '../core/route';
 import { t } from '../i18n';
 import { LaneIcon, LocateIcon, TurnIcon } from './icons';
+import { NavBar } from './NavBar';
 import { useNow } from './useNow';
 
 interface Props {
@@ -19,42 +20,28 @@ interface Props {
   lang: string;
   muted: boolean;
   following: boolean;
-  rerouting: boolean;
+  /** Asking the router for a new route, or it failed and the old one is followed. */
+  reroute: 'idle' | 'asking' | 'failed';
   onMute: () => void;
   onRecenter: () => void;
   onEnd: () => void;
 }
 
-export const SoundIcon = ({ off }: { off: boolean }) => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M4 9.5v5h3.5L12 19V5L7.5 9.5H4Z" />
-    {off ? (
-      <path d="m16 9.5 5 5m0-5-5 5" />
-    ) : (
-      <path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" />
-    )}
-  </svg>
-);
+/** Above this the speed is a GPS jump, not driving. */
+const MAX_KMH = 300;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
-export function NavView({ route, mode, nav, lang, muted, following, rerouting, ...on }: Props) {
+export function NavView({ route, mode, nav, lang, muted, following, reroute, ...on }: Props) {
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
   const eta = started ? nav.eta : route.duration;
   const remaining = started ? nav.remaining : route.distance;
+  const kmh = Math.round(nav.speed * 3.6);
 
-  const guiding = started && !nav.arrived && !rerouting && !nav.offRoute;
+  // Only while off the route: back on it, guidance carries on whatever the router said.
+  const rerouting = nav.offRoute;
+  const guiding = started && !nav.arrived && !rerouting;
   const lanes = guiding && lanesNeeded(m?.lanes) ? m.lanes : undefined;
   const size = lanes ? laneSize(nav.toNext, nav.speed, mode) : 'none';
 
@@ -63,8 +50,8 @@ export function NavView({ route, mode, nav, lang, muted, following, rerouting, .
   if (nav.arrived) {
     title = t.arrived;
     turn = 'arrive';
-  } else if (rerouting || nav.offRoute) {
-    title = t.rerouting;
+  } else if (rerouting) {
+    title = reroute === 'failed' ? t.rerouteFailed : t.rerouting;
   }
 
   return (
@@ -72,7 +59,7 @@ export function NavView({ route, mode, nav, lang, muted, following, rerouting, .
       <section
         className="nav-banner"
         aria-live="polite"
-        data-state={nav.arrived ? 'arrived' : rerouting || nav.offRoute ? 'rerouting' : 'go'}
+        data-state={nav.arrived ? 'arrived' : rerouting ? 'rerouting' : 'go'}
       >
         <TurnIcon turn={turn} size={40} />
         <div>
@@ -97,33 +84,19 @@ export function NavView({ route, mode, nav, lang, muted, following, rerouting, .
         </button>
       )}
 
-      {started && !nav.arrived && (
-        <div className="speed surface" aria-label={`${Math.round(nav.speed * 3.6)} ${t.speedUnit}`}>
-          <strong>{Math.round(nav.speed * 3.6)}</strong>
+      {started && !nav.arrived && mode === 'car' && kmh <= MAX_KMH && (
+        <div className="speed surface" role="img" aria-label={`${kmh} ${t.speedUnit}`}>
+          <strong>{kmh}</strong>
           <small>{t.speedUnit}</small>
         </div>
       )}
 
-      <section className="nav-bar surface">
-        <div className="nav-eta">
-          <strong>{formatClock(new Date(now + eta * 1000), lang)}</strong>
-          <span>
-            {formatDuration(eta)} · {formatDistance(remaining, lang)}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="icon-btn round big"
-          aria-label={muted ? t.unmute : t.mute}
-          aria-pressed={muted}
-          onClick={on.onMute}
-        >
-          <SoundIcon off={muted} />
-        </button>
-        <button type="button" className="nav-end" onClick={on.onEnd}>
-          {t.end}
-        </button>
-      </section>
+      <NavBar muted={muted} arrived={nav.arrived} onMute={on.onMute} onEnd={on.onEnd}>
+        <strong>{formatClock(new Date(now + eta * 1000), lang)}</strong>
+        <span>
+          {formatDuration(eta)} · {formatDistance(remaining, lang)}
+        </span>
+      </NavBar>
     </>
   );
 }

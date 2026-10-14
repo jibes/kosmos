@@ -108,7 +108,9 @@ export function SearchBar({
         if (!live || !category) return;
         setResponse({ key: `cat|${category}`, places, status: 'done' });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (live && category) setResponse({ key: `cat|${category}`, places: [], status: 'error' });
+      });
     return () => {
       live = false;
     };

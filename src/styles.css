@@ -269,6 +269,27 @@ button {
   background: var(--hover);
 }
 
+/* Small controls keep their look but take a thumb: the hit area reaches 44 px. */
+.icon-btn,
+.bar-cancel,
+.coords {
+  position: relative;
+}
+
+.icon-btn::after,
+.bar-cancel::after,
+.credit::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+
+.coords::after {
+  content: '';
+  position: absolute;
+  inset: -12px 0;
+}
+
 .spinner {
   width: 16px;
   height: 16px;
@@ -840,9 +861,31 @@ button {
   border-radius: 18px;
   font-size: 14px;
   font-weight: 500;
-  white-space: nowrap;
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--gutter) - var(--safe-left) - var(--safe-right));
+  text-align: center;
+  text-wrap: balance;
   animation: drop-in 0.32s var(--ease);
   z-index: 10;
+}
+
+/* While guiding, the top belongs to the next turn: notes appear above the bottom bar. */
+body:has(.ui[data-nav]) .toast {
+  top: auto;
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 96px);
+}
+
+.offline {
+  position: absolute;
+  top: calc(var(--gutter) + var(--safe-top));
+  left: 50%;
+  translate: -50% 0;
+  padding: 9px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  animation: drop-in 0.3s var(--ease);
 }
 
 .toast button {
@@ -856,6 +899,15 @@ button {
   max-height: min(72dvh, 640px);
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.card.route .actions {
+  position: sticky;
+  bottom: -16px;
+  margin-inline: -18px;
+  padding: 14px 18px 16px;
+  background: linear-gradient(transparent, var(--surface-solid) 14px);
+  z-index: 1;
 }
 
 .card.route header {
@@ -875,7 +927,7 @@ button {
   flex: 1;
   display: grid;
   place-items: center;
-  height: 36px;
+  height: 40px;
   border-radius: 11px;
   color: var(--muted);
   transition:
@@ -910,14 +962,14 @@ button {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 36px;
+  min-height: 44px;
   margin: 0;
 }
 
 .end-btn {
   flex: 1;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 11px 10px;
   margin-left: -10px;
   border-radius: 10px;
   text-align: left;
@@ -1277,6 +1329,10 @@ button {
 
 .ride-details {
   overflow-y: auto;
+  /* Solid: the route line under it must not run through the stop names. */
+  background: var(--surface-solid);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   padding: 4px 16px 8px;
   border-radius: var(--radius);
   animation: drop-in 0.25s var(--ease);
@@ -1483,11 +1539,22 @@ button.via[aria-expanded='true']::after {
 
 .nav-end {
   height: 48px;
+  margin-left: 6px;
   padding: 0 20px;
   border-radius: 14px;
   background: #e5484d;
   color: #fff;
   font-weight: 600;
+  transition: background 0.15s;
+}
+
+.nav-end[data-state='armed'] {
+  background: #b9262c;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #e5484d 35%, transparent);
+}
+
+.nav-end[data-state='done'] {
+  background: var(--accent);
 }
 
 .speed {
@@ -1561,7 +1628,8 @@ button.via[aria-expanded='true']::after {
 
 .quiet-link {
   display: block;
-  margin-top: 10px;
+  margin-top: 0;
+  padding: 12px 0 2px;
   text-align: center;
   font-size: 13px;
   color: var(--muted);
@@ -1602,8 +1670,8 @@ button.via[aria-expanded='true']::after {
   translate: -50% 0;
   display: grid;
   place-items: center;
-  width: 96px;
-  height: 22px;
+  width: 120px;
+  height: 32px;
   touch-action: none;
   cursor: grab;
 }

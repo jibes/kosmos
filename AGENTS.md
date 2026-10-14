@@ -26,6 +26,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 - Public transport guidance is `core/ride.ts` (pure, replay-tested like `nav.ts`): walk → wait → ride → arrived from fixes and time; GPS when a fix is fresh, the timetable's arrival times underground. `ui/useRide.ts` also ticks every 3 s so it moves on without fixes; `ui/RideView.tsx` renders it; its banner opens the whole trip (`TransitLegs` with the current leg open and passed stops dimmed). A missed departure offers a new connection (one request, user-initiated).
 - Route drawing, the fit and the start marker are `ui/useRouteLayer.ts`, so `App.tsx` stays the wiring.
 - Heading while navigating: `NavState.moving` (hysteresis 3 → 1.5 m/s; progress counts only beyond GPS jitter, max(6 m, accuracy/2)) picks the route's course over the compass; standing still never flips it.
+- Guidance UI: `ui/NavBar.tsx` (time left, mute, End with a second tap; Done on arrival, which also ends guidance after 60 s). A failed reroute keeps the old route (`useRoute` reports `kept`), and the banner says so only while still off the route.
 - Guidance is `core/nav.ts`: pure, fed fixes and time, covered by replay tests. The UI only subscribes it to location (`useLocation().subscribe`) and renders `NavState`.
 - Keep each file under 800 lines; split before adding to it.
 
@@ -44,6 +45,7 @@ Five jobs, one control each: **view** (the map), **find** (search), **locate** (
 
 - `android/` is a committed Capacitor project; `npx cap sync android` copies `dist/` in (ignored by git).
 - Icons are vector adaptive icons in `res/drawable` + `res/mipmap-anydpi`; web PNGs come from `npm run icons` (set `CHROMIUM_PATH` in cloud sessions).
+- Back button: `ui/useBack.ts` (`@capacitor/app`) and Escape share one ladder in `App.tsx` (About → picker → navigation, which needs a second press → route → place); with nothing left back minimises the app instead of quitting.
 - Navigation on Android: `useLocation().background(true)` moves location to the background-geolocation plugin's foreground service; speech uses the system engine (`ui/voice.ts`), keep-awake the native plugin (`ui/wakeLock.ts`). The web build falls back to Web Speech and Screen Wake Lock.
 - CI boots an Android 14 emulator after the build and runs `scripts/android-smoke.sh` (install, launch, no crash, no web errors, `kosmos:ready` logged once the map loads; `loggingBehavior: 'production'` forwards the web console to logcat in release builds) before any release. Its artifact `android-smoke` holds a screenshot with real tiles and the logcat; the latest screenshot is also force-pushed to the `ci-smoke` branch.
 - Release: bump `package.json` version on main → `android.yml` publishes `v<version>` if that tag does not exist.

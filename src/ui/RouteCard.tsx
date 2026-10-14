@@ -14,6 +14,7 @@ import { t } from '../i18n';
 import { CloseIcon, LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { isNative } from './native';
 import { Sheet } from './Sheet';
+import type { LocationStatus } from './useLocation';
 import { changesText, DepartTime, LineChips, TransitCredit, TransitLegs } from './TransitParts';
 import { useNow } from './useNow';
 
@@ -26,6 +27,8 @@ interface Props {
   routes: Route[];
   active: number;
   status: RouteStatus;
+  /** Waiting for a location that will not come (denied, none) offers another start. */
+  location: LocationStatus;
   lang: string;
   onMode: (mode: TravelMode) => void;
   onActive: (index: number) => void;
@@ -50,7 +53,13 @@ const MESSAGE: Partial<Record<RouteStatus, string>> = {
 };
 
 export function RouteCard(props: Props) {
-  const { to, from, mode, routes, active, status, lang } = props;
+  const { to, from, mode, routes, active, status, location, lang } = props;
+  const stuck = status === 'locating' && (location === 'denied' || location === 'unavailable');
+  const message = stuck
+    ? location === 'denied'
+      ? t.locationDenied
+      : t.noLocation
+    : MESSAGE[status];
   const route = status === 'ready' ? routes[active] : undefined;
   const now = useNow();
   const clock = (ms: number) => formatClock(new Date(ms), lang);
@@ -75,7 +84,7 @@ export function RouteCard(props: Props) {
             </span>
           </>
         ) : (
-          <span>{MESSAGE[status]}</span>
+          <span>{message}</span>
         )
       }
     >
@@ -143,8 +152,13 @@ export function RouteCard(props: Props) {
           </span>
         </div>
       ) : (
-        <p className="route-msg" data-status={status}>
-          {MESSAGE[status]}
+        <p className="route-msg" data-status={stuck ? 'stuck' : status}>
+          {message}
+          {stuck && (
+            <button type="button" onClick={props.onChangeStart}>
+              {t.chooseStart}
+            </button>
+          )}
           {(status === 'busy' || status === 'failed') && (
             <button type="button" onClick={props.onRetry}>
               {t.retry}

@@ -378,7 +378,7 @@ test.describe('map', () => {
     await expect(banner).toContainText('Walk to Brandenburger Tor');
     await go(to.lng, to.lat);
     await expect(banner).toContainText('You have arrived');
-    await page.getByRole('button', { name: 'End' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
     await expect(banner).toHaveCount(0);
   });
 
@@ -424,7 +424,8 @@ test.describe('map', () => {
     await expect(lanes).toHaveAttribute('data-size', 'big');
     await expect(lanes.locator('span')).toHaveCount(3);
     await expect(lanes.locator('span').nth(2)).toHaveAttribute('data-use', 'best');
-    await expect(page.locator('.speed strong')).toHaveText(/^\d+$/);
+    // The test's GPS jumps hundreds of metres a quarter second: no such speed is shown.
+    await expect(page.locator('.speed')).toHaveCount(0);
     await expect(banner.locator('strong')).toHaveText(/m$/);
     // The router's alert says no distance; the spoken prompt adds it.
     await expect
@@ -439,8 +440,9 @@ test.describe('map', () => {
       await page.waitForTimeout(250);
     }
     await expect(banner).toContainText('You have arrived');
+    await expect(page.locator('.speed')).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'End' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
     await expect(banner).toHaveCount(0);
     await expect(page.locator('.card.route')).toBeVisible();
   });
@@ -490,8 +492,63 @@ test.describe('map', () => {
     expect(await page.evaluate(() => window.kosmos!.getStyle().name)).toBe('kOSMos light');
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(bg).toBe('rgb(223, 229, 236)');
+    // End next to Mute asks for a second tap.
     await page.getByRole('button', { name: 'End' }).click();
+    await expect(page.locator('.nav-banner')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Tap to end' }).click();
     await expect.poll(theme).toBe('dark');
+  });
+
+  test('keeps guiding when a reroute fails, and again once back on the route', async ({
+    page,
+    context,
+  }) => {
+    await page.evaluate(() => {
+      const w = window as unknown as { offset: number };
+      w.offset = 0;
+      const now = Date.now.bind(Date);
+      Date.now = () => now() + w.offset;
+    });
+    const seconds = (n: number) =>
+      page.evaluate((ms) => ((window as unknown as { offset: number }).offset += ms), n * 1000);
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    await page.getByRole('button', { name: 'Start' }).click();
+    const banner = page.locator('.nav-banner');
+    await expect(banner).toContainText('Head south on Friedrichstraße.');
+
+    // The router is gone; the driver leaves the route for good.
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) => route.abort());
+    const lat = from.lat - 0.002;
+    for (let i = 0; i < 6; i++) {
+      await seconds(3);
+      await go(from.lng + 0.004 + i * 0.00001, lat);
+      await page.waitForTimeout(200);
+    }
+    await expect(banner).toContainText('No new route yet');
+    // Back on the route: guidance carries on, no "finding a new route" left behind.
+    await seconds(3);
+    await go(from.lng, lat - 0.0005);
+    await expect(banner).toContainText('Turn right onto Unter den Linden.');
+    await expect(banner).not.toContainText('route');
+    await expect(banner.locator('strong')).toHaveText(/m$/);
+
+    // Escape (Android: back) asks first, then ends.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.toast')).toContainText('again to end');
+    await expect(banner).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(banner).toHaveCount(0);
   });
 
   test('finds places by category from the map, nearest first', async ({ page }, info) => {
@@ -873,6 +930,43 @@ test.describe('map', () => {
     const at = await screenAt(page, cafe.lng, cafe.lat);
     await page.mouse.click(at.x, at.y);
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Café Einstein');
+  });
+
+  test('remembers the travel mode; Escape closes one layer at a time', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    const openRoute = async () => {
+      await page.getByRole('combobox').fill('brandenburger');
+      await page.getByRole('option').first().click();
+      await page
+        .locator('.card')
+        .getByRole('button', { name: /^Route$/ })
+        .click();
+    };
+    await openRoute();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Walk' }).click();
+    await expect.poll(() => routeRequests.at(-1)?.costing).toBe('pedestrian');
+    await page.keyboard.press('Escape');
+    await expect(card).toHaveCount(0);
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Brandenburger Tor');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.card')).toHaveCount(0);
+
+    await page.reload();
+    await openRoute();
+    await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('says when the map has no connection', async ({ page, context }) => {
+    const note = page.getByRole('status').filter({ hasText: 'The map needs a connection' });
+    await context.setOffline(true);
+    await expect(note).toBeVisible();
+    await context.setOffline(false);
+    await expect(note).toHaveCount(0);
   });
 
   test('opens the about sheet with credits', async ({ page }) => {

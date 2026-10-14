@@ -26,6 +26,10 @@ interface Result {
   key: string;
   routes: Route[];
   error: RouteError;
+  /** The last answer failed and the route being driven was kept. */
+  kept?: boolean;
+  /** Counts answers, so a caller can tell when the one it asked for came. */
+  n: number;
 }
 
 /** A start this close to the last one reuses its route instead of asking the server again. */
@@ -36,8 +40,16 @@ const tripKey = (trip: Trip) =>
   `${trip.mode}|${trip.mode === 'transit' ? (trip.at ?? 'now') : ''}|${trip.to.lng},${trip.to.lat}|${trip.from ? `${trip.from.lng},${trip.from.lat}` : 'me'}`;
 
 /** A failed reroute must not take the route away from someone who is driving it. */
-const keepWhileNavigating = (prev: Result | null, next: Result, pinned: boolean) =>
-  pinned && !next.routes.length && prev?.key === next.key && prev.routes.length ? prev : next;
+const keepWhileNavigating = (
+  prev: Result | null,
+  next: Omit<Result, 'n'>,
+  pinned: boolean,
+): Result => {
+  const n = (prev?.n ?? 0) + 1;
+  return pinned && !next.routes.length && prev?.key === next.key && prev.routes.length
+    ? { ...prev, kept: true, n }
+    : { ...next, n };
+};
 
 /** Asks the router once per trip; following the user's location never polls it. */
 export function useRoute(
@@ -105,5 +117,12 @@ export function useRoute(
     status = 'locating';
   }
   const routes = trip && result?.key === key ? result.routes : NO_ROUTES;
-  return { routes, status, key, retry: () => setAttempt((a) => a + 1) };
+  return {
+    routes,
+    status,
+    key,
+    settled: result?.n ?? 0,
+    kept: !!result?.kept,
+    retry: () => setAttempt((a) => a + 1),
+  };
 }
