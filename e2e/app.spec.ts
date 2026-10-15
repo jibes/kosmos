@@ -693,7 +693,8 @@ test.describe('map', () => {
     await input.press('Enter');
     await expect(input).toHaveValue('Restaurants');
 
-    await expect(options).toHaveCount(3);
+    // A zoom-in, then up to 48 tiles read: slow machines need longer than the default.
+    await expect(options).toHaveCount(3, { timeout: 10_000 });
     await expect(options.first()).toContainText('Zur Letzten Instanz');
     await expect(options.first()).toContainText(/\d+ m/);
     await expect(options.nth(2)).toContainText('Borchardt');
@@ -713,6 +714,8 @@ test.describe('map', () => {
     await shot(page, info, 'category');
     await input.press('Enter');
     await expect(options).toHaveCount(0);
+    // The fit starts once the list has closed (next frame); a click before it ends would stop it.
+    await expect.poll(zoom).toBeGreaterThan(13);
     await idle(page);
     // All of them on screen, centred in the map the search bar leaves free, not crowded at the top.
     const spread = await page.evaluate(() => {

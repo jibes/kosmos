@@ -49,8 +49,12 @@ export async function findCategory(
   zoomIn: boolean,
 ): Promise<Place[]> {
   if (zoomIn && map.getZoom() < SEARCH_ZOOM) {
-    map.easeTo({ zoom: SEARCH_ZOOM, duration: motion(700) });
-    await new Promise((done) => setTimeout(done, motion(700) + 50));
+    // Search the view as it ends up, however long a slow phone takes to get there.
+    await new Promise<void>((done) => {
+      map.easeTo({ zoom: SEARCH_ZOOM, duration: motion(700) });
+      if (map.isMoving()) void map.once('moveend').then(() => done());
+      else done();
+    });
   }
   const template = (map.getSource(MAP_SOURCE) as maplibregl.VectorTileSource | undefined)
     ?.tiles?.[0];
