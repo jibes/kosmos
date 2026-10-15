@@ -26,6 +26,13 @@
 
         </activity>
 
+        <!-- Guidance with the screen off: location in a foreground service (NavLocationService),
+             from the platform's LocationManager, no Google Play services needed. Not exported. -->
+        <service
+            android:name=".NavLocationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -48,8 +55,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <!-- Navigation keeps location in a foreground service (background-geolocation plugin); its
-         permissions merge in from the plugin. A phone without GPS can still install the app. -->
-    <uses-feature android:name="android.hardware.location.gps" android:required="false"
-        tools:replace="android:required" />
+    <!-- Guidance keeps location in a foreground service, shown by a notification (Android 13+
+         asks for it). A phone without GPS can still install the app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>

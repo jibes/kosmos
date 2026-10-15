@@ -7,8 +7,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { lang } from './i18n';
+import { forwardErrors } from './ui/native';
 
 document.documentElement.lang = lang;
+forwardErrors();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

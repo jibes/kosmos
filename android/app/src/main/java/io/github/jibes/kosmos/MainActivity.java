@@ -7,7 +7,8 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        registerPlugin(AppSettingsPlugin.class);
+        registerPlugin(KosmosPlugin.class);
+        registerPlugin(NavLocationPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

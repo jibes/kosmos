@@ -3,6 +3,7 @@ import { useEffect, useRef, type RefObject } from 'react';
 import type { LngLat } from '../core/geo';
 import { routePadding, wide } from './layout';
 import { motion } from './motion';
+import { locationAllowed } from './native';
 
 /**
  * The panel (search, place and route cards): publishes its height as `--panel-h`, so the map
@@ -70,12 +71,11 @@ export function useAutoLocate(
   flyOnFix: RefObject<boolean>,
 ) {
   useEffect(() => {
-    if (!map || !navigator.permissions) return;
+    if (!map) return;
     let live = true;
-    navigator.permissions
-      .query({ name: 'geolocation' })
-      .then((p) => {
-        if (!live || p.state !== 'granted') return;
+    locationAllowed()
+      .then((allowed) => {
+        if (!live || !allowed) return;
         if (map.getZoom() < 4) flyOnFix.current = true;
         start();
       })

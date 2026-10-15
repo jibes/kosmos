@@ -1,8 +1,7 @@
-import type { BackgroundGeolocationPlugin } from '@capacitor-community/background-geolocation';
-import { registerPlugin } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
-import { isNative } from './native';
+import { NavLocation } from './native';
 import type { LngLat } from '../core/geo';
 
 export interface Fix extends LngLat {
@@ -15,10 +14,6 @@ export interface Fix extends LngLat {
   /** ms since epoch. */
   time: number;
 }
-
-const BackgroundGeolocation = isNative
-  ? registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation')
-  : null;
 
 export type LocationStatus = 'off' | 'seeking' | 'on' | 'denied' | 'unavailable';
 
@@ -97,45 +92,55 @@ export function useLocation() {
   }, [status, start]);
 
   /**
-   * Android only: hand location to a foreground service with a notification, so guidance keeps
-   * going with the screen off or another app in front. The browser cannot do this.
+   * Android only: hand location to the app's foreground service, so guidance keeps going with
+   * the screen off or another app in front. The browser cannot do this. The WebView's own watch
+   * carries on until the service delivers its first fix, so a service that cannot start (no
+   * permission, refused) never leaves guidance without positions while the app is open.
    */
-  const bgWatcher = useRef<Promise<string> | null>(null);
+  const native = useRef<{ on: boolean; handle: PluginListenerHandle | null }>({
+    on: false,
+    handle: null,
+  });
   const background = useCallback(
     (on: boolean) => {
-      if (!BackgroundGeolocation) return;
-      if (on && !bgWatcher.current) {
-        stop();
-        bgWatcher.current = BackgroundGeolocation.addWatcher(
-          {
-            backgroundTitle: t.navNotifTitle,
-            backgroundMessage: t.navNotifText,
-            requestPermissions: true,
-            stale: false,
-            distanceFilter: 0,
-          },
-          (loc, err) => {
-            if (err || !loc) {
-              if (err?.code === 'NOT_AUTHORIZED') setStatus('denied');
-              return;
+      const plugin = NavLocation;
+      if (!plugin) return;
+      const bg = native.current;
+      if (on && !bg.on) {
+        bg.on = true;
+        let first = true;
+        void plugin
+          .addListener('location', (loc) => {
+            if (!bg.on) return;
+            if (first) {
+              first = false;
+              stop();
             }
             const next: Fix = {
-              lng: loc.longitude,
-              lat: loc.latitude,
+              lng: loc.lng,
+              lat: loc.lat,
               accuracy: loc.accuracy,
-              speed: loc.speed,
-              heading: loc.bearing,
-              time: loc.time ?? Date.now(),
+              speed: loc.speed ?? null,
+              heading: loc.bearing ?? null,
+              time: loc.time,
             };
             setFix(next);
             setStatus('on');
             for (const fn of listeners.current) fn(next);
-          },
-        );
-      } else if (!on && bgWatcher.current) {
-        const id = bgWatcher.current;
-        bgWatcher.current = null;
-        void id.then((watcherId) => BackgroundGeolocation.removeWatcher({ id: watcherId }));
+          })
+          .then((handle) => {
+            if (bg.on) bg.handle = handle;
+            else void handle.remove();
+          });
+        plugin.start({ title: t.navNotifTitle, text: t.navNotifText }).catch((e: unknown) => {
+          const code = (e as { code?: string } | null)?.code;
+          if (code === 'NOT_AUTHORIZED') setStatus('denied');
+        });
+      } else if (!on && bg.on) {
+        bg.on = false;
+        void bg.handle?.remove();
+        bg.handle = null;
+        void plugin.stop();
         start();
       }
     },
@@ -145,9 +150,10 @@ export function useLocation() {
   useEffect(
     () => () => {
       stop();
-      const id = bgWatcher.current;
-      if (id && BackgroundGeolocation) {
-        void id.then((watcherId) => BackgroundGeolocation.removeWatcher({ id: watcherId }));
+      if (native.current.on) {
+        native.current.on = false;
+        void native.current.handle?.remove();
+        void NavLocation?.stop();
       }
     },
     [stop],

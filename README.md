@@ -44,7 +44,7 @@ No account, no analytics, no tracking. Your location leaves the device only as t
 
 ## Android permissions
 
-Location (while navigating it runs in a foreground service with a notification, so directions continue with the screen off), notifications (for that notification), keep screen on, internet. Nothing runs in the background outside navigation.
+Location, precise or approximate (while navigating it runs in a foreground service with a notification, so directions continue with the screen off), notifications (asked for on the first navigation, Android 13+, only for that notification), internet. Nothing runs in the background outside navigation. Location comes from Android's own location service (GPS, or the network), so the app needs no Google Play services and works on de-Googled phones. Release builds write nothing about your position to the system log.
 
 ## Run locally
 
@@ -62,7 +62,7 @@ Android: `npm run android:sync`, then open `android/` in Android Studio or run `
 ## Release
 
 - **Web:** every push to `main` deploys to GitHub Pages.
-- **Android:** bump `version` in `package.json` and push to `main`. The Android workflow builds, signs, smoke-tests the APK on an emulator, checks the signer against the fingerprint above and publishes `v<version>` with the APK. versionCode = major·10⁷ + minor·10⁵ + patch·10³.
+- **Android:** bump `version` in `package.json` and push to `main`. The Android workflow builds the APK and smoke-tests it on an emulator; a separate job, which never runs npm or Gradle, then signs it, checks the signer against the fingerprint above and publishes `v<version>` with the APK. versionCode = major·10⁷ + minor·10⁵ + patch·10³.
 - Signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them CI builds a debug-signed APK artifact and publishes nothing.
 
 ## Stack

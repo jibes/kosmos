@@ -1,4 +1,4 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { Share } from '@capacitor/share';
 
 export const isNative = Capacitor.isNativePlatform();
@@ -40,7 +40,66 @@ export async function copy(text: string): Promise<void> {
   }
 }
 
-const AppSettings = isNative ? registerPlugin<{ open(): Promise<void> }>('AppSettings') : null;
+/** The app's own native helpers (`KosmosPlugin.java`). */
+const Kosmos = isNative
+  ? registerPlugin<{
+      openSettings(): Promise<void>;
+      log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
+    }>('Kosmos')
+  : null;
 
 /** The app's page in the system settings (Android), where location can be allowed again. */
-export const openAppSettings = AppSettings ? () => void AppSettings.open() : null;
+export const openAppSettings = Kosmos ? () => void Kosmos.openSettings() : null;
+
+/**
+ * Android: a line in the system log under the app's own tag. Release builds forward nothing else
+ * from the WebView (no position ever lands in the log); the CI smoke test reads these lines.
+ */
+export function nativeLog(level: 'info' | 'error', message: string) {
+  void Kosmos?.log({ level, message }).catch(() => undefined);
+}
+
+/** Android: the web app's errors go to the system log too, for the smoke test and bug reports. */
+export function forwardErrors() {
+  if (!Kosmos) return;
+  window.addEventListener('error', (e) =>
+    nativeLog('error', `${e.message} (${e.filename}:${e.lineno})`),
+  );
+  window.addEventListener('unhandledrejection', (e) =>
+    nativeLog('error', `unhandled rejection: ${String(e.reason)}`),
+  );
+  const error = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    error(...args);
+    nativeLog('error', args.map(String).join(' '));
+  };
+}
+
+/** A fix from the app's own location service (`NavLocationPlugin.java`). */
+export interface NativeFix {
+  lng: number;
+  lat: number;
+  accuracy: number;
+  speed?: number;
+  bearing?: number;
+  time: number;
+}
+
+type Grant = 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale';
+
+interface NavLocationPlugin {
+  start(o: { title: string; text: string }): Promise<void>;
+  stop(): Promise<void>;
+  checkPermissions(): Promise<{ location: Grant; coarseLocation: Grant; notifications: Grant }>;
+  addListener(event: 'location', fn: (fix: NativeFix) => void): Promise<PluginListenerHandle>;
+}
+
+/** Android: location for guidance from a foreground service, without Google Play services. */
+export const NavLocation = isNative ? registerPlugin<NavLocationPlugin>('NavLocation') : null;
+
+/** Whether location is already allowed, without asking: Android's own answer in the app. */
+export async function locationAllowed(): Promise<boolean> {
+  if (NavLocation) return (await NavLocation.checkPermissions()).coarseLocation === 'granted';
+  if (!navigator.permissions) return false;
+  return (await navigator.permissions.query({ name: 'geolocation' })).state === 'granted';
+}

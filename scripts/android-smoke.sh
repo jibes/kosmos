@@ -13,8 +13,9 @@ adb install -r -g "$APK"
 adb logcat -c
 adb shell am start -W -n "$PKG/.MainActivity"
 
-# Wait for the map to report it has loaded (console line forwarded by Capacitor), at most 60 s,
-# then a little longer for the first tiles to draw.
+# Wait for the map to report it has loaded (logged under the app's own tag by KosmosPlugin; the
+# release build forwards nothing else from the WebView), at most 60 s, then a little longer for
+# the first tiles to draw.
 for _ in $(seq 1 30); do
   adb logcat -d | grep -q "kosmos:ready" && break
   sleep 2
@@ -33,10 +34,11 @@ if grep -E "FATAL EXCEPTION|AndroidRuntime.*$PKG" "$OUT/logcat.txt"; then
   echo "::error::kOSMos crashed"
   fail=1
 fi
-# Capacitor forwards console.error from the WebView as error-level "Capacitor/Console" lines.
-# Known noise: Capacitor's SystemBars injects the safe-area CSS before the page exists, fails,
-# and succeeds once the page is visible (SystemBars.java onPageCommitVisible) — not an app error.
-if grep -E " E Capacitor/Console" "$OUT/logcat.txt" | grep -v "Error injecting safe area CSS"; then
+# The app logs its web errors (uncaught errors, rejections, console.error) as error-level lines
+# under its tag "kOSMos". Capacitor's own console forwarding is off in release builds; its lines
+# are still checked in case that changes. Known noise: Capacitor's SystemBars injects the
+# safe-area CSS before the page exists, fails, and succeeds once the page is visible.
+if grep -E " E (kOSMos|Capacitor/Console)" "$OUT/logcat.txt" | grep -v "Error injecting safe area CSS"; then
   echo "::error::the web app logged errors"
   fail=1
 fi

@@ -1,7 +1,7 @@
 {
   "name": "kosmos",
   "private": true,
-  "version": "1.20.0",
+  "version": "1.21.0",
   "type": "module",
   "engines": {
     "node": ">=22 <23"
@@ -21,7 +21,6 @@
     "android:sync": "npm run build && cap sync android"
   },
   "dependencies": {
-    "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor-community/keep-awake": "^8.0.1",
     "@capacitor-community/text-to-speech": "^8.0.2",
     "@capacitor/android": "^8.5.3",

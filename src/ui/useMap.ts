@@ -5,6 +5,7 @@ import type { Theme } from '../core/palette';
 import { ROUTE_SOURCE, SEARCH_SOURCE, buildStyle } from '../core/style';
 import { DEFAULT_VIEW, VIEW_KEY, parseView, serializeView } from '../core/view';
 import { mapFontFaces } from './fonts';
+import { nativeLog } from './native';
 
 // MapLibre resolves its worker next to its own module, which bundling moves; point it at the copy.
 maplibregl.setWorkerUrl(new URL(workerUrl, document.baseURI).href);
@@ -65,7 +66,10 @@ export function useMap(
     };
     m.on('moveend', save);
     // The Android CI smoke test waits for this line in logcat.
-    m.once('load', () => console.info('kosmos:ready'));
+    m.once('load', () => {
+      console.info('kosmos:ready');
+      nativeLog('info', 'kosmos:ready');
+    });
     // Exposed for end-to-end tests and the curious.
     (window as unknown as { kosmos?: maplibregl.Map }).kosmos = m;
     setMap(m);

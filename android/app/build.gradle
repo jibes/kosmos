@@ -7,7 +7,8 @@ def pkg = new JsonSlurper().parse(file('../../package.json'))
 def (major, minor, patch) = pkg.version.tokenize('.').collect { it.replaceAll(/\D.*/, '') as int }
 def appVersionCode = major * 10_000_000 + minor * 100_000 + patch * 1_000
 
-// Release signing comes from the environment; without it, release builds use the debug key.
+// Release builds are unsigned unless a keystore is given in the environment. CI signs the tested
+// APK in a separate job (apksigner), so the release key never meets npm or Gradle there.
 def keystorePath = System.getenv('ANDROID_KEYSTORE_PATH')
 
 android {
@@ -42,7 +43,7 @@ android {
     }
     buildTypes {
         release {
-            signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
+            signingConfig keystorePath ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -65,12 +66,3 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
-
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
-}
