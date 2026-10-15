@@ -80,15 +80,19 @@ export async function findCategory(
   me: LngLat | null,
 ): Promise<Place[]> {
   if (zoomIn && map.getZoom() < SEARCH_ZOOM) {
-    // Closer in on what the user sees (beside the panel), and search the view as it ends up,
-    // however long a slow phone takes to get there.
+    // Closer in on what the user sees (beside the panel), which stays where it is on screen:
+    // the centre moves its share of the way there. (MapLibre's `around` lands elsewhere by
+    // frame count while the globe turns flat, at these very zooms.) Then the view is searched
+    // as it ends up, however long a slow phone takes to get there.
     const { middle } = seen(map);
+    const c = map.getCenter();
+    const share = 1 - 2 ** (map.getZoom() - SEARCH_ZOOM);
+    const center: [number, number] = [
+      c.lng + (middle.lng - c.lng) * share,
+      c.lat + (middle.lat - c.lat) * share,
+    ];
     await new Promise<void>((done) => {
-      map.easeTo({
-        zoom: SEARCH_ZOOM,
-        around: [middle.lng, middle.lat],
-        duration: motion(700),
-      });
+      map.easeTo({ zoom: SEARCH_ZOOM, center, duration: motion(700) });
       if (map.isMoving()) void map.once('moveend').then(() => done());
       else done();
     });

@@ -6,7 +6,10 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.location.Location;
@@ -14,11 +17,13 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 import java.util.function.Consumer;
 
 /**
@@ -44,6 +49,34 @@ public class NavLocationService extends Service implements LocationListener {
     private long lastGps;
     /** The first fix is logged (its provider, never the position): CI checks that fixes come. */
     private boolean announced;
+
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable relisten = this::listen;
+
+    /**
+     * Location or a provider switched on or off. A request made while location was off stays
+     * inactive once it is switched on (Android 16 at least), so the providers are asked anew;
+     * a burst of these broadcasts asks once.
+     */
+    private final BroadcastReceiver switched = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            listenAgain();
+        }
+    };
+
+    private void listenAgain() {
+        main.removeCallbacks(relisten);
+        main.postDelayed(relisten, 500);
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        IntentFilter filter = new IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION);
+        filter.addAction(LocationManager.MODE_CHANGED_ACTION);
+        ContextCompat.registerReceiver(this, switched, filter, ContextCompat.RECEIVER_NOT_EXPORTED);
+    }
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -143,9 +176,10 @@ public class NavLocationService extends Service implements LocationListener {
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {}
 
-    // Every provider is asked from the start; one switched on simply begins to deliver.
     @Override
-    public void onProviderEnabled(String provider) {}
+    public void onProviderEnabled(String provider) {
+        listenAgain();
+    }
 
     @Override
     public void onProviderDisabled(String provider) {}
@@ -158,6 +192,8 @@ public class NavLocationService extends Service implements LocationListener {
 
     @Override
     public void onDestroy() {
+        main.removeCallbacks(relisten);
+        unregisterReceiver(switched);
         if (manager != null) manager.removeUpdates(this);
         stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();

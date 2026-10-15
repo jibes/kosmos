@@ -778,6 +778,8 @@ test.describe('map', () => {
   });
 
   test('finds places by category from the map, nearest first', async ({ page }, info) => {
+    // Zooms, reads tiles, fits, searches twice: long on a busy machine.
+    test.slow();
     await jump(page, { ...CENTER, zoom: 11 });
     await centreBeside(page);
     const input = page.getByRole('combobox');
