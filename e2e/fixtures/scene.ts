@@ -292,7 +292,7 @@ function city(): Layers {
       name: 'Zur Letzten Instanz',
       rank: 1,
     }),
-    point(m(-300, 200), { class: 'fast_food', subclass: 'fast_food', name: 'Curry 36', rank: 2 }),
+    point(m(-300, 200), { class: 'restaurant', subclass: 'restaurant', name: 'Curry 36', rank: 2 }),
     point(m(500, -400), {
       class: 'restaurant',
       subclass: 'restaurant',
@@ -313,6 +313,15 @@ function city(): Layers {
       rank: 1,
     }),
     point(m(-400, 350), { class: 'museum', subclass: 'museum', name: 'Pergamonmuseum', rank: 1 }),
+    point(m(200, -700), {
+      class: 'school',
+      subclass: 'kindergarten',
+      name: 'Kita Sonnenschein',
+      rank: 4,
+    }),
+    // A chain: two branches in view, written two ways.
+    point(m(-250, -500), { class: 'shop', subclass: 'electronics', name: 'MediaMarkt', rank: 3 }),
+    point(m(450, 600), { class: 'shop', subclass: 'electronics', name: 'Media Markt', rank: 3 }),
     // Public toilets rarely have a name in OpenStreetMap.
     point(m(-200, -250), { class: 'toilets', subclass: 'toilets', rank: 5 }),
   );

@@ -1,5 +1,15 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { categoriesFor, type Category } from '../core/categories';
+import {
+  byName,
+  categoriesFor,
+  isCategoryWord,
+  misspeltFor,
+  nameOf,
+  NAME_MIN,
+  squeeze,
+  type Category,
+  type Kind,
+} from '../core/categories';
 import { formatDistance } from '../core/route';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
@@ -10,12 +20,12 @@ import { CloseIcon, SearchIcon } from './icons';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
 
-/** What is being searched for: by name, or a kind of place on the map. */
+/** What is being searched for: by name, or a kind of place (or a chain) on the map. */
 export interface SearchState {
   query: string;
   setQuery: (q: string) => void;
-  category: Category | null;
-  setCategory: (c: Category | null) => void;
+  category: Kind | null;
+  setCategory: (c: Kind | null) => void;
   /** Empties the field and ends the category (its dots go with it). */
   clear: () => void;
 }
@@ -23,7 +33,7 @@ export interface SearchState {
 /** The search's own state, kept by whoever should outlive the bar (App, across a route). */
 export function useSearch(): SearchState {
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<Category | null>(null);
+  const [category, setCategory] = useState<Kind | null>(null);
   return useMemo(
     () => ({
       query,
@@ -60,14 +70,16 @@ interface Props {
    * Places of a category from the map itself, nearest first; `null` ends the category. Without
    * it the bar searches by name only (choosing a route's start or destination).
    */
-  onCategory?: (c: Category | null) => Promise<Place[]>;
+  onCategory?: (c: Kind | null) => Promise<Place[]>;
+  /** The name several places in view share that the text begins: "media" → MediaMarkt, 3. */
+  onNames?: (text: string) => Promise<{ name: string; n: number } | null>;
   /** Bumped to search the category again where the map now is. */
   categoryRun?: number;
   /** The search key on a category: all its places on the map, none picked. */
   onShowAll?: () => void;
 }
 
-const label = (c: Category) => t[`cat_${c}`];
+const label = (k: Kind) => nameOf(k) ?? t[`cat_${k as Category}`];
 
 const DEBOUNCE_MS = 200;
 /** A search server that has not answered by now is not going to; say so instead of spinning. */
@@ -76,6 +88,11 @@ const TIMEOUT_MS = 5000;
 const SETTLE_MS = 5000;
 /** A fallback answer that takes longer than this is not coming. */
 const FALLBACK_MS = 8000;
+/**
+ * Names in view are read before Photon's names show, so their row does not push the list down
+ * under a finger; tiles not read by then are left out for this text.
+ */
+const NAMES_MS = 1000;
 /** Answers by query and roughly where the map looked: "Hauptbahnhof" means another one elsewhere. */
 const cache = new Map<string, Place[]>();
 
@@ -83,8 +100,11 @@ const cache = new Map<string, Place[]>();
 const area = (b: SearchBias | undefined) =>
   b ? `${Math.round(b.lat * 2)},${Math.round(b.lng * 2)},${Math.floor(b.zoom / 4)}` : '';
 
-/** A row of the list: a kind of place to search the map for, or a place found by name. */
-type Item = { cat: Category; place?: undefined } | { place: Place; cat?: undefined };
+/**
+ * A row of the list: a kind of place (or a chain, with how many are in view) to search the map
+ * for, or a place found by name.
+ */
+type Item = { cat: Kind; n?: number; place?: undefined } | { place: Place; cat?: undefined };
 
 interface Response {
   key: string;
@@ -106,6 +126,7 @@ export function SearchBar({
   autoFocus,
   onCancel,
   onCategory,
+  onNames,
   categoryRun,
   onShowAll,
 }: Props) {
@@ -126,29 +147,50 @@ export function SearchBar({
   const askedFor = useRef<string | null>(null);
   const onPickRef = useRef(onPick);
   const onCategoryRef = useRef(onCategory);
+  const onNamesRef = useRef(onNames);
   useEffect(() => {
     onPickRef.current = onPick;
     onCategoryRef.current = onCategory;
+    onNamesRef.current = onNames;
   });
+  /** The shared name in view for a text, once looked for (`null`: none, or not in time). */
+  const [shared, setShared] = useState<{
+    key: string;
+    found: { name: string; n: number } | null;
+  } | null>(null);
 
   const q = query.trim();
   const key = category ? `cat|${category}` : `${lang}|${q}|${area(bias())}`;
   const cached = category ? undefined : cache.get(key);
-  const current: Omit<Response, 'key'> | null = cached
-    ? { places: cached, status: 'done' }
-    : response?.key === key
-      ? response
-      : null;
+  const looksForNames = !category && !!onNames && squeeze(q).length >= NAME_MIN;
+  const namesKnown = !looksForNames || shared?.key === key;
+  const current: Omit<Response, 'key'> | null = !namesKnown
+    ? null
+    : cached
+      ? { places: cached, status: 'done' }
+      : response?.key === key
+        ? response
+        : null;
   const status: Status = q.length < 2 ? 'idle' : (current?.status ?? 'loading');
   // While a new query loads, the previous names stay put instead of flickering away. A category
   // shows only its own places: never names, nor the last category's places, to be tapped.
   const sameKind = !!response && !category && !response.key.startsWith('cat|');
   const results = current?.places ?? (sameKind ? response.places : []);
   /** "museum", "Lebensm…": the kinds of place the text may mean, offered above the names. */
-  const suggestions = category || !onCategory ? [] : categoriesFor(q);
+  const kinds = category || !onCategory ? [] : categoriesFor(q);
+  // "media" → MediaMarkt, 3 in view: a chain is searched on the map like a kind of place. A
+  // name that is a kind's own word ("Apotheke am Markt") is the kind's already.
+  const chain = namesKnown && shared?.key === key ? shared.found : null;
+  const suggestions: Item[] = [
+    ...kinds.map((cat) => ({ cat })),
+    ...(chain && !isCategoryWord(chain.name) ? [{ cat: byName(chain.name), n: chain.n }] : []),
+  ];
+  /** "kindergaten": a guess, after the names, so Enter never takes it for a name it resembles. */
+  const guesses = category || !onCategory || !current ? [] : misspeltFor(q);
   const items: Item[] = [
-    ...suggestions.map((cat) => ({ cat })),
+    ...suggestions,
     ...results.map((place) => ({ place })),
+    ...guesses.map((cat) => ({ cat })),
   ];
   // A name search offers its top row for Enter; a category picks nothing until asked.
   const active = cursor.key === key ? Math.min(cursor.index, items.length - 1) : category ? -1 : 0;
@@ -171,6 +213,26 @@ export function SearchBar({
       live = false;
     };
   }, [category, categoryRun]);
+
+  // Names in view, read from the map's own tiles while Photon is asked; given up on in time.
+  useEffect(() => {
+    const ask = onNamesRef.current;
+    if (!looksForNames || !ask) return;
+    let live = true;
+    const settle = (found: { name: string; n: number } | null) => {
+      if (live) setShared({ key, found });
+      live = false;
+    };
+    const late = setTimeout(() => settle(null), NAMES_MS);
+    ask(q)
+      .then(settle)
+      .catch(() => settle(null));
+    return () => {
+      live = false;
+      clearTimeout(late);
+    };
+    // Every edit asks again, a trailing space too: the edit cleared the last answer.
+  }, [q, key, looksForNames, query]);
 
   useEffect(() => {
     if (category || q.length < 2 || cache.has(key)) return;
@@ -264,7 +326,7 @@ export function SearchBar({
   };
 
   /** Search the map for a kind of place; the field shows its name. */
-  const choose = (c: Category) => {
+  const choose = (c: Kind) => {
     setCategory(c);
     setQuery(label(c));
   };
@@ -349,7 +411,7 @@ export function SearchBar({
                 <>
                   <SearchIcon />
                   <span className="r-name">{label(it.cat)}</span>
-                  <span className="r-detail">{t.catHint}</span>
+                  <span className="r-detail">{it.n ? fill(t.inView, { n: it.n }) : t.catHint}</span>
                 </>
               ) : (
                 <>
@@ -408,6 +470,8 @@ export function SearchBar({
             edited.current = Date.now();
             // An Enter pressed for the old text does not jump for the new one.
             jumpFor.current = null;
+            // Names in view are read anew for the new text, wherever the map now is.
+            setShared(null);
             setQuery(e.target.value);
             // Editing the name of a chosen category goes back to searching by name.
             setCategory(null);

@@ -1,11 +1,11 @@
 import { motion } from './motion';
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Category } from '../core/categories';
+import type { Kind } from '../core/categories';
 import { distance, type LngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { SEARCH_SOURCE } from '../core/style';
-import { findCategory } from './categorySearch';
+import { findCategory, sharedNameInView } from './categorySearch';
 
 const SEARCH_LAYERS = ['search-dots', 'search-names'];
 
@@ -14,7 +14,7 @@ const MOVED_SHARE = 0.4;
 const ZOOMED = 1;
 
 /**
- * A category search on the map: its dots, "show them all", and noticing when the map has
+ * A category (or chain) search on the map: its dots, "show them all", and noticing when the map has
  * moved away from where it looked, so the user can search the new area.
  */
 export function useCategory(
@@ -30,7 +30,7 @@ export function useCategory(
   useEffect(() => {
     meRef.current = me;
   });
-  const [active, setActive] = useState<Category | null>(null);
+  const [active, setActive] = useState<Kind | null>(null);
   const [moved, setMoved] = useState(false);
   const [run, setRun] = useState(0);
   const token = useRef(0);
@@ -40,7 +40,7 @@ export function useCategory(
   /** Only the user's own panning and zooming moves away from results; the app's camera moves
    * (locate, follow, show all) re-anchor them instead. */
   const userMove = useRef(false);
-  const last = useRef<Category | null>(null);
+  const last = useRef<Kind | null>(null);
 
   const dots = useCallback(
     (places: Place[]) =>
@@ -56,7 +56,7 @@ export function useCategory(
   );
 
   const onCategory = useCallback(
-    async (c: Category | null) => {
+    async (c: Kind | null) => {
       const mine = ++token.current;
       setActive(c);
       setMoved(false);
@@ -147,11 +147,17 @@ export function useCategory(
     });
   }, [map, padding]);
 
+  /** The name several places in view share that a text begins: a chain to search for. */
+  const names = useCallback(
+    (text: string) => (map ? sharedNameInView(map, text) : Promise.resolve(null)),
+    [map],
+  );
+
   /** Search the category again where the map is now. */
   const searchHere = useCallback(() => {
     setMoved(false);
     setRun((n) => n + 1);
   }, []);
 
-  return { onCategory, showAll, searchHere, run, offerHere: !!active && moved };
+  return { onCategory, names, showAll, searchHere, run, offerHere: !!active && moved };
 }

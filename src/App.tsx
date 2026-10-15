@@ -688,6 +688,7 @@ export function App() {
                 bias={bias}
                 onPick={pick}
                 onCategory={category.onCategory}
+                onNames={category.names}
                 categoryRun={category.run}
                 onShowAll={category.showAll}
                 collapsed={!!selection}

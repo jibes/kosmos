@@ -259,7 +259,10 @@ export async function offlineWorld(context: BrowserContext) {
               osm_id: 777,
             }),
           ]
-        : [];
+        : /media/i.test(q)
+          ? // The chain's branch Photon knows best is out of view.
+            [photonPoint(CENTER.lng, CENTER.lat - 0.05, { name: 'MediaMarkt', city: 'Berlin' })]
+          : [];
     photonSearches.push(q);
     return route.fulfill({ contentType: 'application/json', body: photon(hits) });
   });
