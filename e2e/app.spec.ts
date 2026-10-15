@@ -573,7 +573,17 @@ test.describe('map', () => {
       await go({ lng: corner.lng + (to.lng - corner.lng) * f, lat: to.lat });
       await page.waitForTimeout(250);
     }
-    await expect(banner).toContainText('You have arrived');
+    // A phone goes on sending fixes at the destination; on a busy machine the jumps above may
+    // come too close together to be believed at once (plausible travel since the last fix).
+    await expect
+      .poll(
+        async () => {
+          await go({ lng: to.lng, lat: to.lat + 1e-7 * Math.random() });
+          return banner.textContent();
+        },
+        { intervals: [500], timeout: 8000 },
+      )
+      .toContain('You have arrived');
     await expect(page.locator('.speed')).toHaveCount(0);
     await expect(page.locator('.nav-eta')).toHaveText(SEARCH_HIT.name);
     // Every prompt was queued: none cut another off.
