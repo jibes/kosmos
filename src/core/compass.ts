@@ -60,13 +60,40 @@ export function headingOf(r: OrientationReading, screenAngle = 0): number | null
   return norm(Math.atan2(east, north) / RAD);
 }
 
+/** Where the filtered heading is, how fast it turns (°/s), and as of when (ms). */
+export interface HeadingFilter {
+  heading: number;
+  speed: number;
+  time: number;
+}
+
+/** Held still: the heading settles over about a second, so jitter never shows. */
+const STILL_CUTOFF_HZ = 0.15;
+/** Each degree per second of real turning makes the filter this much quicker (Hz). */
+const TURN_GAIN = 0.008;
+/** How quickly the turning speed itself is believed: noise alternates, a turn persists. */
+const SPEED_CUTOFF_HZ = 0.3;
+
+/** The share of the way to go in one step of `dt` seconds, for a low-pass at `hz`. */
+const step = (dt: number, hz: number) => dt / (dt + 1 / (2 * Math.PI * hz));
+
 /**
- * Low-pass filter on the circle: follows real turns, irons out magnetometer jitter, and never
- * spins the long way round across north.
+ * Smooths compass readings on the circle, by time rather than per reading (phones send 10 to 60
+ * a second): heavily damped while the phone is held still, quick through a real turn, never
+ * the long way round across north. A "one euro" filter: its cut-off rises with the turning
+ * speed, which jitter (alternating) does not build up and a turn (one way) does.
  */
-export function smoothHeading(prev: number | null, next: number, k = 0.25): number {
-  if (prev == null) return norm(next);
-  return norm(prev + angleDiff(prev, next) * k);
+export function filterHeading(
+  prev: HeadingFilter | null,
+  raw: number,
+  time: number,
+): HeadingFilter {
+  if (!prev) return { heading: norm(raw), speed: 0, time };
+  const dt = Math.min(1, Math.max(0.001, (time - prev.time) / 1000));
+  const delta = angleDiff(prev.heading, raw);
+  const speed = prev.speed + step(dt, SPEED_CUTOFF_HZ) * (delta / dt - prev.speed);
+  const cutoff = STILL_CUTOFF_HZ + TURN_GAIN * Math.abs(speed);
+  return { heading: norm(prev.heading + step(dt, cutoff) * delta), speed, time };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { headingOf, smoothHeading } from '../core/compass';
+import { filterHeading, headingOf, type HeadingFilter } from '../core/compass';
 
 type Listener = (heading: number) => void;
 
@@ -13,6 +13,7 @@ interface IOSOrientationEvent {
  */
 export function useCompass() {
   const heading = useRef<number | null>(null);
+  const filter = useRef<HeadingFilter | null>(null);
   const listeners = useRef(new Set<Listener>());
   const [available, setAvailable] = useState(false);
   const stop = useRef<(() => void) | null>(null);
@@ -41,7 +42,8 @@ export function useCompass() {
       );
       if (h == null) return;
       if (heading.current == null) setAvailable(true);
-      heading.current = smoothHeading(heading.current, h);
+      filter.current = filterHeading(filter.current, h, e.timeStamp || performance.now());
+      heading.current = filter.current.heading;
       for (const fn of listeners.current) fn(heading.current);
     };
     // Chromium sends north-anchored readings as deviceorientationabsolute, Safari and some

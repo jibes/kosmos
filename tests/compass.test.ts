@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   angleDiff,
   headingOf,
-  smoothHeading,
+  filterHeading,
   travelHeading,
   type OrientationReading,
+  type HeadingFilter,
 } from '../src/core/compass';
 
 type M = number[][];
@@ -117,10 +118,59 @@ describe('compass', () => {
     expect(angleDiff(0, 180)).toBe(180);
   });
 
+  // A phone held still: the magnetometer's jitter, here up to ±4° on every reading.
+  const noisy = (hz: number, seconds: number, at: number, seed = 7) => {
+    let r = seed;
+    const rand = () => ((r = (r * 16807) % 2147483647) / 2147483647) * 2 - 1;
+    return Array.from({ length: hz * seconds }, (_, i) => ({
+      raw: at + 4 * rand(),
+      time: (i * 1000) / hz,
+    }));
+  };
+  const run = (readings: { raw: number; time: number }[], from: HeadingFilter | null = null) => {
+    let f = from;
+    const out: number[] = [];
+    for (const { raw, time } of readings) {
+      f = filterHeading(f, raw, time);
+      out.push(f.heading);
+    }
+    return { f: f!, out };
+  };
+  const spread = (hs: number[]) =>
+    Math.max(...hs.map((h) => angleDiff(hs[0], h))) -
+    Math.min(...hs.map((h) => angleDiff(hs[0], h)));
+
+  it('holds still when the phone does, whatever the readings per second', () => {
+    for (const hz of [10, 20, 60]) {
+      const { out } = run(noisy(hz, 4, 120));
+      // After the first second: the beam drifts by under two degrees all told, not ±4° on
+      // every reading (smoothing each reading by a quarter left 3–5°).
+      expect(spread(out.slice(hz))).toBeLessThan(1.8);
+    }
+  });
+
+  it('follows a real turn quickly, and settles where it ends', () => {
+    const hz = 60;
+    const still = noisy(hz, 2, 0);
+    // A quarter turn in half a second, then still again.
+    const turn = Array.from({ length: hz / 2 }, (_, i) => ({
+      raw: 180 * ((i + 1) / hz),
+      time: 2000 + ((i + 1) * 1000) / hz,
+    }));
+    const after = noisy(hz, 2, 90).map((r) => ({ ...r, time: r.time + 2500 }));
+    const { f } = run(still);
+    const mid = run(turn, f);
+    // Half a second after the turn began it is most of the way there.
+    expect(angleDiff(0, mid.f.heading)).toBeGreaterThan(60);
+    const end = run(after, mid.f);
+    // Half a second after the turn ended, within a few degrees of where it stopped.
+    expect(Math.abs(angleDiff(end.out[hz / 2], 90))).toBeLessThan(6);
+  });
+
   it('smooths across north without spinning', () => {
-    expect(smoothHeading(null, 370)).toBe(10);
-    const h = smoothHeading(350, 10, 0.5);
-    expect(h).toBe(0);
+    expect(filterHeading(null, 370, 0).heading).toBe(10);
+    const f = run([350, 10, 350, 10, 350, 10].map((raw, i) => ({ raw, time: i * 50 }))).f;
+    expect(Math.abs(angleDiff(0, f.heading))).toBeLessThan(10);
   });
 
   it('uses the compass when not moving and the course when moving', () => {
