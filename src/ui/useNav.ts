@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   initialNav,
+  markReroute,
   markSpoken,
   type Prompt,
   prompt,
+  rerouteDue,
   step,
   track,
   type NavState,
+  type RerouteMark,
   type Track,
 } from '../core/nav';
 import { spokenDistance, type Mode, type Route } from '../core/route';
@@ -14,14 +17,16 @@ import { fill, locale, t, units } from '../i18n';
 import type { Fix } from './useLocation';
 import type { Voice } from './voice';
 
-/** The public router is asked again at most this often, however lost the driver is. */
-const REROUTE_EVERY_MS = 30_000;
+/** A fix this recent counts at once when guidance starts: the arrow need not wait for the next. */
+export const FRESH_MS = 10_000;
 
 interface Options {
   route: Route | undefined;
   mode: Mode;
   active: boolean;
   subscribe: (fn: (fix: Fix) => void) => () => void;
+  /** The latest fix before guidance began, if any. */
+  last?: Fix | null;
   voice: Voice;
   muted: boolean;
   /** Called after every fix with the new state, for the camera and the user's arrow. */
@@ -63,25 +68,22 @@ export function useNav(o: Options) {
   useEffect(() => {
     opts.current = o;
   });
-  const lastReroute = useRef(0);
-  const started = useRef(false);
+  /** The last time the router was asked for a new route, and where. */
+  const asked = useRef<RerouteMark | null>(null);
 
   useEffect(() => {
-    if (!o.active) started.current = false;
+    if (!o.active) asked.current = null;
   }, [o.active]);
 
   useEffect(() => {
     if (!tr) return;
     let nav = initialNav();
-    // "Head north on …" once at the start; a reroute continues silently.
+    // "Head north on …" at the start, and a new route's first words after a reroute.
     const depart = tr.route.maneuvers[0];
-    if (!started.current && depart) {
-      started.current = true;
-      if (!opts.current.muted) opts.current.voice.speak(depart.pre ?? depart.instruction);
-    }
+    if (depart && !opts.current.muted) opts.current.voice.speak(depart.pre ?? depart.instruction);
     nav = markSpoken(nav, '0:pre');
     const { mode, subscribe } = opts.current;
-    return subscribe((fix) => {
+    const onFix = (fix: Fix) => {
       nav = step(tr, nav, fix);
       const p = prompt(tr, nav, mode);
       if (p) {
@@ -90,11 +92,17 @@ export function useNav(o: Options) {
       }
       setView({ tr, nav });
       opts.current.onStep(nav, fix);
-      if (nav.offRoute && !nav.arrived && fix.time - lastReroute.current > REROUTE_EVERY_MS) {
-        lastReroute.current = fix.time;
+      // Never on a coarse fix, and backing off when standing in the same wrong place.
+      if (nav.offRoute && !nav.arrived && !nav.weak && rerouteDue(asked.current, fix)) {
+        asked.current = markReroute(asked.current, fix);
         opts.current.onReroute();
       }
-    });
+    };
+    const off = subscribe(onFix);
+    // Where the user already is counts at once: the arrow and camera need not wait for a fix.
+    const last = opts.current.last;
+    if (last && Date.now() - last.time < FRESH_MS) onFix(last);
+    return off;
   }, [tr]);
 
   const nav = view.tr === tr ? view.nav : initialNav();

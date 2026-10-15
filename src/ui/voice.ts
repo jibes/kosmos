@@ -18,7 +18,9 @@ export function webVoice(lang: string): Voice {
     speak(text) {
       const s = synth();
       if (!s) return;
-      s.cancel();
+      // Queued, never cut off: the opening words and the first prompt often come together. A
+      // queue stuck behind nothing (some engines stall) is cleared first.
+      if (!s.speaking && s.pending) s.cancel();
       const u = new SpeechSynthesisUtterance(text);
       u.lang = lang;
       u.rate = 1.02;
@@ -34,7 +36,7 @@ export function webVoice(lang: string): Voice {
 export function nativeVoice(lang: string): Voice {
   return {
     speak(text) {
-      void TextToSpeech.speak({ text, lang, rate: 1, queueStrategy: QueueStrategy.Flush }).catch(
+      void TextToSpeech.speak({ text, lang, rate: 1, queueStrategy: QueueStrategy.Add }).catch(
         () => undefined,
       );
     },

@@ -1,4 +1,5 @@
-import type { LngLat } from './geo';
+import { angleDiff } from './compass';
+import { distance, type LngLat } from './geo';
 import type { Maneuver, Mode, Route } from './route';
 
 /**
@@ -110,9 +111,28 @@ export interface Fix extends LngLat {
   accuracy: number;
   /** m/s, when the device reports it. */
   speed?: number | null;
+  /** Course over ground, degrees clockwise from north, when moving and reported. */
+  heading?: number | null;
   /** ms since epoch. */
   time: number;
 }
+
+/**
+ * A fix less precise than this moves the dot, not the guidance: no turn is passed or skipped,
+ * and no reroute is asked, on a guess (network fixes, a tunnel, approximate location only).
+ */
+export const COARSE_M = 65;
+/** A maneuver is done once this far past it, on the road after it: going straight on at a
+ * turn, or waiting at the light just before it, does not count as taking it. */
+const PAST_M = 10;
+/** Driving this far back along the route is going the wrong way. */
+const BACK_M = 40;
+/** A course this far from the route's direction, for this many fixes in a row, too. */
+const AGAINST_DEG = 135;
+const AGAINST_N = 3;
+/** Before reaching the route (from a car park or a building), only moving this much further
+ * away from its start is off it. */
+const LEAVE_M = 150;
 
 /** Device speeds below this are a phone at rest. */
 const STILL_MS = 0.5;
@@ -147,6 +167,16 @@ export interface NavState {
   moving: boolean;
   /** Where speed was last measured from: progress only counts once it beats GPS jitter. */
   anchor: { along: number; time: number } | null;
+  /** The last fix was too coarse to guide by. */
+  weak: boolean;
+  /** On the route at least once; before that, the user is still getting to it. */
+  joined: boolean;
+  /** Closest to the route's start so far, metres, while getting to it. */
+  approach: number | null;
+  /** Furthest along the route so far, metres. */
+  peak: number;
+  /** Fixes in a row moving against the route's direction. */
+  against: number;
   time: number;
 }
 
@@ -163,6 +193,11 @@ export const initialNav = (): NavState => ({
   speed: 0,
   moving: false,
   anchor: null,
+  weak: false,
+  joined: false,
+  approach: null,
+  peak: 0,
+  against: 0,
   time: 0,
 });
 
@@ -178,7 +213,7 @@ export const ARRIVE_M = 25;
  * route is reused within 150 m of where it was asked for).
  */
 function reachOf(prev: NavState, fix: Fix): { from: number; ahead: number } {
-  const slack = 40 + fix.accuracy * 2;
+  const slack = 40 + Math.min(fix.accuracy, COARSE_M) * 2;
   if (!prev.snap) return { from: 0, ahead: 150 + slack };
   const dt = Math.min(120, Math.max(1, (fix.time - prev.time) / 1000));
   const fast = Math.max(prev.speed, fix.speed ?? 0, 15) * 1.5;
@@ -189,16 +224,39 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
   // Once arrived, guidance has done its job; a GPS wobble at the door does not undo it.
   if (prev.arrived && prev.snap)
     return { ...prev, time: fix.time, offSince: null, offRoute: false };
+  // Too coarse to tell which road, let alone which side of a turn: wait for a better fix.
+  if (fix.accuracy > COARSE_M) return { ...prev, weak: true };
   const s = snap(tr, fix, prev.snap?.segment ?? 0, reachOf(prev, fix));
   // Never let a noisy fix move progress backwards by more than a few metres.
   const along =
     prev.snap && s.along < prev.snap.along - 30 && s.offset > 20 ? prev.snap.along : s.along;
   const total = tr.along[tr.along.length - 1];
-  const off = s.offset > offRouteLimit(fix.accuracy);
+  const onLine = s.offset <= offRouteLimit(fix.accuracy);
+  const joined = prev.joined || onLine;
+  // Still getting to the route (it starts on the road nearest to where it was asked from):
+  // heading for its start is not off it; only moving well away from it is.
+  let approach = prev.approach;
+  let off = !onLine;
+  if (!joined) {
+    const toStart = distance(fix, { lng: tr.route.coords[0][0], lat: tr.route.coords[0][1] });
+    approach = Math.min(approach ?? toStart, toStart);
+    off = toStart > approach + LEAVE_M;
+  }
+  // The wrong way along the route: going back down it, or a course against it.
+  const peak = Math.max(prev.peak, along);
+  const course = fix.heading != null && Number.isFinite(fix.heading) ? fix.heading : null;
+  const against =
+    onLine && course !== null && prev.moving && Math.abs(angleDiff(course, s.bearing)) > AGAINST_DEG
+      ? prev.against + 1
+      : 0;
+  if (joined && onLine && (against >= AGAINST_N || peak - along > BACK_M)) off = true;
   const offSince = off ? (prev.offSince ?? fix.time) : null;
 
   let next = Math.max(1, prev.next);
-  while (next < tr.at.length - 1 && tr.at[next] <= along + 5) next++;
+  // Back before the maneuver just done (driving back, a jump undone): it is ahead again.
+  while (next > 1 && along < tr.at[next - 1] - 2 * PAST_M) next--;
+  // Done only once past it on the road after it.
+  while (next < tr.at.length - 1 && onLine && along > tr.at[next] + PAST_M) next++;
   const toNext = Math.max(0, tr.at[next] - along);
 
   // Time left: the router's estimate for the rest of the current maneuver, pro rata.
@@ -237,9 +295,46 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
     speed,
     moving,
     anchor,
+    weak: false,
+    joined,
+    approach,
+    peak,
+    against,
     time: fix.time,
   };
 }
+
+/** The public router is asked again at most this often, however lost the driver is. */
+export const REROUTE_MS = 30_000;
+
+/** Where and when the router was last asked for a new route, and how often in a row there. */
+export interface RerouteMark {
+  lng: number;
+  lat: number;
+  time: number;
+  count: number;
+}
+
+const movedOn = (last: RerouteMark, fix: Fix) =>
+  distance(last, fix) > Math.max(50, 2 * fix.accuracy);
+
+/**
+ * Whether to ask the router again now. Every 30 s at most; standing in the same wrong place
+ * (a car park beside the road), it backs off to 1, 2 and 4 minutes instead of asking for the
+ * same route over and over.
+ */
+export function rerouteDue(last: RerouteMark | null, fix: Fix): boolean {
+  if (!last) return true;
+  const wait = movedOn(last, fix) ? REROUTE_MS : REROUTE_MS * 2 ** Math.min(last.count + 1, 3);
+  return fix.time - last.time >= wait;
+}
+
+export const markReroute = (last: RerouteMark | null, fix: Fix): RerouteMark => ({
+  lng: fix.lng,
+  lat: fix.lat,
+  time: fix.time,
+  count: last && !movedOn(last, fix) ? last.count + 1 : 0,
+});
 
 export interface Prompt {
   key: string;
@@ -266,6 +361,8 @@ const PRE_MIN_M: Record<Mode, number> = { car: 60, bike: 25, foot: 12 };
  */
 export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
   if (!st.snap) return null;
+  // Off the route nothing ahead on it applies; a new route brings its own words.
+  if (!st.arrived && st.offSince !== null) return null;
   const said = (k: string) => st.spoken.includes(k);
   const ms = tr.route.maneuvers;
   if (st.arrived) {

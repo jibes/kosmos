@@ -10,7 +10,7 @@ import {
   type Mode,
   type Route,
 } from '../core/route';
-import { t, units } from '../i18n';
+import { fill, t, units } from '../i18n';
 import { LaneIcon, LocateIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
 import type { RouteStatus } from './RouteCard';
@@ -26,6 +26,7 @@ interface Props {
   following: boolean;
   /** Asking the router for a new route, or it failed and the old one is followed. */
   reroute: 'idle' | 'asking' | 'failed';
+  destination: string;
   onMute: () => void;
   onRecenter: () => void;
   onEnd: () => void;
@@ -38,19 +39,22 @@ const THEN_M = 150;
 const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
-export function NavView({ route, mode, nav, lang, muted, following, reroute, ...on }: Props) {
+export function NavView(props: Props) {
+  const { route, mode, nav, lang, muted, following, reroute, destination, ...on } = props;
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
+  // Before the first fix: the way the route sets off, and how far until its first turn.
+  const toNext = started ? nav.toNext : route.maneuvers[0]?.distance;
   const eta = started ? nav.eta : route.duration;
   const remaining = started ? nav.remaining : route.distance;
   const speed = speedIn(nav.speed, units);
 
   // Only while off the route: back on it, guidance carries on whatever the router said.
   const rerouting = nav.offRoute;
-  const guiding = started && !nav.arrived && !rerouting;
+  const guiding = !nav.arrived && !rerouting;
   const lanes = guiding && lanesNeeded(m?.lanes) ? m.lanes : undefined;
-  const size = lanes ? laneSize(nav.toNext, nav.speed, mode) : 'none';
+  const size = lanes && started ? laneSize(nav.toNext, nav.speed, mode) : 'none';
 
   // Two turns close together: the second one shows under the first, so it is no surprise.
   const after = route.maneuvers[nav.next + 1];
@@ -66,8 +70,12 @@ export function NavView({ route, mode, nav, lang, muted, following, reroute, ...
     title = t.arrived;
     turn = 'arrive';
   } else if (rerouting) {
+    // Not the old route's arrow: while asking it says nothing about where to turn.
     title = reroute === 'failed' ? t.rerouteFailed : t.rerouting;
+    turn = reroute === 'failed' ? 'uturn' : 'depart';
   }
+  // What the user should know besides the instruction: no position yet, or a poor one.
+  const note = !started ? t.locating : nav.weak && !nav.arrived ? t.weakGps : null;
 
   return (
     <>
@@ -77,9 +85,10 @@ export function NavView({ route, mode, nav, lang, muted, following, reroute, ...
       >
         <TurnIcon turn={turn} size={40} />
         <div>
-          {guiding && <strong>{formatDistance(nav.toNext, lang, units)}</strong>}
+          {guiding && toNext != null && <strong>{formatDistance(toNext, lang, units)}</strong>}
           {/* Only the instruction is announced: the distance changes with every fix. */}
           <p aria-live="polite">{title}</p>
+          {note && <small>{note}</small>}
           {then && (
             <p className="nav-then">
               {t.then}
@@ -114,10 +123,18 @@ export function NavView({ route, mode, nav, lang, muted, following, reroute, ...
       )}
 
       <NavBar muted={muted} arrived={nav.arrived} onMute={on.onMute} onEnd={on.onEnd}>
-        <strong>{formatClock(new Date(now + eta * 1000), lang)}</strong>
-        <span>
-          {formatDuration(eta)} · {formatDistance(remaining, lang, units)}
-        </span>
+        {/* Time left leads; a bare clock time would read as the time now. */}
+        {nav.arrived ? (
+          <strong>{destination}</strong>
+        ) : (
+          <>
+            <strong>{formatDuration(eta)}</strong>
+            <span>
+              {fill(t.arriveAt, { time: formatClock(new Date(now + eta * 1000), lang) })} ·{' '}
+              {formatDistance(remaining, lang, units)}
+            </span>
+          </>
+        )}
       </NavBar>
     </>
   );

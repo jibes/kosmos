@@ -36,6 +36,10 @@ const label = (c: Category) => t[`cat_${c}`];
 const DEBOUNCE_MS = 200;
 /** A search server that has not answered by now is not going to; say so instead of spinning. */
 const TIMEOUT_MS = 5000;
+/** Nominatim is only asked for text left alone this long (OSMF policy: never as-you-type). */
+const SETTLE_MS = 5000;
+/** A fallback answer that takes longer than this is not coming. */
+const FALLBACK_MS = 8000;
 const cache = new Map<string, Place[]>();
 
 /** A row of the list: a kind of place to search the map for, or a place found by name. */
@@ -72,6 +76,9 @@ export function SearchBar({
   const listId = useId();
   /** Enter pressed before results arrived: jump to the first one when they do. */
   const jumpFor = useRef<string | null>(null);
+  /** When the text last changed, and the query Enter asked again for (it may ask at once). */
+  const edited = useRef(0);
+  const askedFor = useRef<string | null>(null);
   const onPickRef = useRef(onPick);
   const onCategoryRef = useRef(onCategory);
   useEffect(() => {
@@ -136,12 +143,19 @@ export function SearchBar({
         }
       }
     };
-    /** Photon failed or hung: ask Nominatim once for this settled query (never as-you-type). */
+    /** Photon failed or hung: ask Nominatim once for this settled query, in its time slot. */
     const viaNominatim = async () => {
       await new Promise((go) => setTimeout(go, nominatimSlot()));
       if (fallback.signal.aborted) return null;
-      const r = await getJson(nominatimSearchUrl(q, lang, bias()), fallback.signal);
-      return r.ok ? parseNominatim(r.json) : null;
+      const own = new AbortController();
+      fallback.signal.addEventListener('abort', () => own.abort());
+      const late = setTimeout(() => own.abort(), FALLBACK_MS);
+      try {
+        const r = await getJson(nominatimSearchUrl(q, lang, bias()), own.signal);
+        return r.ok ? parseNominatim(r.json) : null;
+      } finally {
+        clearTimeout(late);
+      }
     };
     const timer = setTimeout(async () => {
       const limit = setTimeout(() => {
@@ -151,17 +165,32 @@ export function SearchBar({
       try {
         const res = await fetch(searchUrl(q, lang, bias()), { signal: ctrl.signal });
         if (!res.ok) throw new Error(String(res.status));
-        done(parsePhoton(await res.json()));
+        const places = parsePhoton(await res.json());
+        clearTimeout(limit);
+        done(places);
+        return;
       } catch (e) {
+        clearTimeout(limit);
         if (ctrl.signal.aborted && !timedOut) return;
         console.warn('search failed', e);
-        const places = q.length >= 3 ? await viaNominatim().catch(() => null) : null;
-        if (fallback.signal.aborted) return;
-        if (places) done(places);
-        else setResponse({ key, places: [], status: timedOut ? 'slow' : 'error' });
-      } finally {
-        clearTimeout(limit);
       }
+      const status = timedOut ? 'slow' : 'error';
+      if (q.length < 3) {
+        setResponse({ key, places: [], status });
+        return;
+      }
+      // Photon's timeout means the text has been left alone for 5 s already. A quick failure
+      // says so at once and waits until the text has settled as long, unless Enter asked.
+      if (!timedOut && askedFor.current !== key) {
+        setResponse({ key, places: [], status });
+        const wait = edited.current + SETTLE_MS - Date.now();
+        await new Promise((go) => setTimeout(go, Math.max(0, wait)));
+        if (fallback.signal.aborted) return;
+      }
+      const places = await viaNominatim().catch(() => null);
+      if (fallback.signal.aborted) return;
+      if (places) done(places);
+      else setResponse({ key, places: [], status });
     }, DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);
@@ -213,6 +242,7 @@ export function SearchBar({
       (status === 'error' || status === 'slow') &&
       !suggestions.length
     ) {
+      askedFor.current = key;
       setResponse(null);
       setRetry((n) => n + 1);
     } else if (e.key === 'Enter') {
@@ -317,6 +347,7 @@ export function SearchBar({
           role="combobox"
           value={query}
           onChange={(e) => {
+            edited.current = Date.now();
             setQuery(e.target.value);
             // Editing the name of a chosen category goes back to searching by name.
             setCategory(null);

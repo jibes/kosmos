@@ -55,7 +55,8 @@ export interface Route {
 }
 
 export function routeUrl(
-  from: LngLat,
+  /** With `heading`, the direction of travel at the start (a reroute while driving). */
+  from: LngLat & { heading?: number | null },
   to: LngLat,
   mode: Mode,
   lang: string,
@@ -64,7 +65,14 @@ export function routeUrl(
 ) {
   const body = {
     locations: [
-      { lat: +from.lat.toFixed(6), lon: +from.lng.toFixed(6) },
+      {
+        lat: +from.lat.toFixed(6),
+        lon: +from.lng.toFixed(6),
+        // So a new route carries on the way the car is going instead of starting by turning round.
+        ...(from.heading != null && Number.isFinite(from.heading)
+          ? { heading: Math.round(((from.heading % 360) + 360) % 360), heading_tolerance: 45 }
+          : {}),
+      },
       { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
     ],
     costing: COSTING[mode],

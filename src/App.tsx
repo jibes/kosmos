@@ -2,8 +2,6 @@ import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { distance, type LngLat } from './core/geo';
 import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
-import { travelHeading } from './core/compass';
-import { offRouteLimit, type NavState } from './core/nav';
 import type { Mode, TravelMode } from './core/route';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
 import { lang, locale, t } from './i18n';
@@ -18,16 +16,17 @@ import { RideView, rideWords } from './ui/RideView';
 import { RouteCard } from './ui/RouteCard';
 import { SearchBar } from './ui/SearchBar';
 import { Toasts, useToast } from './ui/Toasts';
-import { useLocation, type Fix } from './ui/useLocation';
+import { useLocation } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
 import { useMap } from './ui/useMap';
-import { useNav } from './ui/useNav';
 import { useCategory } from './ui/useCategory';
 import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
+import { useGuidance } from './ui/useGuidance';
+import { FRESH_MS } from './ui/useNav';
 import { useRouteLayer } from './ui/useRouteLayer';
 import { motion } from './ui/motion';
-import { NO_PADDING, followNav, padding, routePadding, touch, type NavCamera } from './ui/layout';
+import { NO_PADDING, followNav, padding, routePadding, startBearing, touch } from './ui/layout';
 import { HINTED_KEY, MODE_KEY, store, stored, storedMode } from './ui/prefs';
 import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
@@ -96,8 +95,6 @@ export function App() {
     pickingRef.current = picking;
   }, [picking]);
   const [navFollow, setNavFollow] = useState(true);
-  /** The router answer count when a reroute was asked for; `null` when none is pending. */
-  const [rerouteAt, setRerouteAt] = useState<number | null>(null);
   const route = useRoute(trip, fix, lang, navigating);
   // The voice speaks the language of the words it is given: the UI's (and the router's).
   const voice = useMemo(() => systemVoice(locale), []);
@@ -106,6 +103,8 @@ export function App() {
   /** Road navigation owns the camera and the arrow; public transport only follows the dot. */
   const riding = navigating && trip?.mode === 'transit';
   const roadNavRef = useRef(false);
+  /** Road guidance has its route and drives the arrow and the camera itself. */
+  const trackingRef = useRef(false);
   const navFollowRef = useRef(true);
   useEffect(() => {
     navRef.current = navigating;
@@ -345,8 +344,20 @@ export function App() {
   }, [map]);
 
   useEffect(() => {
-    if (!map || !fix || roadNavRef.current) return;
+    if (!map || !fix || (roadNavRef.current && trackingRef.current)) return;
     me.current?.update(fix);
+    if (roadNavRef.current) {
+      // Guidance is still waiting for its route: the dot and the camera follow the fix meanwhile.
+      const bearing = fix.heading != null && (fix.speed ?? 0) > 2 ? fix.heading : compass.current();
+      if (navFollowRef.current && !touching.current.size) {
+        followNav(
+          map,
+          { center: [fix.lng, fix.lat], bearing, speed: fix.speed ?? 0 },
+          motion(1000),
+        );
+      }
+      return;
+    }
     // A finger on the map: this fix moves the dot only; the next one catches the camera up.
     if (touching.current.size) return;
     if (flyOnFix.current) {
@@ -432,55 +443,31 @@ export function App() {
   });
 
   // Navigation: guidance on the device, camera behind the user, the router asked only to reroute.
-  const lastView = useRef<NavCamera | null>(null);
-  const followCamera = useCallback(
-    (v: NavCamera | null, duration: number) => map && v && followNav(map, v, duration),
-    [map],
-  );
-  const onStep = useCallback(
-    (nav: NavState, f: Fix) => {
-      const s = nav.snap;
-      // On the line the arrow rides the route; off it (or after arriving) it is where the fix
-      // is, and so is the camera: a missed turn must not leave the user off the screen.
-      const onLine = !!s && !nav.arrived && s.offset < offRouteLimit(f.accuracy);
-      const center: [number, number] = onLine ? s.point : [f.lng, f.lat];
-      const course = nav.moving && f.heading != null && !Number.isNaN(f.heading) ? f.heading : null;
-      const bearing = onLine
-        ? travelHeading(s.bearing, compass.current(), nav.moving)
-        : (course ?? compass.current());
-      me.current?.update({ lng: center[0], lat: center[1], accuracy: f.accuracy });
-      lastNavMoving.current = nav.moving;
-      me.current?.heading(bearing);
-      if (s && map) updateNavTheme(map, s, nav.time);
-      lastView.current = { center, bearing, speed: nav.speed };
-      if (navFollowRef.current && !touching.current.size)
-        followCamera(lastView.current, motion(1000));
-    },
-    [followCamera, compass, map, updateNavTheme],
-  );
-  const reroute = useCallback(() => {
-    setRerouteAt(route.settled);
-    setActive(0);
-    route.retry();
-  }, [route]);
-  const rerouteState =
-    rerouteAt === null || (route.settled !== rerouteAt && !route.kept)
-      ? 'idle'
-      : route.settled === rerouteAt
-        ? 'asking'
-        : 'failed';
   /** Public transport has no turn-by-turn yet, so guidance only ever sees a road mode. */
   const roadMode: Mode = trip && trip.mode !== 'transit' ? trip.mode : 'car';
-  const { nav } = useNav({
+  const guidance = useGuidance({
+    map,
+    meRef: me,
+    compass,
+    touchingRef: touching,
+    followingRef: navFollowRef,
+    movingRef: lastNavMoving,
+    updateTheme: updateNavTheme,
     route: navigating && !riding ? shown[chosen] : undefined,
     mode: roadMode,
     active: navigating && !riding,
     subscribe,
+    last: fix,
     voice,
     muted,
-    onStep,
-    onReroute: reroute,
+    settled: route.settled,
+    kept: route.kept,
+    retry: route.retry,
   });
+  const { nav, rerouteState } = guidance;
+  useEffect(() => {
+    trackingRef.current = guidance.tracking;
+  }, [guidance.tracking]);
 
   const ride = useRide({
     transit: shown[chosen]?.transit,
@@ -525,11 +512,21 @@ export function App() {
     setNavigating(true);
     setNavFollow(true);
     if (!isNative) showToast(t.keepOpen);
-    map?.easeTo({ pitch: 55, zoom: Math.max(map.getZoom(), 16), duration: motion(800) });
+    // With a fix, guidance places the camera on the user at once; without one, the route's start.
+    const first = shown[chosen];
+    if (map && first && !(fix && Date.now() - fix.time < FRESH_MS)) {
+      followNav(
+        map,
+        { center: first.coords[0], bearing: startBearing(first), speed: 0 },
+        motion(800),
+      );
+    }
   };
   const endNav = useCallback(() => {
     setNavigating(false);
-    setRerouteAt(null);
+    // At once, not after the next render: a compass reading in between would bring the arrow back.
+    navRef.current = false;
+    roadNavRef.current = false;
     voice.stop();
     me.current?.heading(null);
     map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: motion(800) });
@@ -659,9 +656,10 @@ export function App() {
             following={navFollow}
             reroute={rerouteState}
             onMute={toggleMute}
+            destination={trip?.to.name ?? ''}
             onRecenter={() => {
               setNavFollow(true);
-              followCamera(lastView.current, motion(600));
+              guidance.recenter();
             }}
             onEnd={arrived ? finish : endNav}
           />

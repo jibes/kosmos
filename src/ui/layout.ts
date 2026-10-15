@@ -37,6 +37,49 @@ export interface NavCamera {
   speed: number;
 }
 
+const RAD = Math.PI / 180;
+
+/** The direction a route sets off in, degrees clockwise from north. */
+export function startBearing(route: { coords: [number, number][] }): number {
+  const [a, b] = [route.coords[0], route.coords[1] ?? route.coords[0]];
+  return (Math.atan2((b[0] - a[0]) * Math.cos(a[1] * RAD), b[1] - a[1]) / RAD + 360) % 360;
+}
+
+/** Room around an overview while guiding: the banner on top, the bar at the bottom. */
+const overviewPadding = () =>
+  wide()
+    ? { top: 64, bottom: 64, left: 480, right: 64 }
+    : { top: Math.round(innerHeight * 0.3), bottom: 150, left: 48, right: 48 };
+
+/**
+ * Off the route: the user and the nearest point of it both in view, from above, so the way
+ * back is plain. Linear like the follow camera, which takes over again back on the route.
+ */
+export function overviewNav(
+  map: maplibregl.Map,
+  a: [number, number],
+  b: [number, number],
+  bearing: number | null,
+  duration: number,
+) {
+  map.fitBounds(
+    [
+      [Math.min(a[0], b[0]), Math.min(a[1], b[1])],
+      [Math.max(a[0], b[0]), Math.max(a[1], b[1])],
+    ],
+    {
+      padding: overviewPadding(),
+      absolutePadding: true,
+      bearing: bearing ?? map.getBearing(),
+      pitch: 0,
+      maxZoom: 17,
+      linear: true,
+      duration,
+      easing: (x) => x,
+    },
+  );
+}
+
 /** Behind the user, looking ahead; linear, so one fix's move runs into the next. */
 export function followNav(map: maplibregl.Map, v: NavCamera, duration: number) {
   map.easeTo({

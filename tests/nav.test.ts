@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   initialNav,
+  markReroute,
   markSpoken,
   navZoom,
   prompt,
+  rerouteDue,
   snap,
   step,
   track,
@@ -361,5 +363,114 @@ describe('on a motorway', () => {
     const alert = said.find((s) => s.endsWith('|Take the exit.'));
     expect(alert).toBeDefined();
     expect(Number(alert!.split('|')[0])).toBeGreaterThan(600);
+  });
+});
+
+describe('fixes not to be trusted, turns not taken', () => {
+  // North 1000 m, right 500 m, left 500 m.
+  const r = routeThrough(
+    [
+      [0, 0],
+      [0, 1000],
+      [500, 1000],
+      [500, 1500],
+    ],
+    [
+      { type: 1, text: 'Head north.' },
+      { type: 10, text: 'Turn right onto B.' },
+      { type: 15, text: 'Turn left onto C.' },
+      { type: 4, text: 'You have arrived.' },
+    ],
+  );
+  const t = track(r);
+  const at = (e: number, n: number, time: number, extra: Partial<Fix> = {}): Fix => ({
+    ...fixAt(m(e, n), time),
+    ...extra,
+  });
+
+  it('lets a coarse fix move neither progress nor the turn ahead', () => {
+    let st = step(t, initialNav(), at(0, 200, 0));
+    // A network fix 400 m ahead, give or take 400 m: guidance waits for a better one.
+    st = step(t, st, at(0, 600, 1000, { accuracy: 400 }));
+    expect(st.weak).toBe(true);
+    expect(st.snap!.along).toBeCloseTo(200, -1);
+    st = step(t, st, at(0, 230, 2000));
+    expect(st.weak).toBe(false);
+    expect(st.next).toBe(1);
+    expect(st.toNext).toBeCloseTo(770, -1);
+  });
+
+  it('does not take a turn driven straight past, and says nothing off the route', () => {
+    const fixes: [number, number][] = [];
+    for (let n = 0; n <= 1300; n += 20) fixes.push(m(0, n));
+    const { said, states } = replay(r, fixes, 10);
+    const last = states.at(-1)!;
+    expect(last.next).toBe(1);
+    expect(last.offSince).not.toBeNull();
+    expect(said.some((x) => x.includes('onto C'))).toBe(false);
+  });
+
+  it('keeps the turn ahead while waiting at the light just before it', () => {
+    let st = initialNav();
+    for (let i = 0; i < 50; i++) st = step(t, st, at(0, i * 20, i * 1000));
+    // Standing 8 m before the corner for a minute, GPS wandering by metres.
+    for (let i = 0; i < 60; i++) {
+      st = step(t, st, at(i % 2 ? 3 : -3, 986 + (i % 3) * 6, (50 + i) * 1000, { speed: 0 }));
+    }
+    expect(st.next).toBe(1);
+  });
+
+  it('notices driving back down the route', () => {
+    const fixes: [number, number][] = [];
+    for (let n = 0; n <= 600; n += 20) fixes.push(m(0, n));
+    for (let n = 580; n >= 300; n -= 20) fixes.push(m(0, n));
+    const { states } = replay(r, fixes, 10);
+    expect(states.at(-1)!.offRoute).toBe(true);
+  });
+
+  it('notices a course against the route', () => {
+    let st = initialNav();
+    for (let i = 0; i <= 10; i++) {
+      st = step(t, st, at(0, i * 20, i * 1000, { speed: 15, heading: 0 }));
+    }
+    // Turned round across a wide road: heading south, on the same line.
+    for (let i = 11; i <= 14; i++) {
+      st = step(t, st, at(0, 200, i * 1000, { speed: 15, heading: 180 }));
+    }
+    expect(st.offSince).not.toBeNull();
+  });
+
+  it('does not count getting to the route from a car park as off it', () => {
+    let st = initialNav();
+    for (let i = 0; i <= 20; i++) st = step(t, st, at(120 - i * 5, 0, i * 1000, { speed: 3 }));
+    expect(st.offRoute).toBe(false);
+    expect(st.joined).toBe(true);
+    // Driving away from the route instead is off it.
+    let away = initialNav();
+    for (let i = 0; i <= 30; i++) {
+      away = step(t, away, at(120 + i * 10, -i * 5, i * 1000, { speed: 8 }));
+    }
+    expect(away.offRoute).toBe(true);
+  });
+});
+
+describe('asking the router again', () => {
+  const at = (e: number, n: number, time: number): Fix => fixAt(m(e, n), time);
+
+  it('asks at most every 30 s while moving on', () => {
+    const first = markReroute(null, at(0, 0, 0));
+    expect(rerouteDue(first, at(0, 300, 20_000))).toBe(false);
+    expect(rerouteDue(first, at(0, 300, 30_000))).toBe(true);
+  });
+
+  it('backs off standing in the same wrong place, and starts over once moving', () => {
+    let mark = markReroute(null, at(0, 0, 0));
+    expect(rerouteDue(mark, at(5, 0, 30_000))).toBe(false);
+    expect(rerouteDue(mark, at(5, 0, 60_000))).toBe(true);
+    mark = markReroute(mark, at(5, 0, 60_000));
+    expect(mark.count).toBe(1);
+    expect(rerouteDue(mark, at(5, 0, 150_000))).toBe(false);
+    expect(rerouteDue(mark, at(5, 0, 180_000))).toBe(true);
+    expect(markReroute(mark, at(0, 400, 200_000)).count).toBe(0);
   });
 });

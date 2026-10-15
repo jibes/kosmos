@@ -91,7 +91,14 @@ export function useRouteLayer(map: maplibregl.Map | null, o: Options) {
     // the fit's own; together they can exceed the screen and the fit is silently dropped.
     map.stop();
     map.setPadding(NO_PADDING);
-    map.fitBounds([w, s, e, n], { padding: padding(), maxZoom: 17, duration: motion(1200) });
+    // Flat and north up: guidance may have just ended, tilted and turned (its own ease is stopped).
+    map.fitBounds([w, s, e, n], {
+      padding: padding(),
+      pitch: 0,
+      bearing: 0,
+      maxZoom: 17,
+      duration: motion(1200),
+    });
   }, [map, navigating, ready, tripKey, routes, padding]);
   useEffect(() => {
     if (!hasTrip) fitted.current = '';

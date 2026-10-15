@@ -7,6 +7,8 @@ import { MAP_SOURCE } from '../core/style';
 
 type Pt = [number, number];
 
+const TUNNEL_READ_MS = 4_000;
+
 /** Road tunnels in the tiles already loaded around the user; asks no server. */
 function tunnelLines(map: maplibregl.Map): Pt[][] {
   const features = map.querySourceFeatures(MAP_SOURCE, {
@@ -34,23 +36,29 @@ function tunnelLines(map: maplibregl.Map): Pt[][] {
 export function useNavTheme(active: boolean) {
   const [dark, setDark] = useState<boolean | null>(null);
   const lastTunnel = useRef(-Infinity);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  /** Tunnels near the user, read from the loaded tiles every few seconds, not on every fix. */
+  const tunnels = useRef<{ at: number; lines: Pt[][] }>({ at: -Infinity, lines: [] });
+  // Each drive decides afresh; the last one's night or tunnel says nothing about this one.
+  const [wasActive, setWasActive] = useState(active);
+  if (wasActive !== active) {
+    setWasActive(active);
+    setDark(null);
+  }
 
   useEffect(() => {
     if (active) return;
     lastTunnel.current = -Infinity;
-    clearTimeout(timer.current);
+    tunnels.current = { at: -Infinity, lines: [] };
   }, [active]);
 
   const update = useCallback((map: maplibregl.Map, s: Snap, time: number) => {
     const [lng, lat] = s.point;
-    const night = isNight(lat, lng, time);
-    if (inTunnel(s.point, s.bearing, tunnelLines(map))) lastTunnel.current = time;
-    const hold = lastTunnel.current + TUNNEL_HOLD_MS - time;
-    setDark(night || hold > 0);
-    // Light again when the hold runs out, even if no further fix arrives by then.
-    clearTimeout(timer.current);
-    if (hold > 0 && !night) timer.current = setTimeout(() => setDark(false), hold);
+    if (time - tunnels.current.at > TUNNEL_READ_MS) {
+      tunnels.current = { at: time, lines: tunnelLines(map) };
+    }
+    if (inTunnel(s.point, s.bearing, tunnels.current.lines)) lastTunnel.current = time;
+    // Inside a tunnel GPS often stops altogether: dark holds until a fix outside says otherwise.
+    setDark(isNight(lat, lng, time) || lastTunnel.current + TUNNEL_HOLD_MS > time);
   }, []);
 
   /** Night alone, for public transport: no route bearing to match tunnels against. */

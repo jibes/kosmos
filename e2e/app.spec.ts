@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
-import { isNight } from '../src/core/daylight';
+import { isNight, TUNNEL_HOLD_MS } from '../src/core/daylight';
 import { CENTER } from './fixtures/scene';
 import {
   SEARCH_HIT,
@@ -110,6 +110,10 @@ test.describe('map', () => {
 
   test('renders the globe and a city', async ({ page }, info) => {
     await expect(page.locator('canvas.maplibregl-canvas')).toBeVisible();
+    // Frosted glass, in Chromium too (a minifier once kept only the -webkit- form).
+    expect(
+      await page.locator('.bar').evaluate((e) => getComputedStyle(e).backdropFilter),
+    ).toContain('blur');
     await shot(page, info, 'globe');
     await jump(page, { ...CENTER, zoom: 15.2 });
     await shot(page, info, 'city');
@@ -431,9 +435,16 @@ test.describe('map', () => {
   test('navigates turn by turn with spoken prompts', async ({ page, context }, info) => {
     await page.evaluate(() => {
       const spoken: string[] = [];
-      (window as unknown as { spoken: string[] }).spoken = spoken;
+      const w = window as unknown as { spoken: string[]; cancels: number };
+      w.spoken = spoken;
+      w.cancels = 0;
       Object.defineProperty(window, 'speechSynthesis', {
-        value: { speak: (u: SpeechSynthesisUtterance) => spoken.push(u.text), cancel: () => {} },
+        value: {
+          speak: (u: SpeechSynthesisUtterance) => spoken.push(u.text),
+          cancel: () => w.cancels++,
+          speaking: false,
+          pending: false,
+        },
       });
     });
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
@@ -453,8 +464,14 @@ test.describe('map', () => {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
 
     const banner = page.locator('.nav-banner');
-    await expect(banner).toContainText('Head south on Friedrichstraße.');
+    // The position already known counts at once: the first turn ahead, with its distance.
+    await expect(banner).toContainText('Turn right onto Unter den Linden.');
+    await expect(banner.locator('strong')).toHaveText(/km$/);
+    await expect(page.locator('.me.nav')).toHaveCount(1);
     await expect(page.locator('.panel')).toBeHidden();
+    // Time left leads the bar; the clock time says it is the arrival.
+    await expect(page.locator('.nav-eta strong')).toHaveText(/min$/);
+    await expect(page.locator('.nav-eta span')).toContainText('arrival');
     const spoken = () => page.evaluate(() => (window as unknown as { spoken: string[] }).spoken);
     await expect.poll(spoken).toContain('Head south on Friedrichstraße.');
     // Lanes stay out of the way while the turn is far.
@@ -476,7 +493,7 @@ test.describe('map', () => {
     // The router's alert says no distance; the spoken prompt adds it.
     await expect
       .poll(async () => (await spoken()).find((w) => w.includes('Unter den Linden')))
-      .toMatch(/^In \d+ metres, turn right onto Unter den Linden\.$/);
+      .toMatch(/^In [\d.]+ (metres|kilometres), turn right onto Unter den Linden\.$/);
     await expect(page.locator('.me.nav')).toHaveCount(1);
     await idle(page);
     await shot(page, info, 'navigating');
@@ -487,6 +504,9 @@ test.describe('map', () => {
     }
     await expect(banner).toContainText('You have arrived');
     await expect(page.locator('.speed')).toHaveCount(0);
+    await expect(page.locator('.nav-eta')).toHaveText(SEARCH_HIT.name);
+    // Every prompt was queued: none cut another off.
+    expect(await page.evaluate(() => (window as unknown as { cancels: number }).cancels)).toBe(0);
 
     // Done closes the trip: the destination's card is back, and no route is asked for from
     // the destination to itself.
@@ -516,7 +536,7 @@ test.describe('map', () => {
       .click();
     await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
-    await expect(page.locator('.nav-banner')).toContainText('Head south on Friedrichstraße.');
+    await expect(page.locator('.nav-banner')).toContainText('Turn right onto Unter den Linden.');
     await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) => route.abort());
     // East, away from the route (which runs south), for 1.5 km.
     for (let i = 1; i <= 15; i++) {
@@ -599,6 +619,9 @@ test.describe('map', () => {
     await west(150);
     await expect.poll(theme).toBe('dark');
     expect(await page.evaluate(() => window.kosmos!.getStyle().name)).toBe('kOSMos dark');
+    // Underground GPS stops: with no fix for longer than the hold, it stays dark.
+    await page.waitForTimeout(TUNNEL_HOLD_MS + 1500);
+    expect(await theme()).toBe('dark');
     await west(-450);
     await expect.poll(theme, { timeout: 8000 }).toBe('light');
     expect(await page.evaluate(() => window.kosmos!.getStyle().name)).toBe('kOSMos light');
@@ -637,7 +660,7 @@ test.describe('map', () => {
     await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const banner = page.locator('.nav-banner');
-    await expect(banner).toContainText('Head south on Friedrichstraße.');
+    await expect(banner).toContainText('Turn right onto Unter den Linden.');
 
     // The router is gone; the driver leaves the route for good.
     await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) => route.abort());
@@ -875,6 +898,114 @@ test.describe('map', () => {
     await page.getByRole('option').first().click();
     await expect(page.locator('.card .hours summary')).toBeVisible();
     expect(lookupRequests.length).toBe(asked + 1);
+  });
+
+  test('keeps the chosen route when a reroute fails', async ({ page, context }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    // The other way round: west first, then south.
+    await card.locator('.alts [role=radio]').nth(1).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    const drawnCorner = () =>
+      page.evaluate(
+        ([lng, lat]) => {
+          const src = window.kosmos!.getSource('route') as unknown as {
+            _data: { geojson?: GeoJSON.FeatureCollection };
+          };
+          const coords = (src._data.geojson?.features ?? []).flatMap((f) =>
+            f.geometry.type === 'LineString' ? f.geometry.coordinates : [],
+          );
+          return coords.some(([x, y]) => Math.abs(x - lng) < 1e-4 && Math.abs(y - lat) < 1e-4);
+        },
+        [SEARCH_HIT.lng, from.lat],
+      );
+    await expect.poll(drawnCorner).toBe(true);
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) => route.abort());
+    for (let i = 0; i < 12; i++) {
+      await go(from.lng + 0.004 + i * 0.00001, from.lat - 0.004);
+      await page.waitForTimeout(1000);
+    }
+    await expect(page.locator('.nav-banner')).toContainText('No new route yet', {
+      timeout: 15_000,
+    });
+    // Still the route the user chose, not the router's first one.
+    expect(await drawnCorner()).toBe(true);
+  });
+
+  test('follows the user while guidance waits for its route, and ends flat', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await go(CENTER.lng + 0.01, CENTER.lat + 0.01);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.locator('.end-btn').first().click();
+    await page.getByRole('combobox', { name: 'Search start' }).fill('brandenburg');
+    await page.getByRole('option').filter({ hasText: 'Havel' }).click();
+    await expect(card.locator('.summary strong')).toHaveText(/min|h/);
+    // The route from here (asked at Start) does not come.
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) =>
+      route.fulfill({ status: 503, body: '' }),
+    );
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(page.locator('.nav-banner')).toContainText('busy');
+    const there = { lng: CENTER.lng - 0.01, lat: CENTER.lat - 0.005 };
+    await go(there.lng, there.lat);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ([lng, lat]) => {
+            const c = window.kosmos!.getCenter();
+            return Math.abs(c.lng - lng) < 0.002 && Math.abs(c.lat - lat) < 0.002;
+          },
+          [there.lng, there.lat],
+        ),
+      )
+      .toBe(true);
+    await page.getByRole('button', { name: 'End' }).click();
+    await page.getByRole('button', { name: /(Tap|Click) again to end navigation/ }).click();
+    await expect(card).toBeVisible();
+    await idle(page);
+    expect(await page.evaluate(() => window.kosmos!.getPitch())).toBe(0);
+  });
+
+  test('asks Nominatim only for a settled query when Photon fails at once', async ({ page }) => {
+    test.slow();
+    await page.route(/photon\.komoot\.io\/api\//, (route) =>
+      route.fulfill({ status: 503, body: '' }),
+    );
+    const asked = nominatimSearches.length;
+    const input = page.getByRole('combobox');
+    // Typing with pauses longer than the debounce: Photon fails at once every time.
+    for (const q of ['bra', 'brand', 'brandenb', 'brandenburger']) {
+      await input.fill(q);
+      await page.waitForTimeout(800);
+    }
+    expect(nominatimSearches.length).toBe(asked);
+    // Left alone, the text is a settled query: one search answers it.
+    await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name, {
+      timeout: 10_000,
+    });
+    expect(nominatimSearches.length).toBe(asked + 1);
+    expect(nominatimSearches.at(-1)!.get('q')).toBe('brandenburger');
   });
 
   test('falls back to Nominatim when Photon does not answer', async ({ page, context }) => {

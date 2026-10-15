@@ -238,3 +238,30 @@ describe('units', () => {
     expect(speedIn(10, 'metric')).toBe(36);
   });
 });
+
+describe('rerouting', () => {
+  it('asks for one route leaving in the direction of travel', () => {
+    const url = routeUrl(
+      { lng: 13.4, lat: 52.5, heading: 370 },
+      { lng: 13.41, lat: 52.51 },
+      'car',
+      'en',
+      0,
+    );
+    const body = JSON.parse(decodeURIComponent(url.split('json=')[1]));
+    expect(body.locations[0]).toMatchObject({ heading: 10, heading_tolerance: 45 });
+    expect(body.locations[1].heading).toBeUndefined();
+    expect(body.alternates).toBe(0);
+  });
+
+  it('leaves the direction open when there is none', () => {
+    const url = routeUrl(
+      { lng: 13.4, lat: 52.5, heading: null },
+      { lng: 13.41, lat: 52.51 },
+      'car',
+      'en',
+    );
+    const body = JSON.parse(decodeURIComponent(url.split('json=')[1]));
+    expect(body.locations[0].heading).toBeUndefined();
+  });
+});

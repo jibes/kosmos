@@ -57,7 +57,7 @@ const keepWhileNavigating = (
 /** Asks the router once per trip; following the user's location never polls it. */
 export function useRoute(
   trip: Trip | null,
-  here: (LngLat & { accuracy?: number }) | null,
+  here: (LngLat & { accuracy?: number; heading?: number | null; speed?: number | null }) | null,
   lang: string,
   /** While navigating, only an explicit reroute may ask again, never mere movement. */
   pinned = false,
@@ -95,7 +95,20 @@ export function useRoute(
             ...r,
             routes: r.ok ? parseMotis(r.json) : [],
           }))
-        : getJson(routeUrl(from, trip.to, trip.mode, lang, 2, units), ctrl.signal).then((r) => ({
+        : getJson(
+            // A reroute while guiding: one route, leaving in the direction of travel.
+            routeUrl(
+              pinned && !trip.from && here?.heading != null && (here.speed ?? 0) > 2
+                ? { ...from, heading: here.heading }
+                : from,
+              trip.to,
+              trip.mode,
+              lang,
+              pinned ? 0 : 2,
+              units,
+            ),
+            ctrl.signal,
+          ).then((r) => ({
             ...r,
             routes: r.ok ? parseValhalla(r.json) : [],
           }));
