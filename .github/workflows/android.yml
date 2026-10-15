@@ -84,9 +84,11 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # The Android the app targets (36), without Play's location; installed without any
+      # permission granted, as on a phone.
       - name: Start emulator
         env:
-          IMAGE: system-images;android-34;google_apis;x86_64
+          IMAGE: system-images;android-36;google_apis;x86_64
         run: |
           sdk="$ANDROID_HOME/cmdline-tools/latest/bin"
           yes | "$sdk/sdkmanager" --licenses >/dev/null || true
@@ -159,6 +161,8 @@ jobs:
   release:
     needs: apk
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # The signing secrets belong in this environment, limited to main (repository settings).
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -170,12 +174,37 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      # Before the key is touched: a released version signs nothing, and only a plain x.y.z
+      # newer than the last release is published (a pre-release would share its versionCode).
+      - name: Check the version
+        id: version
+        env:
+          VERSION: ${{ needs.apk.outputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "v$VERSION is already released."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$VERSION is not a plain x.y.z version"
+            exit 1
+          fi
+          latest=$(git tag -l 'v*' | sort -V | tail -1)
+          if [ -n "$latest" ] && [ "$(printf '%s\n%s\n' "$latest" "v$VERSION" | sort -V | tail -1)" != "v$VERSION" ]; then
+            echo "::error::v$VERSION is not newer than $latest"
+            exit 1
+          fi
+          echo "new=true" >> "$GITHUB_OUTPUT"
+
       - name: Fetch the unsigned APK
+        if: steps.version.outputs.new == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n apk-unsigned -D in
 
       - name: Sign
+        if: steps.version.outputs.new == 'true'
         id: sign
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -217,10 +246,6 @@ jobs:
           VERSION: ${{ needs.apk.outputs.version }}
           FILE: ${{ steps.sign.outputs.file }}
         run: |
-          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
-            echo "v$VERSION is already released."
-            exit 0
-          fi
           gh release create "v$VERSION" "$FILE" \
             --target "$GITHUB_SHA" \
             --title "kOSMos $VERSION" \

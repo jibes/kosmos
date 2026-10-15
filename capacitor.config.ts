@@ -14,8 +14,9 @@ const config: CapacitorConfig = {
   },
   android: {
     backgroundColor: '#121417',
-    // MapLibre needs WebGL 2 and the bundle targets ES2022: Chrome 100 or newer.
-    minWebViewVersion: 100,
+    // MapLibre needs WebGL 2 and the bundle ES2022 (Chrome 100); the styles need color-mix(),
+    // dvh and :has() (Chrome 111). Older, every card would be see-through: the update note shows.
+    minWebViewVersion: 111,
   },
 };
 

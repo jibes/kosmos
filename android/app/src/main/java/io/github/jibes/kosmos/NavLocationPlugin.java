@@ -16,9 +16,11 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
 /**
- * Location for guidance through {@link NavLocationService}. Asks for location (precise or
- * approximate, either will do) and, from Android 13, for the notification that shows guidance
- * is running; then starts the service and passes every fix on as a "location" event.
+ * Location for guidance through {@link NavLocationService}. Asks for location, and once for
+ * precise location where only approximate was given (approximate fixes are kilometres off and
+ * rare: no use for turns); from Android 13, once, for the notification that shows guidance is
+ * running; then starts the service and passes every fix on as a "location" event. The answer
+ * says whether location is approximate only, so the app can explain.
  */
 @CapacitorPlugin(
     name = "NavLocation",
@@ -32,6 +34,9 @@ import com.getcapacitor.annotation.PermissionCallback;
     }
 )
 public class NavLocationPlugin extends Plugin {
+
+    /** Precise location is asked for again once per run of the app, not at every Start. */
+    private static boolean askedPrecise;
 
     @Override
     public void load() {
@@ -47,6 +52,14 @@ public class NavLocationPlugin extends Plugin {
     @PluginMethod
     public void start(PluginCall call) {
         if (getPermissionState("coarseLocation") != PermissionState.GRANTED) {
+            // The user chooses precise or approximate here: not asked again this run.
+            askedPrecise = true;
+            requestPermissionForAlias("location", call, "afterLocation");
+            return;
+        }
+        if (getPermissionState("location") != PermissionState.GRANTED && !askedPrecise) {
+            // Approximate only: Android offers to change it to precise.
+            askedPrecise = true;
             requestPermissionForAlias("location", call, "afterLocation");
             return;
         }
@@ -62,14 +75,17 @@ public class NavLocationPlugin extends Plugin {
         askNotifications(call);
     }
 
-    /** Asked once: after a refusal Android will not show the question again anyway. */
+    /**
+     * Asked once: only before any answer. After a refusal Android would show it once more, and
+     * a second question while setting off to drive is one too many.
+     */
     private void askNotifications(PluginCall call) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            PermissionState state = getPermissionState("notifications");
-            if (state == PermissionState.PROMPT || state == PermissionState.PROMPT_WITH_RATIONALE) {
-                requestPermissionForAlias("notifications", call, "afterNotifications");
-                return;
-            }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            getPermissionState("notifications") == PermissionState.PROMPT
+        ) {
+            requestPermissionForAlias("notifications", call, "afterNotifications");
+            return;
         }
         run(call);
     }
@@ -86,7 +102,9 @@ public class NavLocationPlugin extends Plugin {
             .putExtra(NavLocationService.EXTRA_TEXT, call.getString("text", ""));
         try {
             ContextCompat.startForegroundService(getContext(), intent);
-            call.resolve();
+            JSObject result = new JSObject();
+            result.put("approximate", getPermissionState("location") != PermissionState.GRANTED);
+            call.resolve(result);
         } catch (RuntimeException e) {
             call.reject(e.getMessage(), "START_FAILED");
         }

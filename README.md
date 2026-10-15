@@ -34,7 +34,7 @@ SHA-256 (release certificate): 00:82:00:1C:3F:66:FD:D2:C1:4F:80:85:2F:4A:D2:96:9
 
 ## Privacy
 
-No account, no analytics, no tracking. Your location leaves the device only as the start of a route you ask for. The app talks to exactly five services:
+No account, no analytics, no tracking. Your location leaves the device as the start of a route you ask for, and, while the map follows you, as the map's centre or view that searches are biased to. The app talks to exactly five services:
 
 | Service                                                                | For                                     | Sends                                                                                                                                        |
 | ---------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -42,11 +42,11 @@ No account, no analytics, no tracking. Your location leaves the device only as t
 | [Photon](https://photon.komoot.io) by komoot                           | Search, address lookup                  | Search text, map centre; a tapped label's name and point; the point you long-press                                                           |
 | [Valhalla](https://valhalla1.openstreetmap.de) by FOSSGIS              | Routing                                 | Route start (your location, when you ask for a route), destination and travel mode                                                           |
 | [Transitous](https://transitous.org)                                   | Public transport                        | Start, destination and departure time of a public transport route you ask for; while you follow it, the vehicle's trip id for one live check |
-| [Nominatim](https://nominatim.openstreetmap.org) by the OSM Foundation | Opening hours, phone, website           | The OpenStreetMap id of the place card you open; a search's text only when Photon does not answer                                            |
+| [Nominatim](https://nominatim.openstreetmap.org) by the OSM Foundation | Opening hours, phone, website           | The OpenStreetMap id of the place card you open; a search's text and the map's view only when Photon does not answer                         |
 
 ## Android permissions
 
-Location, precise or approximate (while navigating it runs in a foreground service with a notification, so directions continue with the screen off), notifications (asked for on the first navigation, Android 13+, only for that notification), internet. Nothing runs in the background outside navigation. Location comes from Android's own location service (GPS, or the network), so the app needs no Google Play services and works on de-Googled phones. Release builds write nothing about your position to the system log.
+Location (while navigating it runs in a foreground service with a notification, so directions continue with the screen off; turn-by-turn needs precise location, and the app asks once to change approximate to precise and explains otherwise), notifications (asked for once, on the first navigation, Android 13+, only for that notification), internet. Nothing runs in the background outside navigation. Location comes from Android's own location service (GPS, or the network), so the app needs no Google Play services and works on de-Googled phones. Release builds write nothing about your position to the system log.
 
 ## Run locally
 
@@ -65,7 +65,7 @@ Android: `npm run android:sync`, then open `android/` in Android Studio or run `
 
 - **Web:** every push to `main` deploys to GitHub Pages.
 - **Android:** bump `version` in `package.json` and push to `main`. The Android workflow builds the APK and smoke-tests it on an emulator; a separate job, which never runs npm or Gradle, then signs it, checks the signer against the fingerprint above and publishes `v<version>` with the APK. versionCode = major·10⁷ + minor·10⁵ + patch·10³.
-- Signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them CI builds a debug-signed APK artifact and publishes nothing.
+- Signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. They belong in the `release` environment, limited to `main`. Without them CI leaves an unsigned APK artifact (tested with a throwaway key) and publishes nothing. Only a plain `x.y.z` newer than the last release is published.
 
 ## Stack
 

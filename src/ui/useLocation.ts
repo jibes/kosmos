@@ -102,7 +102,8 @@ export function useLocation() {
     handle: null,
   });
   const background = useCallback(
-    (on: boolean) => {
+    /** `onApproximate`: the service runs on approximate location only, which guidance can't use. */
+    (on: boolean, onApproximate?: () => void) => {
       const plugin = NavLocation;
       if (!plugin) return;
       const bg = native.current;
@@ -132,10 +133,19 @@ export function useLocation() {
             if (bg.on) bg.handle = handle;
             else void handle.remove();
           });
-        plugin.start({ title: t.navNotifTitle, text: t.navNotifText }).catch((e: unknown) => {
-          const code = (e as { code?: string } | null)?.code;
-          if (code === 'NOT_AUTHORIZED') setStatus('denied');
-        });
+        // The plugin's question is the only one: the WebView's own watch starts once it is
+        // answered (two prompts at once cancel each other), until the service's first fix.
+        plugin
+          .start({ title: t.navNotifTitle, text: t.navNotifText })
+          .then((r) => {
+            if (r?.approximate) onApproximate?.();
+            if (bg.on && first) start();
+          })
+          .catch((e: unknown) => {
+            const code = (e as { code?: string } | null)?.code;
+            if (code === 'NOT_AUTHORIZED') setStatus('denied');
+            else if (bg.on) start();
+          });
       } else if (!on && bg.on) {
         bg.on = false;
         void bg.handle?.remove();

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Installs the APK on a running emulator, launches kOSMos and checks that it lives:
-# no crash, the interface is on screen, no web errors. Leaves a screenshot and logcat in
-# smoke/ either way, so the real map (real tiles, the emulator is online) can be looked at.
+# no crash, the interface is on screen, no web errors. Then the location service guidance runs
+# on: in the foreground, and delivering fixes once location is switched on after it started. Leaves a screenshot and logcat in smoke/ either way, so the real map
+# (real tiles, the emulator is online) can be looked at.
 set -euo pipefail
 
 APK="$1"
@@ -9,7 +10,8 @@ PKG=io.github.jibes.kosmos
 OUT=smoke
 mkdir -p "$OUT"
 
-adb install -r -g "$APK"
+# No permission granted up front: opening the app must not need any (it never asks then).
+adb install -r "$APK"
 adb logcat -c
 adb shell am start -W -n "$PKG/.MainActivity"
 
@@ -46,6 +48,43 @@ fi
 # own "loaded" line is the proof that the interface came up.
 if ! grep -q "kosmos:ready" "$OUT/logcat.txt"; then
   echo "::error::the map never reported it had loaded (no kosmos:ready in logcat)"
+  fail=1
+fi
+[ "$fail" = 0 ] || exit "$fail"
+
+# Guidance's location service, as Start leaves it once location is allowed: started with
+# location switched off, then switched on. The service is not exported; root may start it.
+if ! adb root; then
+  echo "::error::this emulator image does not allow root, which starting the service needs"
+  exit 1
+fi
+adb wait-for-device
+for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION POST_NOTIFICATIONS; do
+  adb shell pm grant "$PKG" "android.permission.$p"
+done
+adb shell cmd location set-location-enabled false
+adb logcat -c
+adb shell am start-foreground-service -n "$PKG/.NavLocationService"
+sleep 4
+adb shell dumpsys activity services "$PKG" > "$OUT/services.txt"
+if ! grep -q "NavLocationService" "$OUT/services.txt" || ! grep -q "isForeground=true" "$OUT/services.txt"; then
+  echo "::error::the location service is not running in the foreground"
+  cat "$OUT/services.txt"
+  fail=1
+fi
+adb shell cmd location set-location-enabled true
+for _ in $(seq 1 15); do
+  adb emu geo fix 13.4050 52.5200 >/dev/null
+  adb logcat -d | grep -q "navigation: first fix" && break
+  sleep 2
+done
+adb logcat -d > "$OUT/logcat-service.txt"
+if ! grep -q "navigation: first fix" "$OUT/logcat-service.txt"; then
+  echo "::error::no fix reached the location service after location was switched on"
+  fail=1
+fi
+if grep -E "FATAL EXCEPTION|AndroidRuntime.*$PKG" "$OUT/logcat-service.txt"; then
+  echo "::error::kOSMos crashed while guiding"
   fail=1
 fi
 exit "$fail"

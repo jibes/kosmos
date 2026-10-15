@@ -1,0 +1,426 @@
+/* kOSMos: one map, three floating things (search, controls, credit). Everything else is map. */
+
+:root {
+  --space: #dfe5ec;
+  --surface: #fbfaf8;
+  --surface-solid: #ffffff;
+  --text: #1d1c1a;
+  --muted: #6e6961;
+  --line: rgb(30 28 24 / 0.08);
+  --hover: rgb(30 28 24 / 0.05);
+  --hover-strong: rgb(30 28 24 / 0.09);
+  /* The chosen one of a few: lifted off its track. */
+  --raised: #ffffff;
+  --accent: #2f5cff;
+  --accent-text: #ffffff;
+  /* End and alarms: white on it reads at 4.7:1 in either theme. */
+  --danger: #d93036;
+  --on-danger: #ffffff;
+  /* Delayed departures: 5.2:1 on the light card, 6.9:1 on the dark one. */
+  --late: #c2410c;
+  --shadow:
+    0 0.5px 1px rgb(20 18 14 / 0.06), 0 4px 12px -2px rgb(20 18 14 / 0.08),
+    0 16px 40px -8px rgb(20 18 14 / 0.12);
+  --radius: 22px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --gutter: 12px;
+  /* Capacitor's Android shell injects --safe-area-inset-*; browsers report env(). */
+  --safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+  --safe-left: max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px));
+  --safe-right: max(env(safe-area-inset-right, 0px), var(--safe-area-inset-right, 0px));
+  color-scheme: light dark;
+}
+
+/* Dark follows the system unless navigation follows the sun (data-theme, set by App): light by
+   day even on a dark system, dark after sunset and in tunnels. Keep the two dark blocks
+   identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --space: #05060a;
+    --surface: #1a1c20;
+    --surface-solid: #1f2125;
+    --text: #edebe6;
+    --muted: #8f939b;
+    --line: rgb(255 255 255 / 0.08);
+    --hover: rgb(255 255 255 / 0.06);
+    --hover-strong: rgb(255 255 255 / 0.1);
+    --raised: rgb(255 255 255 / 0.14);
+    --accent: #6e8bff;
+    --accent-text: #0b0d12;
+    --late: #ff8a4c;
+    --shadow:
+      0 0.5px 1px rgb(0 0 0 / 0.4), 0 4px 12px -2px rgb(0 0 0 / 0.35),
+      0 16px 40px -8px rgb(0 0 0 / 0.5);
+  }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --space: #05060a;
+  --surface: #1a1c20;
+  --surface-solid: #1f2125;
+  --text: #edebe6;
+  --muted: #8f939b;
+  --line: rgb(255 255 255 / 0.08);
+  --hover: rgb(255 255 255 / 0.06);
+  --hover-strong: rgb(255 255 255 / 0.1);
+  --raised: rgb(255 255 255 / 0.14);
+  --accent: #6e8bff;
+  --accent-text: #0b0d12;
+  --late: #ff8a4c;
+  --shadow:
+    0 0.5px 1px rgb(0 0 0 / 0.4), 0 4px 12px -2px rgb(0 0 0 / 0.35),
+    0 16px 40px -8px rgb(0 0 0 / 0.5);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Scrollbars in the theme: thin, quiet, and gone from the layout where the system allows. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 45%, transparent) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  background: var(--space);
+  color: var(--text);
+  font:
+    400 15px/1.4 Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-feature-settings: 'cv11', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+a {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  background: none;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Map ---------- */
+
+.map {
+  position: fixed;
+  inset: 0;
+  background: var(--space);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* A card's heading takes focus as the card opens, to be read out; no ring around a title. */
+h2[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
+.maplibregl-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+
+/* ---------- Surfaces ---------- */
+
+.surface {
+  background: color-mix(in srgb, var(--surface) 93%, transparent);
+  /* Prefixed first: the minifier keeps only the last of the two, and Chromium needs the plain one. */
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  backdrop-filter: blur(24px) saturate(1.8);
+  border: 0.5px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .surface {
+    background: var(--surface-solid);
+  }
+}
+
+.ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ui > * {
+  pointer-events: auto;
+}
+
+/* ---------- Panel: search + place card ---------- */
+
+.panel {
+  position: absolute;
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--gutter) + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.panel > * {
+  pointer-events: auto;
+}
+
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 8px 0 18px;
+  border-radius: 26px;
+  color: var(--muted);
+  cursor: text;
+  transition: box-shadow 0.25s var(--ease);
+}
+
+.bar:focus-within {
+  color: var(--text);
+  box-shadow:
+    var(--shadow),
+    0 0 0 2px var(--accent);
+}
+
+.bar input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.bar input::placeholder {
+  color: var(--muted);
+}
+
+.bar input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--muted);
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.icon-btn.round {
+  width: 30px;
+  height: 30px;
+  background: var(--hover);
+}
+
+/* Small controls keep their look but take a thumb: the hit area reaches 44 px. */
+.icon-btn,
+.bar-cancel,
+.coords {
+  position: relative;
+}
+
+.icon-btn::after,
+.bar-cancel::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+
+/* The way into About: a small credit, a thumb-sized target. */
+.credit::after {
+  content: '';
+  position: absolute;
+  inset: -11px -4px;
+}
+
+.coords::after {
+  content: '';
+  position: absolute;
+  inset: -12px 0;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  margin: 1px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.75px solid var(--line);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  border-radius: var(--radius);
+  max-height: min(56vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: rise 0.28s var(--ease);
+}
+
+.results li[role='option'] {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.results li[aria-selected='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.r-name {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.r-detail {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.r-empty {
+  padding: 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.r-loading {
+  height: 46px;
+}
+
+/* After the map moved away from category results: one tap searches where it is now. */
+.search-here {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: drop-in 0.3s var(--ease);
+}
+
+/* A kind of place offered above the names it matched, in the accent. */
+.results li.r-cat {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  column-gap: 10px;
+  align-items: center;
+}
+
+.r-cat svg {
+  grid-row: span 2;
+  color: var(--accent);
+}
+
+.r-cat .r-name {
+  color: var(--accent);
+}
+
+.hint {
+  margin: 0 auto;
+  padding: 6px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  animation: fade 0.4s var(--ease);
+}

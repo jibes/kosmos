@@ -1,7 +1,7 @@
 import { QueueStrategy, TextToSpeech } from '@capacitor-community/text-to-speech';
 import { useCallback, useRef, useState } from 'react';
 import type { TravelMode } from '../core/route';
-import { isNative } from './native';
+import { duckAudio, isNative } from './native';
 import { MUTED_KEY, store, storedMuted } from './prefs';
 
 /** Spoken guidance. Web Speech in browsers; the system engine (Google's voices) on Android. */
@@ -32,16 +32,35 @@ export function webVoice(lang: string): Voice {
   };
 }
 
-/** Android's own speech engine: natural voices, offline, and it keeps talking in the background. */
+/** A prompt that has not finished by now never will: other audio comes back regardless. */
+const DUCK_MAX_MS = 20_000;
+
+/**
+ * Android's own speech engine: natural voices, offline, and it keeps talking in the background.
+ * Music and podcasts duck while it speaks, from the first queued prompt to the end of the last.
+ */
 export function nativeVoice(lang: string): Voice {
+  let speaking = 0;
+  let watchdog: ReturnType<typeof setTimeout> | undefined;
+  const release = () => {
+    speaking = 0;
+    clearTimeout(watchdog);
+    duckAudio(false);
+  };
   return {
     speak(text) {
-      void TextToSpeech.speak({ text, lang, rate: 1, queueStrategy: QueueStrategy.Add }).catch(
-        () => undefined,
-      );
+      if (speaking++ === 0) duckAudio(true);
+      clearTimeout(watchdog);
+      watchdog = setTimeout(release, DUCK_MAX_MS);
+      void TextToSpeech.speak({ text, lang, rate: 1, queueStrategy: QueueStrategy.Add })
+        .catch(() => undefined)
+        .finally(() => {
+          if (speaking > 0 && --speaking === 0) release();
+        });
     },
     stop() {
       void TextToSpeech.stop().catch(() => undefined);
+      release();
     },
   };
 }

@@ -42,6 +42,8 @@ public class NavLocationService extends Service implements LocationListener {
 
     private LocationManager manager;
     private long lastGps;
+    /** The first fix is logged (its provider, never the position): CI checks that fixes come. */
+    private boolean announced;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -98,26 +100,35 @@ public class NavLocationService extends Service implements LocationListener {
         return checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED;
     }
 
-    /** Asks every available provider for a fix a second; GPS needs precise location. */
+    /**
+     * Asks each provider the permission allows for a fix a second, switched on or not: one
+     * switched on later (location or GPS turned on mid-trip) then starts by itself. GPS needs
+     * precise location; a phone without a network provider simply has none.
+     */
     private void listen() {
         if (manager == null) manager = getSystemService(LocationManager.class);
         manager.removeUpdates(this);
         boolean fine = allowed(Manifest.permission.ACCESS_FINE_LOCATION);
         boolean coarse = fine || allowed(Manifest.permission.ACCESS_COARSE_LOCATION);
+        if (fine) request(LocationManager.GPS_PROVIDER, 1000);
+        if (coarse) request(LocationManager.NETWORK_PROVIDER, 2000);
+    }
+
+    /** One provider: its failure (missing on this phone, refused) leaves the other one asked. */
+    private void request(String provider, long intervalMs) {
         try {
-            if (fine && manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                manager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this, Looper.getMainLooper());
-            }
-            if (coarse && manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                manager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000, 0, this, Looper.getMainLooper());
-            }
+            manager.requestLocationUpdates(provider, intervalMs, 0, this, Looper.getMainLooper());
         } catch (SecurityException | IllegalArgumentException e) {
-            Log.w(TAG, "no location updates", e);
+            Log.w(TAG, "no location updates from " + provider, e);
         }
     }
 
     @Override
     public void onLocationChanged(Location location) {
+        if (!announced) {
+            announced = true;
+            Log.i(TAG, "navigation: first fix from " + location.getProvider());
+        }
         long now = SystemClock.elapsedRealtime();
         if (LocationManager.GPS_PROVIDER.equals(location.getProvider())) {
             lastGps = now;
@@ -132,11 +143,9 @@ public class NavLocationService extends Service implements LocationListener {
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {}
 
+    // Every provider is asked from the start; one switched on simply begins to deliver.
     @Override
-    public void onProviderEnabled(String provider) {
-        // GPS switched on mid-trip: ask it too.
-        listen();
-    }
+    public void onProviderEnabled(String provider) {}
 
     @Override
     public void onProviderDisabled(String provider) {}

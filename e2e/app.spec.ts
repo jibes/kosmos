@@ -1373,10 +1373,16 @@ test.describe('map', () => {
       const b = (await page.locator('.me.nav').boundingBox())!;
       return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     };
+    // Polled together: the camera eases there, and halfway it is neither.
     await expect
-      .poll(async () => (await arrow()).y / height, { timeout: 8000 })
-      .toBeGreaterThan(0.68);
-    expect((await arrow()).x).toBeGreaterThan(column.x + column.width);
+      .poll(
+        async () => {
+          const a = await arrow();
+          return a.x > column.x + column.width && a.y / height > 0.68;
+        },
+        { timeout: 8000 },
+      )
+      .toBe(true);
 
     // Looking around: Re-centre under the middle of the map, not across the column.
     await page.mouse.move(700, 150);

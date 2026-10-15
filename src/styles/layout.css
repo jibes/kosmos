@@ -1,0 +1,228 @@
+/* ---------- Sheets: pull down for more map ---------- */
+
+.sheet {
+  position: relative;
+  padding-top: 22px;
+  transition:
+    transform 0.32s var(--spring),
+    padding 0.25s var(--ease);
+}
+
+.sheet[data-dragging] {
+  transition: none;
+}
+
+.grab {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 32px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.grab span {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  background: color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.sheet[data-min] {
+  padding: 18px 18px 12px;
+}
+
+/* The whole strip restores the card, not only its one line of text. */
+.peek {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  min-height: 28px;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.peek::after {
+  content: '';
+  position: absolute;
+  inset: -12px -18px;
+}
+
+.peek strong {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.peek .peek-time {
+  color: var(--accent);
+  overflow: visible;
+}
+
+.peek span {
+  color: var(--muted);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Pointer hover (desktop) ---------- */
+
+@media (hover: hover) {
+  .end-btn:hover,
+  .action:not(.primary, :disabled):hover,
+  .route-try button:hover {
+    background: var(--hover-strong);
+  }
+
+  .modes button:not([aria-checked='true']):hover,
+  .steps summary:hover,
+  .hours summary:hover {
+    color: var(--text);
+  }
+
+  .modes button:not([aria-checked='true']):hover,
+  .alts button:not([aria-checked='true']):hover {
+    background: var(--hover);
+  }
+
+  .search-here:hover {
+    background: color-mix(in srgb, var(--surface) 88%, var(--accent));
+  }
+}
+
+/* ---------- Motion ---------- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+@keyframes drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- Wide screens: panel moves to the top left ---------- */
+
+@media (min-width: 900px), (orientation: landscape) and (min-width: 560px) {
+  :root {
+    --gutter: 16px;
+    /* The side column: panel, banner, bar. ui/layout.ts mirrors it as sideWidth(). */
+    --side-w: min(400px, max(320px, 48vw));
+    /* Where the map beside the column begins. */
+    --side-end: calc(var(--gutter) + var(--safe-left) + var(--side-w));
+  }
+
+  .panel {
+    top: calc(var(--gutter) + var(--safe-top));
+    bottom: auto;
+    right: auto;
+    width: var(--side-w);
+    max-height: calc(100dvh - 2 * var(--gutter) - var(--safe-top) - var(--safe-bottom));
+    flex-direction: column-reverse;
+  }
+
+  /* Every card scrolls inside the screen, also a phone held sideways; under the search bar
+     when there is one. */
+  .panel .card {
+    max-height: calc(100dvh - 2 * var(--gutter) - var(--safe-top) - var(--safe-bottom) - 74px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* The route card replaces the search bar: all the height is the trip's. */
+  .panel .card.route {
+    max-height: calc(100dvh - 2 * var(--gutter) - var(--safe-top) - var(--safe-bottom));
+  }
+
+  .controls {
+    bottom: calc(var(--gutter) + var(--safe-bottom) + 44px);
+  }
+
+  .search {
+    flex-direction: column-reverse;
+  }
+
+  .credit,
+  .ui[data-nav] .credit {
+    top: auto;
+    left: auto;
+    bottom: calc(var(--gutter) + var(--safe-bottom));
+    right: calc(var(--gutter) + var(--safe-right));
+  }
+
+  .nav-banner,
+  .nav-bar,
+  .ride-top {
+    right: auto;
+    width: var(--side-w);
+  }
+
+  /* Notes on the map beside the column, at its top; free while guiding too. */
+  .notes,
+  .ui[data-nav] .notes {
+    top: calc(var(--gutter) + var(--safe-top));
+    bottom: auto;
+    left: calc(var(--side-end) + var(--gutter));
+    right: calc(var(--gutter) + var(--safe-right));
+    align-items: center;
+    text-align: center;
+  }
+
+  /* While guiding, the map beside the column is the road: Re-center under its middle, the
+     speed in the corner above the credit. */
+  .recenter {
+    left: calc(50% + var(--side-end) / 2);
+    bottom: calc(var(--gutter) + var(--safe-bottom) + 44px);
+  }
+
+  /* The bar is below it in the column; Re-centre is beside it on the map. */
+  .ride-top {
+    max-height: calc(100% - 120px - var(--safe-top) - var(--safe-bottom));
+  }
+
+  .speed {
+    left: auto;
+    right: calc(var(--gutter) + var(--safe-right));
+    bottom: calc(var(--gutter) + var(--safe-bottom) + 40px);
+  }
+}

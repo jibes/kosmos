@@ -447,7 +447,8 @@ export function App() {
     beginVoice(trip.mode);
     if (trip.mode === 'transit') {
       // The connection stays as planned, from wherever it starts; the map follows the dot.
-      start();
+      // In the app, location comes from its service, which asks for it (see `background`).
+      if (!isNative) start();
       void compass.start();
       setNavigating(true);
       setFollow('position');
@@ -462,7 +463,7 @@ export function App() {
       });
       return;
     }
-    start();
+    if (!isNative) start();
     void compass.start();
     if (trip.from) setTrip({ ...trip, from: null });
     setNavigating(true);
@@ -490,13 +491,18 @@ export function App() {
   }, [map, voice]);
   useEffect(() => {
     if (!navigating) return;
-    background(true);
+    background(true, () =>
+      showToast(
+        t.needPrecise,
+        openAppSettings ? [{ label: t.settings, run: openAppSettings }] : undefined,
+      ),
+    );
     const release = keepAwake();
     return () => {
       release();
       background(false);
     };
-  }, [navigating, background]);
+  }, [navigating, background, showToast]);
 
   const locate = () => {
     if (status === 'denied') {

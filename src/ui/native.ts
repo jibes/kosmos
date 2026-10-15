@@ -44,12 +44,18 @@ export async function copy(text: string): Promise<void> {
 const Kosmos = isNative
   ? registerPlugin<{
       openSettings(): Promise<void>;
+      duck(o: { on: boolean }): Promise<void>;
       log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
     }>('Kosmos')
   : null;
 
 /** The app's page in the system settings (Android), where location can be allowed again. */
-export const openAppSettings = Kosmos ? () => void Kosmos.openSettings() : null;
+export const openAppSettings = Kosmos
+  ? () => void Kosmos.openSettings().catch(() => undefined)
+  : null;
+
+/** Android: other audio ducks while `on` (a prompt speaks), and comes back after. */
+export const duckAudio = (on: boolean) => void Kosmos?.duck({ on }).catch(() => undefined);
 
 /**
  * Android: a line in the system log under the app's own tag. Release builds forward nothing else
@@ -88,7 +94,8 @@ export interface NativeFix {
 type Grant = 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale';
 
 interface NavLocationPlugin {
-  start(o: { title: string; text: string }): Promise<void>;
+  /** `approximate`: running, but on approximate location only (kilometres off, rare). */
+  start(o: { title: string; text: string }): Promise<{ approximate?: boolean } | undefined>;
   stop(): Promise<void>;
   checkPermissions(): Promise<{ location: Grant; coarseLocation: Grant; notifications: Grant }>;
   addListener(event: 'location', fn: (fix: NativeFix) => void): Promise<PluginListenerHandle>;

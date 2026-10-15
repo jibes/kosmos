@@ -1,0 +1,409 @@
+/* ---------- Route card ---------- */
+
+.card.route {
+  max-height: min(72dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.card.route header {
+  align-items: center;
+}
+
+.modes {
+  flex: 1;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--hover);
+}
+
+.modes button {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border-radius: 11px;
+  color: var(--muted);
+  transition:
+    background 0.2s var(--ease),
+    color 0.2s;
+}
+
+/* The track's padding is part of each button's target: 46 px. */
+.modes button::after {
+  content: '';
+  position: absolute;
+  inset: -3px -2px;
+}
+
+.modes button[aria-checked='true'] {
+  background: var(--raised);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+.ends {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 14px 0 0;
+  font-size: 14px;
+}
+
+.ends dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ends dd {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+}
+
+/* From and To look like fields: a tap changes them. */
+.end-btn {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--hover);
+  text-align: left;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s;
+}
+
+.summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 12px;
+}
+
+.summary strong {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary span {
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-msg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.route-msg[data-status='loading'],
+.route-msg[data-status='locating'] {
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+.route-msg button,
+.depart button {
+  min-height: 44px;
+  padding: 0 8px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.route-msg[data-status='none'] {
+  flex-wrap: wrap;
+}
+
+/* The other ways, named: the switch above has the same icons, so these say what they do. */
+.route-try {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-basis: 100%;
+}
+
+.route-try button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 14px 0 12px;
+  border-radius: 12px;
+  background: var(--hover);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.alts {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  /* Room for the focus ring, which the scroller would clip. */
+  padding: 4px;
+  margin-inline: -4px;
+  overflow-x: auto;
+}
+
+.alts button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 7px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.alts button small {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.alts button[aria-checked='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---------- Public transport ---------- */
+
+.depart {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.depart label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.depart input {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.legs {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border-top: 0.5px solid var(--line);
+  font-size: 14px;
+}
+
+.legs li {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.legs .walk {
+  align-items: center;
+  color: var(--muted);
+}
+
+.legs .walk svg {
+  justify-self: center;
+}
+
+/* A line: its number in its own colour, with the vehicle; ink when the timetable has none. */
+.line {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  padding: 2px 7px 2px 5px;
+  border-radius: 7px;
+  background: var(--text);
+  color: var(--surface-solid);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.line svg {
+  flex: none;
+  stroke-width: 2.2;
+}
+
+.legs .line {
+  justify-self: start;
+}
+
+/* The rides of a connection on its tile. */
+.chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 5px 0 3px;
+  font-weight: 700;
+}
+
+.alts button[aria-checked='true'] .line {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.legs p {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.legs p small,
+.legs .via {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legs .via {
+  display: block;
+  margin: 3px 0 3px calc(var(--clock) + 8px);
+}
+
+.legs .walk .via {
+  margin: 0;
+  font-size: inherit;
+}
+
+/* Wide enough for "10:07 PM" as well as "22:07", so stop names line up. */
+.legs .ride {
+  --clock: 68px;
+}
+
+.legs time {
+  flex: none;
+  min-width: var(--clock);
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.legs time[data-late] {
+  color: var(--late);
+}
+
+.legs [data-cancelled] {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.steps {
+  margin-top: 12px;
+  border-top: 0.5px solid var(--line);
+}
+
+.steps summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding-top: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+}
+
+.steps summary::-webkit-details-marker {
+  display: none;
+}
+
+/* One caret for everything that opens: the steps, the hours, the legs of a trip. */
+.steps summary::after,
+.hours summary::after {
+  content: ' ▾' / '';
+  margin-left: 4px;
+  color: var(--muted);
+}
+
+.steps[open] summary::after,
+.hours[open] summary::after {
+  content: ' ▴' / '';
+}
+
+.steps summary small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.steps ol {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.steps li {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: start;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: 14px;
+  border-bottom: 0.5px solid var(--line);
+}
+
+.steps li svg {
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.steps li small {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.start-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface-solid);
+  border: 4px solid var(--text);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+}

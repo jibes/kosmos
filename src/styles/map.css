@@ -1,0 +1,571 @@
+/* ---------- Place card ---------- */
+
+/* Hours and contacts: one quiet line each, the week one tap away. */
+.place-details {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.hours summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.hours summary::-webkit-details-marker {
+  display: none;
+}
+
+.hours summary::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.hours summary[data-open='true']::before {
+  background: #2f9e44;
+}
+
+.hours summary[data-open='false']::before {
+  background: var(--danger);
+}
+
+.hours ul {
+  margin: 6px 0 2px 14px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.hours li[data-today] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+}
+
+.contacts a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.card {
+  padding: 18px 18px 16px;
+  border-radius: var(--radius);
+  animation: rise 0.36s var(--ease);
+}
+
+/* A place with hours, phone and website still leaves the map in view. */
+.card:not(.route) {
+  max-height: min(70dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.card header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.card-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.card-title p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  min-height: 1.4em;
+}
+
+.shimmer {
+  width: 60%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--hover) 0%, var(--line) 50%, var(--hover) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.coords {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 2px 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+
+.coords:hover {
+  color: var(--text);
+}
+
+/* Route, Share and Start stay in reach however far the card scrolls (the hours opened, the
+   steps of a long route); the card's text fades out under them. */
+.actions {
+  position: sticky;
+  bottom: -16px;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  margin: 2px -18px 0;
+  padding: 12px 18px 16px;
+  background: linear-gradient(transparent, var(--surface) 12px);
+}
+
+/* Last in the place card: its own bottom padding stands in for the card's. */
+.card:not(.route) .actions {
+  margin-bottom: -16px;
+}
+
+.action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  border-radius: 14px;
+  font-weight: 500;
+  font-size: 15px;
+  text-decoration: none;
+  background: var(--hover);
+  transition:
+    transform 0.15s var(--ease),
+    filter 0.15s;
+}
+
+.action:active {
+  transform: scale(0.97);
+}
+
+.action.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.action.primary:hover {
+  filter: brightness(1.06);
+}
+
+/* ---------- Controls ---------- */
+
+.controls {
+  position: absolute;
+  /* Above the panel, within the thumb's reach; the panel's height comes from App. */
+  bottom: min(
+    calc(var(--gutter) + var(--safe-bottom) + var(--panel-h, 64px) + 12px),
+    calc(100dvh - var(--safe-top) - 130px)
+  );
+  right: calc(var(--gutter) + var(--safe-right));
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  transition: bottom 0.25s var(--ease);
+}
+
+/* Typing: the result list has the room, the map buttons step aside (a small phone with the
+   keyboard up would put them over the results). */
+.ui:has(.search[data-open]:not([hidden])) .controls {
+  visibility: hidden;
+}
+
+.ctl {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: var(--text);
+  transition:
+    opacity 0.3s var(--ease),
+    transform 0.3s var(--spring),
+    color 0.2s;
+}
+
+.ctl:active {
+  transform: scale(0.92);
+}
+
+.ctl[data-following] {
+  color: var(--accent);
+}
+
+.ctl[data-state='seeking'] svg {
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+.ctl[data-state='denied'],
+.ctl[data-state='unavailable'] {
+  color: var(--muted);
+}
+
+.compass span {
+  display: grid;
+  transition: transform 0.1s linear;
+}
+
+.compass[data-hidden] {
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------- Credit ---------- */
+
+.credit {
+  position: absolute;
+  top: calc(var(--gutter) + var(--safe-top) + 4px);
+  left: calc(var(--gutter) + var(--safe-left));
+  padding: 4px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.credit:hover {
+  color: var(--text);
+}
+
+/* ---------- Markers ---------- */
+
+.pin {
+  width: 30px;
+  height: 40px;
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+}
+
+.pin-dot {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--accent);
+  box-shadow:
+    0 0 0 3px var(--surface-solid),
+    0 6px 14px rgb(0 0 0 / 0.25);
+  animation: drop 0.5s var(--spring) both;
+}
+
+.pin-dot::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--surface-solid);
+}
+
+.pin-shadow {
+  align-self: end;
+  width: 10px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.25);
+  filter: blur(1px);
+  animation: fade 0.5s var(--ease) both;
+}
+
+@keyframes drop {
+  from {
+    transform: translateY(-24px) rotate(-45deg) scale(0.6);
+    opacity: 0;
+  }
+}
+
+.me {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+}
+
+/* Every layer is centred on the marker's centre, which is the location. (A grid here let the
+   accuracy ring grow the cell and pushed the dot off the location by the ring's radius.) */
+.me > * {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+}
+
+/* The compass beam: a soft cone from the dot towards where the phone points. */
+.me-beam {
+  top: auto;
+  bottom: 50%;
+  width: 84px;
+  height: 72px;
+  translate: -50% 0;
+  clip-path: polygon(50% 100%, 8% 0, 92% 0);
+  background: radial-gradient(
+    120% 100% at 50% 100%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 18%, transparent) 55%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+
+.me.facing .me-beam {
+  opacity: 1;
+}
+
+.me.nav .me-beam {
+  display: none;
+}
+
+.me-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow:
+    0 0 0 3px #fff,
+    0 2px 8px rgb(0 0 0 / 0.3);
+}
+
+.me-ring {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  transition:
+    width 0.3s var(--ease),
+    height 0.3s var(--ease),
+    opacity 0.3s;
+}
+
+.me-dot::after {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 2.4s var(--ease) infinite;
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+/* ---------- About ---------- */
+
+.about {
+  width: min(420px, calc(100vw - 2 * var(--gutter)));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border-radius: 28px;
+  color: var(--text);
+  overflow: auto;
+}
+
+.about[open] {
+  animation: pop 0.32s var(--ease);
+}
+
+.about::backdrop {
+  background: rgb(0 0 0 / 0.25);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  animation: fade 0.3s var(--ease);
+}
+
+.about-body {
+  position: relative;
+  padding: 32px 28px 24px;
+  text-align: center;
+}
+
+.about .close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.about svg {
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.about h2 {
+  margin: 16px 0 2px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.about h2 span {
+  color: var(--accent);
+}
+
+.tagline {
+  margin: 0 0 22px;
+  color: var(--muted);
+}
+
+.about dl {
+  margin: 0;
+  text-align: left;
+  font-size: 13.5px;
+}
+
+.about dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 16px;
+}
+
+.about dd {
+  margin: 4px 0 0;
+}
+
+.fine {
+  margin: 24px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.fine a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* ---------- Notes ---------- */
+
+/* Notes, the offline note and "Search this area" stack in one place: on phones just above the
+   panel, within the thumb's reach and clear of the map buttons, so none covers another or a
+   control. */
+.notes {
+  position: absolute;
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right) + 60px);
+  bottom: min(
+    calc(var(--gutter) + var(--safe-bottom) + var(--panel-h, 64px) + 12px),
+    calc(100dvh - var(--safe-top) - 160px)
+  );
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+  transition: bottom 0.25s var(--ease);
+}
+
+.toasts {
+  display: flex;
+  flex-direction: column;
+  align-items: inherit;
+  gap: 8px;
+  max-width: 100%;
+}
+
+/* A note to read lets taps through to the map; one with a choice takes them. */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 100%;
+  padding: 10px 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 500;
+  text-wrap: balance;
+  animation: drop-in 0.32s var(--ease);
+}
+
+.toast:has(button),
+.search-here {
+  pointer-events: auto;
+}
+
+.toast button {
+  position: relative;
+  flex: none;
+  min-height: 36px;
+  padding: 0 4px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* The button keeps the note slim; its hit area reaches 44 px. */
+.toast button::after {
+  content: '';
+  position: absolute;
+  inset: -4px -6px;
+}
+
+/* While guiding, the top belongs to the next turn: notes sit above the speed, the bar and
+   Re-center, across the width. */
+.ui[data-nav] .notes {
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 184px);
+  align-items: center;
+  text-align: center;
+}
+
+.offline {
+  padding: 9px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  animation: drop-in 0.3s var(--ease);
+}

@@ -1,0 +1,457 @@
+/* ---------- Navigation ---------- */
+
+.nav-banner {
+  position: absolute;
+  flex-wrap: wrap;
+  top: calc(var(--gutter) + var(--safe-top));
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right));
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: var(--shadow);
+  animation: drop-in 0.32s var(--ease);
+}
+
+.nav-banner[data-state='rerouting'] {
+  background: var(--surface-solid);
+  color: var(--text);
+}
+
+.nav-banner svg {
+  flex: none;
+}
+
+.nav-banner div {
+  min-width: 0;
+}
+
+/* The instruction takes the row beside the arrow; lanes wrap below both. */
+.nav-banner > div:first-of-type {
+  flex: 1 1 0;
+}
+
+.nav-banner strong {
+  display: block;
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Public transport on the way: the banner, and under it, when tapped, the whole trip. */
+.ride-top {
+  position: absolute;
+  top: calc(var(--gutter) + var(--safe-top));
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Clear of Re-centre below it. */
+  max-height: calc(100% - 196px - var(--safe-top) - var(--safe-bottom));
+}
+
+/* In the column, not placed on the screen: relative only anchors the tap target, so the
+   standalone banner's offsets must not shift it over the trip below. */
+.ride-top .nav-banner {
+  position: relative;
+  inset: auto;
+  width: auto;
+  flex: none;
+  cursor: pointer;
+}
+
+/* Covers the banner: a tap anywhere on it opens the trip. */
+.ride-toggle {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.ride-new {
+  position: relative;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ride-details {
+  overflow-y: auto;
+  /* Solid: the route line under it must not run through the stop names. */
+  background: var(--surface-solid);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  padding: 4px 16px 8px;
+  border-radius: var(--radius);
+  animation: drop-in 0.25s var(--ease);
+}
+
+.ride-details .legs {
+  margin-top: 0;
+  border-top: 0;
+}
+
+.legs [data-current] {
+  margin: 0 -10px;
+  padding-left: 10px;
+  padding-right: 10px;
+  border-radius: 12px;
+  background: var(--hover);
+}
+
+.legs [data-done],
+.stops [data-passed] {
+  color: var(--muted);
+}
+
+button.via {
+  position: relative;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* A small line of text, a thumb-sized target. */
+button.via::before {
+  content: '';
+  position: absolute;
+  inset: -12px -6px;
+}
+
+/* The arrow is decoration: no part of the button's name. */
+button.via::after {
+  content: ' ▾' / '';
+}
+
+button.via[aria-expanded='true']::after {
+  content: ' ▴' / '';
+}
+
+.stops {
+  margin: 2px 0 6px calc(var(--clock, 0px) + 8px);
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.stops li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.stops time {
+  flex: none;
+  min-width: var(--clock, 0px);
+  font-variant-numeric: tabular-nums;
+}
+
+.legs .walk .stops {
+  margin-left: 0;
+}
+
+.stops.turns li {
+  align-items: center;
+}
+
+.stops.turns small {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Public transport on the way: the line chip in place of the turn arrow. */
+.nav-banner .line {
+  flex: none;
+  justify-content: center;
+  gap: 5px;
+  min-width: 48px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 18px;
+}
+
+/* Without a line colour the chip reads in the banner's own colours. */
+.nav-banner .line:not([style]) {
+  background: var(--accent-text);
+  color: var(--accent);
+}
+
+.nav-banner small {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  opacity: 0.92;
+}
+
+.ride-new {
+  flex-basis: 100%;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+/* Lanes into the next maneuver: a hint while far, the main thing once close. */
+.nav-lanes {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 0 -8px -6px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.16);
+  animation: rise 0.25s var(--ease);
+}
+
+.nav-lanes span {
+  display: grid;
+  place-items: center;
+  padding: 2px 6px;
+}
+
+.nav-lanes span + span {
+  border-left: 1.5px dashed currentColor;
+  border-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+
+.nav-lanes[data-size='big'] {
+  padding: 10px 8px;
+}
+
+.nav-lanes[data-size='big'] span {
+  padding: 4px 12px;
+}
+
+.nav-lanes .off {
+  opacity: 0.55;
+}
+
+.nav-lanes [data-use='no'] {
+  opacity: 0.6;
+}
+
+.nav-lanes [data-use='best'] svg {
+  stroke-width: 2.4;
+}
+
+.nav-banner p {
+  margin: 2px 0 0;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  /* Read at a glance: two lines at most. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.nav-banner .nav-then {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+.nav-then span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-bar {
+  position: absolute;
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--gutter) + var(--safe-bottom));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 20px;
+  border-radius: var(--radius);
+  animation: rise 0.36s var(--ease);
+}
+
+.nav-eta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-eta strong {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-eta span {
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One line each, whatever the language: the bar keeps its height. */
+.nav-eta > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-btn.big {
+  width: 48px;
+  height: 48px;
+  color: var(--text);
+}
+
+.icon-btn[aria-pressed='true'] {
+  color: var(--muted);
+}
+
+/* Quiet until armed: red is for the second tap, not the loudest thing on screen. */
+.nav-end {
+  min-width: 92px;
+  height: 48px;
+  margin-left: 6px;
+  padding: 0 20px;
+  border-radius: 14px;
+  background: var(--hover-strong);
+  color: var(--text);
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.nav-end[data-state='armed'] {
+  background: var(--danger);
+  color: var(--on-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.nav-end[data-state='done'] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Focus on the blue banner: a ring in the banner's own text colour, not blue on blue. */
+.nav-banner :focus-visible {
+  outline-color: var(--accent-text);
+}
+
+/* The sticky Start must not hide what the keyboard moved to. */
+.card.route {
+  scroll-padding-bottom: 80px;
+}
+
+.speed {
+  position: absolute;
+  left: calc(var(--gutter) + var(--safe-left));
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 92px);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  line-height: 1;
+  animation: rise 0.3s var(--ease);
+}
+
+.speed strong {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.speed small {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* Above the credit and the speed, not beside them: a 360 px phone has no room for both. */
+.recenter {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 128px);
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  color: var(--accent);
+  font-weight: 600;
+  animation: rise 0.28s var(--ease);
+}
+
+.ui[data-nav] .credit {
+  top: auto;
+  left: auto;
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 92px);
+}
+
+/* The user's dot becomes an arrow along the route. */
+.me.nav .me-ring,
+.me.nav .me-dot::after {
+  display: none;
+}
+
+.me.nav .me-dot {
+  width: 30px;
+  height: 34px;
+  border-radius: 0;
+  box-shadow: none;
+  clip-path: polygon(50% 0, 100% 100%, 50% 76%, 0 100%);
+}
+
+/* clip-path would cut a shadow on the arrow itself, so the marker casts it. */
+.me.nav {
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.35));
+}
+
+.quiet-link {
+  display: block;
+  margin-top: 0;
+  padding: 13px 0 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.quiet-link:hover {
+  color: var(--text);
+}
+
+.bar-cancel {
+  flex: none;
+  padding: 0 12px;
+  height: 36px;
+  border-radius: 18px;
+  color: var(--accent);
+  font-weight: 600;
+}

@@ -176,6 +176,7 @@ export const de = {
   startHere: 'Start hier',
   goHere: 'Ziel hier',
   tryOther: 'Anders versuchen',
+  needPrecise: 'Die Navigation braucht deinen genauen Standort: erlaube ihn in den Einstellungen',
   settings: 'Einstellungen',
   noAddress: 'Keine Adresse hier',
   veh_bus: 'Bus',

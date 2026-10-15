@@ -1,9 +1,11 @@
+import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Theme } from '../core/palette';
 import { inTunnel, isNight, TUNNEL_HOLD_MS } from '../core/daylight';
 import type { Snap } from '../core/nav';
 import { MAP_SOURCE } from '../core/style';
+import { isNative } from './native';
 
 type Pt = [number, number];
 
@@ -86,6 +88,17 @@ const STATUS_BAR = { light: '#f5f3ef', dark: '#121417' } as const;
 /** The phone's status bar follows the navigation theme too, not only the system's. */
 export function useStatusBar(navTheme: Theme | null) {
   useEffect(() => {
+    // The app: its icons, light on the dark map and dark on the light one. The WebView ignores
+    // the theme-color below.
+    if (isNative) {
+      const style =
+        navTheme === 'dark'
+          ? SystemBarsStyle.Dark
+          : navTheme === 'light'
+            ? SystemBarsStyle.Light
+            : SystemBarsStyle.Default;
+      void SystemBars.setStyle({ style }).catch(() => undefined);
+    }
     for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
       meta.dataset.system ??= meta.content;
       meta.content = navTheme ? STATUS_BAR[navTheme] : meta.dataset.system;

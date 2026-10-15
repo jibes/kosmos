@@ -175,6 +175,7 @@ export const en = {
   goHere: 'Go here',
   tryOther: 'Try another way',
   settings: 'Settings',
+  needPrecise: 'Guidance needs your precise location: allow it in the settings',
   noAddress: 'No address here',
   veh_bus: 'bus',
   veh_tram: 'tram',
