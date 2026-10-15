@@ -10,7 +10,7 @@ import {
   type Fix,
   type NavState,
 } from '../src/core/nav';
-import type { Route } from '../src/core/route';
+import type { Mode, Route } from '../src/core/route';
 
 const O = { lng: 13.4, lat: 52.5 };
 /** A point `east`/`north` metres from O. */
@@ -200,5 +200,166 @@ describe('guidance', () => {
     // ... down to a crawl hands it to the compass.
     drive(0.5, 30);
     expect(st.moving).toBe(false);
+  });
+});
+
+/** A route along the given points (metres from O), one maneuver at each corner. */
+function routeThrough(points: [number, number][], kinds: { type: number; text: string }[]): Route {
+  const coords = points.map(([e, n]) => m(e, n));
+  let along = 0;
+  const lengths = points.slice(1).map(([e, n], i) => {
+    const d = Math.hypot(e - points[i][0], n - points[i][1]);
+    along += d;
+    return d;
+  });
+  return {
+    coords,
+    distance: along,
+    duration: along / 10,
+    bbox: [0, 0, 0, 0],
+    maneuvers: kinds.map((k, i) => ({
+      type: k.type,
+      instruction: k.text,
+      pre: k.text,
+      alert: i > 0 && i < kinds.length - 1 ? k.text : undefined,
+      distance: lengths[i] ?? 0,
+      duration: (lengths[i] ?? 0) / 10,
+      begin: i,
+    })),
+  };
+}
+
+/** Feeds fixes one second apart, speaking prompts; returns what was said and the states. */
+function replay(r: Route, fixes: [number, number][], speed: number | null, mode: Mode = 'car') {
+  const t = track(r);
+  let st = initialNav();
+  const said: string[] = [];
+  const states: NavState[] = [];
+  fixes.forEach((p, i) => {
+    st = step(t, st, { ...fixAt(p, i * 1000, speed ?? undefined), speed });
+    const pr = prompt(t, st, mode);
+    if (pr) {
+      said.push(pr.distance ? `${Math.round(pr.distance)}|${pr.text}` : pr.text);
+      st = markSpoken(st, pr.key);
+    }
+    states.push(st);
+  });
+  return { said, states };
+}
+
+describe('arrival', () => {
+  const r = routeThrough(
+    [
+      [0, 0],
+      [0, 2000],
+    ],
+    [
+      { type: 1, text: 'Head north.' },
+      { type: 4, text: 'You have arrived.' },
+    ],
+  );
+
+  it('is said on arriving, not on the way there', () => {
+    const fixes: [number, number][] = [];
+    for (let d = 0; d <= 2000; d += 25) fixes.push(m(0, d));
+    const { said, states } = replay(r, fixes, 25);
+    expect(said).toEqual(['You have arrived.']);
+    const at = states.findIndex((s) => s.arrived);
+    expect(2000 - states[at].snap!.along).toBeLessThan(25);
+  });
+
+  it('stays arrived when the fix wanders off at the door', () => {
+    const fixes: [number, number][] = [
+      m(0, 1950),
+      m(0, 1990),
+      m(0, 2000),
+      m(80, 1990),
+      m(90, 1950),
+    ];
+    const { states } = replay(r, fixes, 2);
+    expect(states.at(-1)!.arrived).toBe(true);
+    expect(states.at(-1)!.offRoute).toBe(false);
+  });
+});
+
+describe('a route that crosses itself', () => {
+  // North 500, east 200, south 300, west 400: the last leg crosses the first at 200 m.
+  const r = routeThrough(
+    [
+      [0, 0],
+      [0, 500],
+      [200, 500],
+      [200, 200],
+      [-200, 200],
+    ],
+    [
+      { type: 1, text: 'Head north.' },
+      { type: 10, text: 'Turn right.' },
+      { type: 10, text: 'Turn right again.' },
+      { type: 10, text: 'Turn right a third time.' },
+      { type: 4, text: 'You have arrived.' },
+    ],
+  );
+
+  it('does not jump to the later leg at the crossing', () => {
+    const fixes: [number, number][] = [];
+    for (let d = 0; d <= 500; d += 10) fixes.push(m(d === 200 ? 3 : 0, d));
+    const { states, said } = replay(r, fixes, 10);
+    const atCrossing = states[20];
+    expect(atCrossing.snap!.along).toBeCloseTo(200, -1);
+    expect(atCrossing.next).toBe(1);
+    expect(said.some((s) => s.includes('Turn right.'))).toBe(true);
+  });
+});
+
+describe('a U-turn onto the other carriageway', () => {
+  // North 1000 m, then back south 16 m to the east.
+  const r = routeThrough(
+    [
+      [0, 0],
+      [0, 1000],
+      [16, 1000],
+      [16, 0],
+    ],
+    [
+      { type: 1, text: 'Head north.' },
+      { type: 12, text: 'Make a U-turn.' },
+      { type: 15, text: 'Continue.' },
+      { type: 4, text: 'You have arrived.' },
+    ],
+  );
+
+  it('keeps to the carriageway being driven when a fix strays toward the other', () => {
+    const fixes: [number, number][] = [];
+    for (let d = 0; d <= 400; d += 10) fixes.push(m(d === 300 ? 9 : 0, d));
+    const { states } = replay(r, fixes, 10);
+    const s = states.at(-1)!;
+    expect(s.snap!.along).toBeCloseTo(400, -1);
+    expect(s.snap!.bearing).toBeCloseTo(0, 0);
+    expect(s.next).toBe(1);
+  });
+});
+
+describe('on a motorway', () => {
+  const r = routeThrough(
+    [
+      [0, 0],
+      [0, 5000],
+      [1000, 5000],
+    ],
+    [
+      { type: 1, text: 'Head north.' },
+      { type: 20, text: 'Take the exit.' },
+      { type: 4, text: 'You have arrived.' },
+    ],
+  );
+
+  it('still warns early at 160 km/h', () => {
+    const fixes: [number, number][] = [];
+    for (let d = 0; d <= 5000; d += 44) fixes.push(m(0, d));
+    const { said } = replay(r, fixes, 44);
+    const alert = said.find((s) => s.endsWith('|Take the exit.'));
+    expect(alert).toBeDefined();
+    expect(Number(alert!.split('|')[0])).toBeGreaterThan(600);
   });
 });

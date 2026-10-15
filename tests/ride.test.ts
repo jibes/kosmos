@@ -163,4 +163,58 @@ describe('ride', () => {
     const lost = replay([{ fix: at(m(500, 100), min(1)), time: min(1) }]).st;
     expect(lost.turn).toBeNull();
   });
+
+  it('stays on board a late train while the position says so', () => {
+    // Planned to arrive at 20; at 23 the rider is still 1.4 km short, on the line.
+    const { st, said } = replay([
+      { fix: at(s1, min(7)), time: min(7) },
+      { fix: at(m(1000, 402), min(15)), time: min(15) },
+      { fix: at(m(1600, 402), min(23)), time: min(23) },
+      { fix: at(m(2400, 402), min(26)), time: min(26) },
+    ]);
+    expect(st).toMatchObject({ leg: 1, phase: 'ride', stopsLeft: 1 });
+    expect(said).toEqual(['1:board', '1:next']);
+    expect(said).not.toContain('2:walk');
+  });
+
+  it('counts a departure as missed when the stop is reached after it', () => {
+    const { st } = replay([
+      { fix: at(start, min(0)), time: min(0) },
+      { fix: at(m(0, 250), min(7.9)), time: min(7.9) },
+      // The U6 left at 8; the rider gets to the platform at 10.
+      { fix: at(s1, min(10)), time: min(10) },
+    ]);
+    expect(st).toMatchObject({ leg: 0, phase: 'walk', missed: true });
+  });
+
+  it('counts a departure as missed when the rider is still near the stop', () => {
+    const { st } = replay([
+      { fix: at(start, min(0)), time: min(0) },
+      { fix: at(m(0, 250), min(8.6)), time: min(8.6) },
+    ]);
+    expect(st).toMatchObject({ leg: 0, missed: true });
+    expect(st.phase).toBe('walk');
+  });
+
+  it('rides a late vehicle once the position moves along its line', () => {
+    const { st } = replay([
+      { fix: at(start, min(0)), time: min(0) },
+      { fix: at(m(0, 395), min(9)), time: min(9) },
+      { fix: at(m(400, 401), min(11)), time: min(11) },
+    ]);
+    expect(st).toMatchObject({ leg: 1, phase: 'ride', missed: false });
+  });
+
+  it('does not send the rider to a cancelled trip', () => {
+    const cancelled: Transit = {
+      ...transit,
+      legs: transit.legs.map((l) => (l.ride ? { ...l, cancelled: true } : l)),
+    };
+    let st = initialRide(cancelled, min(6.5), at(m(0, 300), min(6.5)));
+    expect(st).toMatchObject({ phase: 'walk', cancelled: true });
+    expect(ridePrompt(cancelled, markRideSpoken(st, '0:walk'))).toBeNull();
+    st = rideStep(cancelled, st, at(s1, min(9)), min(9));
+    expect(st).toMatchObject({ phase: 'wait', cancelled: true });
+    expect(ridePrompt(cancelled, st)).toBeNull();
+  });
 });

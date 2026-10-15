@@ -154,7 +154,8 @@ export function RouteCard(props: Props) {
       ) : (
         <p className="route-msg" role="status" data-status={stuck ? 'stuck' : status}>
           {message}
-          {stuck && (
+          {/* Waiting for a position that may never come: a start can be chosen instead. */}
+          {status === 'locating' && (
             <button type="button" onClick={props.onChangeStart}>
               {t.chooseStart}
             </button>

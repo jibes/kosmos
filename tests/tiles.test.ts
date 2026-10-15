@@ -23,6 +23,26 @@ describe('tilesIn', () => {
     expect(t.every(({ x, y }) => Math.abs(x - 8801) <= 4 && Math.abs(y - 5373) <= 4)).toBe(true);
   });
 
+  it('looks only around the centre of a continent-wide view, at once', () => {
+    const europe = { west: -25, east: 45, south: 34, north: 71 };
+    const t0 = performance.now();
+    const t = tilesIn(europe, berlin);
+    expect(performance.now() - t0).toBeLessThan(50);
+    expect(t.length).toBe(48);
+    expect(t[0]).toEqual({ z: 14, x: 8801, y: 5373 });
+    // The whole globe, as a view with a pole in it reports.
+    const world = tilesIn({ west: -180, east: 180, south: -85, north: 85 }, berlin);
+    expect(world.length).toBe(48);
+  });
+
+  it('wraps around the antimeridian', () => {
+    const fiji = { lng: 179.999, lat: -17.8 };
+    const t = tilesIn({ west: 179.99, east: -179.99, south: -17.81, north: -17.79 }, fiji);
+    const xs = new Set(t.map((tile) => tile.x));
+    expect(xs.has(0)).toBe(true);
+    expect(xs.has(2 ** 14 - 1)).toBe(true);
+  });
+
   it('fills a URL template', () => {
     expect(tileUrl('https://t.example/a/{z}/{x}/{y}.pbf', { z: 14, x: 1, y: 2 })).toBe(
       'https://t.example/a/14/1/2.pbf',

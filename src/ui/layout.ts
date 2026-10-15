@@ -1,3 +1,6 @@
+import type * as maplibregl from 'maplibre-gl';
+import { navZoom } from '../core/nav';
+
 /** The side layout: wide screens, and phones held sideways (the same query as styles.css). */
 export const wide = () =>
   matchMedia('(min-width: 900px), (orientation: landscape) and (min-width: 560px)').matches;
@@ -26,3 +29,23 @@ export const routePadding = () => {
 
 /** A finger long-presses; a mouse right-clicks. */
 export const touch = () => matchMedia('(pointer: coarse)').matches;
+
+/** Where the navigation camera looks: the arrow's place and heading, and the speed for zoom. */
+export interface NavCamera {
+  center: [number, number];
+  bearing: number | null;
+  speed: number;
+}
+
+/** Behind the user, looking ahead; linear, so one fix's move runs into the next. */
+export function followNav(map: maplibregl.Map, v: NavCamera, duration: number) {
+  map.easeTo({
+    center: v.center,
+    bearing: v.bearing ?? map.getBearing(),
+    pitch: 55,
+    zoom: navZoom(v.speed),
+    padding: navPadding(),
+    duration,
+    easing: (x) => x,
+  });
+}

@@ -223,6 +223,29 @@ test.describe('map', () => {
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Brandenburg an der Havel');
   });
 
+  test('does not plan public transport again while the user moves', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 10 });
+    await go(CENTER.lng + 0.01, CENTER.lat + 0.01);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Public transport' }).click();
+    await expect(card.locator('.legs')).toBeVisible();
+    const asked = transitRequests.length;
+    for (let i = 1; i <= 8; i++) {
+      await go(CENTER.lng + 0.01 - i * 0.002, CENTER.lat + 0.01);
+      await page.waitForTimeout(150);
+    }
+    await page.waitForTimeout(500);
+    expect(transitRequests.length).toBe(asked);
+  });
+
   test('plans public transport, now or at a chosen time', async ({ page, context }, info) => {
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
@@ -253,7 +276,7 @@ test.describe('map', () => {
     await expect(tiles.first().locator('.line')).toHaveText('U6');
     await expect(tiles.first().locator('.line svg')).toHaveCount(1);
     await expect(tiles.nth(2).locator('.line')).toHaveCount(0);
-    await expect(card.getByRole('button', { name: 'Start' })).toBeEnabled();
+    await expect(card.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
     await expect(card.getByRole('link', { name: 'Timetables via Transitous' })).toBeVisible();
     expect(transitRequests.length).toBe(asked + 1);
     expect(transitRequests.at(-1)!.has('time')).toBe(false);
@@ -317,7 +340,7 @@ test.describe('map', () => {
     const card = page.locator('.card.route');
     await card.getByRole('radio', { name: 'Public transport' }).click();
     await expect(card.locator('.legs .line').first()).toHaveText('U6');
-    await card.getByRole('button', { name: 'Start' }).click();
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
 
     // The first connection: walk minutes 3–8, U6 8–20 with stops at 12 and 16, walk 20–25.
     // A departure check finds it three minutes late: 11–23, stops at 15 and 19.
@@ -404,7 +427,7 @@ test.describe('map', () => {
       .getByRole('button', { name: /^Route$/ })
       .click();
     await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
-    await page.getByRole('button', { name: 'Start' }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
 
     const banner = page.locator('.nav-banner');
     await expect(banner).toContainText('Head south on Friedrichstraße.');
@@ -442,9 +465,75 @@ test.describe('map', () => {
     await expect(banner).toContainText('You have arrived');
     await expect(page.locator('.speed')).toHaveCount(0);
 
+    // Done closes the trip: the destination's card is back, and no route is asked for from
+    // the destination to itself.
+    const asked = routeRequests.length;
     await page.getByRole('button', { name: 'Done' }).click();
     await expect(banner).toHaveCount(0);
-    await expect(page.locator('.card.route')).toBeVisible();
+    await expect(page.locator('.card.route')).toHaveCount(0);
+    await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    await page.waitForTimeout(500);
+    expect(routeRequests.length).toBe(asked);
+  });
+
+  test('keeps the camera on the user who leaves the route far behind', async ({
+    page,
+    context,
+  }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(page.locator('.nav-banner')).toContainText('Head south on Friedrichstraße.');
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) => route.abort());
+    // East, away from the route (which runs south), for 1.5 km.
+    for (let i = 1; i <= 15; i++) {
+      await go(from.lng + i * 0.0015, from.lat - 0.001);
+      await page.waitForTimeout(150);
+    }
+    await idle(page);
+    const where = await page.evaluate(() => {
+      const r = document.querySelector('.me')!.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2, w: innerWidth, h: innerHeight };
+    });
+    expect(where.x).toBeGreaterThan(0);
+    expect(where.x).toBeLessThan(where.w);
+    expect(where.y).toBeGreaterThan(0);
+    expect(where.y).toBeLessThan(where.h);
+  });
+
+  test('never leaves guidance without an End, also while its route is still coming', async ({
+    page,
+  }) => {
+    // No location at all; the route starts at a place chosen instead.
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('button', { name: 'Choose start' }).click();
+    await page.getByRole('combobox').fill('brandenburg');
+    await page.getByRole('option').filter({ hasText: 'Havel' }).click();
+    await expect(card.locator('.summary strong')).toHaveText(/min|h/);
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    // Guidance starts from where the user is, which is not known: it says so, and End works.
+    const banner = page.locator('.nav-banner');
+    await expect(banner).toContainText(/Location is off|location is not available|Waiting/);
+    await page.getByRole('button', { name: 'End' }).click();
+    await page.getByRole('button', { name: 'Tap again to end navigation' }).click();
+    await expect(banner).toHaveCount(0);
+    await expect(card).toBeVisible();
   });
 
   test('follows the sun while navigating: light by day on a dark system, dark in a tunnel', async ({
@@ -475,7 +564,7 @@ test.describe('map', () => {
       .locator('.card')
       .getByRole('button', { name: /^Route$/ })
       .click();
-    await page.getByRole('button', { name: 'Start' }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     for (const f of [0.5, 1]) {
       await go({ lng: from.lng, lat: from.lat + (to.lat - from.lat) * f });
       await page.waitForTimeout(250);
@@ -495,7 +584,7 @@ test.describe('map', () => {
     // End next to Mute asks for a second tap.
     await page.getByRole('button', { name: 'End' }).click();
     await expect(page.locator('.nav-banner')).toHaveCount(1);
-    await page.getByRole('button', { name: 'Tap to end' }).click();
+    await page.getByRole('button', { name: 'Tap again to end navigation' }).click();
     await expect.poll(theme).toBe('dark');
   });
 
@@ -523,7 +612,7 @@ test.describe('map', () => {
       .getByRole('button', { name: /^Route$/ })
       .click();
     await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
-    await page.getByRole('button', { name: 'Start' }).click();
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
     const banner = page.locator('.nav-banner');
     await expect(banner).toContainText('Head south on Friedrichstraße.');
 
@@ -549,6 +638,24 @@ test.describe('map', () => {
     await expect(banner).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(banner).toHaveCount(0);
+  });
+
+  test('never shows the places of a category as answers to a name', async ({ page, context }) => {
+    await context.route(/photon\.komoot\.io\/api\//, async (route) => {
+      await new Promise((r) => setTimeout(r, 2000));
+      await route.fallback();
+    });
+    await jump(page, { ...CENTER, zoom: 14 });
+    const input = page.getByRole('combobox');
+    await input.fill('restaurant');
+    await input.press('Enter');
+    await expect(page.getByRole('option').first()).toContainText('Zur Letzten Instanz');
+    await input.fill('brandenburger');
+    await page.waitForTimeout(300);
+    await expect(page.getByRole('option').filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name);
   });
 
   test('finds places by category from the map, nearest first', async ({ page }, info) => {
@@ -1006,6 +1113,34 @@ test.describe('map', () => {
     await page.getByRole('button', { name: /north|Norden/ }).click();
     await expect(locate).toHaveAttribute('data-follow', 'position');
     await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getBearing()))).toBe(0);
+
+    // A drag while the compass turns the map every frame still pans, and leaves compass mode
+    // (a turn once cancelled every gesture the moment it began).
+    await locate.click();
+    await expect(locate).toHaveAttribute('data-follow', 'compass');
+    await page.evaluate(() => {
+      let alpha = 0;
+      (window as unknown as { spin: number }).spin = window.setInterval(() => {
+        alpha = (alpha + 1) % 360;
+        for (const type of ['deviceorientationabsolute', 'deviceorientation']) {
+          window.dispatchEvent(
+            new DeviceOrientationEvent(type, { alpha, beta: 0, gamma: 0, absolute: true }),
+          );
+        }
+      }, 16);
+    });
+    const box = (await page.locator('canvas.maplibregl-canvas').boundingBox())!;
+    const y = box.y + box.height * 0.4;
+    await page.mouse.move(box.x + box.width * 0.3, y);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    for (let i = 1; i <= 10; i++) {
+      await page.mouse.move(box.x + box.width * 0.3 + i * 15, y);
+      await page.waitForTimeout(30);
+    }
+    await page.mouse.up();
+    await page.evaluate(() => clearInterval((window as unknown as { spin: number }).spin));
+    await expect(locate).toHaveAttribute('data-follow', 'off');
   });
 
   test('drops a pin and looks up the address', async ({ page }) => {

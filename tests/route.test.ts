@@ -186,6 +186,31 @@ describe('spokenDistance', () => {
 });
 
 describe('units', () => {
+  it('reads lengths in the unit the router answered in', () => {
+    const trip = (units: string) => ({
+      trip: {
+        units,
+        legs: [
+          {
+            shape: encodePolyline([
+              [13.4, 52.5],
+              [13.5, 52.5],
+            ]),
+            maneuvers: [
+              { type: 1, instruction: 'Go.', length: 4.3, time: 300, begin_shape_index: 0 },
+            ],
+          },
+        ],
+        summary: { length: 4.3, time: 300 },
+      },
+    });
+    const [mi] = parseValhalla(trip('miles'));
+    expect(mi.distance).toBeCloseTo(4.3 * 1609.344, 3);
+    expect(mi.maneuvers[0].distance).toBeCloseTo(4.3 * 1609.344, 3);
+    const [km] = parseValhalla(trip('kilometers'));
+    expect(km.distance).toBeCloseTo(4300, 3);
+  });
+
   it('follows the region of the locale', () => {
     expect(unitsFor('en-US')).toBe('us');
     expect(unitsFor('en-GB')).toBe('uk');

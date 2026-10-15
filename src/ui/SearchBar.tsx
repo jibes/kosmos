@@ -88,8 +88,10 @@ export function SearchBar({
       ? response
       : null;
   const status: Status = q.length < 2 ? 'idle' : (current?.status ?? 'loading');
-  // While a new query loads, the previous results stay put instead of flickering away.
-  const results = current?.places ?? response?.places ?? [];
+  // While a new query loads, the previous names stay put instead of flickering away; places of
+  // a category are never shown as if they were answers to a name, nor names for a category.
+  const sameKind = !!response && response.key.startsWith('cat|') === key.startsWith('cat|');
+  const results = current?.places ?? (sameKind ? response.places : []);
   /** "museum", "Lebensm…": the kinds of place the text may mean, offered above the names. */
   const suggestions = category ? [] : categoriesFor(q);
   const items: Item[] = [

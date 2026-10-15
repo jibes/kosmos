@@ -59,25 +59,37 @@ export interface Snap {
 
 /**
  * Projects a fix onto the route. Searches forward from the last match first, so a route that
- * passes the same street twice is followed in order; falls back to the whole route.
+ * passes the same street twice is followed in order; falls back to the whole route. With
+ * `reach`, a match further along than that many metres is not believed while a nearer one
+ * fits: where the route crosses itself, or runs back on the other carriageway, a fix a few
+ * metres to the side must not skip the turns in between.
  */
-export function snap(tr: Track, fix: LngLat, hint = 0): Snap {
+export function snap(
+  tr: Track,
+  fix: LngLat,
+  hint = 0,
+  reach?: { from: number; ahead: number },
+): Snap {
   const p = project([fix.lng, fix.lat], tr.lat0);
   const best = { d: Infinity, seg: 0, f: 0 };
-  const scan = (from: number, to: number) => {
+  const scan = (from: number, to: number, limit = Infinity) => {
     for (let i = Math.max(0, from); i < Math.min(tr.xy.length - 1, to); i++) {
+      if (tr.along[i] > limit) break;
       const [ax, ay] = tr.xy[i];
       const [bx, by] = tr.xy[i + 1];
       const dx = bx - ax;
       const dy = by - ay;
       const len2 = dx * dx + dy * dy;
-      const f = len2 ? Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2)) : 0;
+      let f = len2 ? Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / len2)) : 0;
+      // Within reach only: the part of a long segment beyond it does not count.
+      const seg = tr.along[i + 1] - tr.along[i];
+      if (seg > 0 && tr.along[i] + f * seg > limit) f = (limit - tr.along[i]) / seg;
       const d = Math.hypot(p[0] - (ax + f * dx), p[1] - (ay + f * dy));
       if (d < best.d) Object.assign(best, { d, seg: i, f });
     }
   };
-  // Forward window of about a kilometre of shape points first.
-  scan(hint, hint + 200);
+  // Forward window of about a kilometre of shape points first, as far as one could have got.
+  scan(hint, hint + 200, reach ? reach.from + reach.ahead : Infinity);
   if (best.d > 50) scan(0, tr.xy.length);
   const [a, b] = [
     tr.route.coords[best.seg],
@@ -160,8 +172,24 @@ export const offRouteLimit = (accuracy: number) => Math.max(35, Math.min(accurac
 export const OFF_ROUTE_MS = 8_000;
 export const ARRIVE_M = 25;
 
+/**
+ * How far along the route a fix may be from the last one: what the fastest plausible travel
+ * since then covers, plus the GPS error. The first fix may be up to a stale start away (the
+ * route is reused within 150 m of where it was asked for).
+ */
+function reachOf(prev: NavState, fix: Fix): { from: number; ahead: number } {
+  const slack = 40 + fix.accuracy * 2;
+  if (!prev.snap) return { from: 0, ahead: 150 + slack };
+  const dt = Math.min(120, Math.max(1, (fix.time - prev.time) / 1000));
+  const fast = Math.max(prev.speed, fix.speed ?? 0, 15) * 1.5;
+  return { from: prev.snap.along, ahead: slack + fast * dt };
+}
+
 export function step(tr: Track, prev: NavState, fix: Fix): NavState {
-  const s = snap(tr, fix, prev.snap?.segment ?? 0);
+  // Once arrived, guidance has done its job; a GPS wobble at the door does not undo it.
+  if (prev.arrived && prev.snap)
+    return { ...prev, time: fix.time, offSince: null, offRoute: false };
+  const s = snap(tr, fix, prev.snap?.segment ?? 0, reachOf(prev, fix));
   // Never let a noisy fix move progress backwards by more than a few metres.
   const along =
     prev.snap && s.along < prev.snap.along - 30 && s.offset > 20 ? prev.snap.along : s.along;
@@ -224,8 +252,11 @@ export interface Prompt {
 /** A final instruction this far ahead (fast roads) still says how far. */
 const PRE_WITH_DISTANCE_M = 150;
 
-/** Distances at which a maneuver is announced, by travel mode. */
+/** Distances at which a maneuver is announced, by travel mode; further out when fast. */
 const ALERT_M: Record<Mode, number> = { car: 600, bike: 200, foot: 80 };
+/** On a motorway the early alert comes this long ahead, so it never falls inside the last one. */
+const ALERT_S = 30;
+const alertAt = (mode: Mode, speed: number) => Math.max(ALERT_M[mode], speed * ALERT_S);
 const PRE_S = 8; // seconds before the maneuver at current speed
 const PRE_MIN_M: Record<Mode, number> = { car: 60, bike: 25, foot: 12 };
 
@@ -244,8 +275,11 @@ export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
   }
   const m: Maneuver | undefined = ms[st.next];
   if (!m) return null;
+  // The destination's own words ("You have arrived") are for arriving, not for approaching.
+  const last = st.next === ms.length - 1;
   const preAt = Math.max(PRE_MIN_M[mode], st.speed * PRE_S);
-  if (st.toNext <= preAt && !said(`${st.next}:pre`)) {
+  const alertM = alertAt(mode, st.speed);
+  if (!last && st.toNext <= preAt && !said(`${st.next}:pre`)) {
     return {
       key: `${st.next}:pre`,
       text: m.pre ?? m.instruction,
@@ -253,8 +287,8 @@ export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
     };
   }
   if (
-    st.toNext <= ALERT_M[mode] &&
-    st.toNext > preAt * 1.8 &&
+    st.toNext <= alertM &&
+    (st.toNext > preAt * 1.8 || last) &&
     !said(`${st.next}:alert`) &&
     m.alert
   ) {
@@ -263,7 +297,7 @@ export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
   const done = ms[st.next - 1];
   const sinceDone = st.snap.along - tr.at[st.next - 1];
   // "Continue for …" only when no alert for the next maneuver is due, so the two never collide.
-  const alertDue = !!m.alert && st.toNext <= ALERT_M[mode];
+  const alertDue = !!m.alert && st.toNext <= alertM;
   const quiet = !alertDue && st.toNext > preAt * 2;
   if (done?.post && quiet && sinceDone > 15 && sinceDone < 150 && !said(`${st.next - 1}:post`)) {
     return { key: `${st.next - 1}:post`, text: done.post };

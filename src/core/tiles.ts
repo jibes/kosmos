@@ -28,18 +28,30 @@ const ty = (lat: number, n: number) => {
 
 /**
  * The tiles of zoom `z` over `b`, those nearest `center` first, at most `max`: a wide view reads
- * its middle rather than hundreds of tiles.
+ * its middle rather than hundreds of tiles. Only a window around the centre is ever looked at
+ * (a view of a continent spans millions of zoom-14 tiles), and a view across the antimeridian
+ * (west > east, or past ±180°) wraps around.
  */
 export function tilesIn(b: Bounds, center: LngLat, z = DETAIL_ZOOM, max = 48): TileId[] {
   const n = 2 ** z;
-  const clamp = (v: number) => Math.max(0, Math.min(n - 1, Math.floor(v)));
-  const [x0, x1] = [clamp(tx(b.west, n)), clamp(tx(b.east, n))];
-  const [y0, y1] = [clamp(ty(b.north, n)), clamp(ty(b.south, n))];
+  const east = b.east < b.west ? b.east + 360 : b.east;
   const cx = tx(center.lng, n);
   const cy = ty(center.lat, n);
+  // The `max` nearest tiles all lie within this many tiles of the centre.
+  const r = Math.ceil(Math.sqrt(max)) + 1;
+  const [x0, x1] = [
+    Math.max(Math.floor(tx(b.west, n)), Math.floor(cx) - r),
+    Math.min(Math.floor(tx(east, n) - 1e-9), Math.floor(cx) + r),
+  ];
+  const [y0, y1] = [
+    Math.max(0, Math.floor(ty(b.north, n)), Math.floor(cy) - r),
+    Math.min(n - 1, Math.floor(ty(b.south, n) - 1e-9), Math.floor(cy) + r),
+  ];
   const out: (TileId & { d: number })[] = [];
   for (let x = x0; x <= x1; x++) {
-    for (let y = y0; y <= y1; y++) out.push({ z, x, y, d: Math.hypot(x + 0.5 - cx, y + 0.5 - cy) });
+    for (let y = y0; y <= y1; y++) {
+      out.push({ z, x: ((x % n) + n) % n, y, d: Math.hypot(x + 0.5 - cx, y + 0.5 - cy) });
+    }
   }
   return out
     .sort((a, b) => a.d - b.d)

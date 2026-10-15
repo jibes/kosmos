@@ -35,6 +35,8 @@ interface Result {
 
 /** A start this close to the last one reuses its route instead of asking the server again. */
 const MOVE_TOLERANCE_M = 150;
+/** Moving on with a road route open asks again at most this often. */
+const REFRESH_MS = 60_000;
 const NO_ROUTES: Route[] = [];
 
 const tripKey = (trip: Trip) =>
@@ -55,14 +57,14 @@ const keepWhileNavigating = (
 /** Asks the router once per trip; following the user's location never polls it. */
 export function useRoute(
   trip: Trip | null,
-  here: LngLat | null,
+  here: (LngLat & { accuracy?: number }) | null,
   lang: string,
   /** While navigating, only an explicit reroute may ask again, never mere movement. */
   pinned = false,
 ) {
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const last = useRef<{ key: string; from: LngLat; attempt: number } | null>(null);
+  const last = useRef<{ key: string; from: LngLat; attempt: number; at: number } | null>(null);
   const inflight = useRef<AbortController | null>(null);
   const key = trip ? tripKey(trip) : '';
 
@@ -75,15 +77,15 @@ export function useRoute(
     const from = trip.from ?? here;
     if (!from) return;
     const prev = last.current;
-    if (
-      prev &&
-      prev.key === key &&
-      prev.attempt === attempt &&
-      (trip.from || pinned || distance(prev.from, from) < MOVE_TOLERANCE_M)
-    ) {
-      return;
+    if (prev && prev.key === key && prev.attempt === attempt) {
+      // A chosen start, guidance (which reroutes by itself) and public transport (a plan is
+      // for the trip, not for each step taken) never ask again by themselves. A road route
+      // follows a walker or passenger, but not GPS jitter and not more than once a minute.
+      if (trip.from || pinned || trip.mode === 'transit') return;
+      const slack = Math.max(MOVE_TOLERANCE_M, 2 * (here?.accuracy ?? 0));
+      if (distance(prev.from, from) < slack || Date.now() - prev.at < REFRESH_MS) return;
     }
-    last.current = { key, from, attempt };
+    last.current = { key, from, attempt, at: Date.now() };
     inflight.current?.abort();
     const ctrl = new AbortController();
     inflight.current = ctrl;

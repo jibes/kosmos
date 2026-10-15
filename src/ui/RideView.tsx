@@ -75,14 +75,18 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
       big = formatDistance(st.toGo, lang, units);
       title = walkTo;
     }
-    if (ride && st.missed) sub = fill(t.hasLeft, { line: ride.line ?? t.transit });
+    if (ride && st.cancelled) sub = fill(t.lineCancelled, { line: ride.line ?? t.transit });
+    else if (ride && st.missed) sub = fill(t.hasLeft, { line: ride.line ?? t.transit });
     else if (ride)
       sub = `${fill(t.leaves, { line: ride.line ?? t.transit, time: clock(ride.start) })}${platform}`;
   } else if (st.phase === 'wait' && leg) {
     icon = <LineChip leg={leg} big />;
     big = when;
     title = leg.headsign ? `→ ${leg.headsign}` : (leg.line ?? t.transit);
-    sub = `${fill(t.leaves, { line: leg.line ?? t.transit, time: clock(leg.start) })}${platform}`;
+    sub = st.cancelled
+      ? fill(t.lineCancelled, { line: leg.line ?? t.transit })
+      : `${fill(t.leaves, { line: leg.line ?? t.transit, time: clock(leg.start) })}${platform}`;
+    if (st.cancelled) big = t.cancelled;
   } else if (st.phase === 'ride' && leg) {
     icon = <LineChip leg={leg} big />;
     big = st.stopsLeft === 1 ? t.nextStop : fill(t.stops, { n: st.stopsLeft });
@@ -101,7 +105,9 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
       <div className="ride-top">
         <section
           className="nav-banner ride"
-          data-state={st.phase === 'arrived' ? 'arrived' : st.missed ? 'rerouting' : 'go'}
+          data-state={
+            st.phase === 'arrived' ? 'arrived' : st.missed || st.cancelled ? 'rerouting' : 'go'
+          }
           data-phase={st.phase}
         >
           {/* The whole banner opens the trip; the button inside says so to a screen reader. */}
@@ -119,7 +125,7 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
             {goal && <small>{goal}</small>}
             {sub && <small>{sub}</small>}
           </div>
-          {st.missed && (
+          {(st.missed || st.cancelled) && (
             <button
               type="button"
               className="ride-new"

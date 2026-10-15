@@ -61,3 +61,16 @@ export function useNavTheme(active: boolean) {
   const theme: Theme | null = active && dark !== null ? (dark ? 'dark' : 'light') : null;
   return { theme, update, updateNight };
 }
+
+/** Status bar colours, as in index.html. */
+const STATUS_BAR = { light: '#f5f3ef', dark: '#121417' } as const;
+
+/** The phone's status bar follows the navigation theme too, not only the system's. */
+export function useStatusBar(navTheme: Theme | null) {
+  useEffect(() => {
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      meta.dataset.system ??= meta.content;
+      meta.content = navTheme ? STATUS_BAR[navTheme] : meta.dataset.system;
+    }
+  }, [navTheme]);
+}

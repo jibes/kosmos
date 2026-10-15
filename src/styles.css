@@ -861,11 +861,22 @@ button {
 
 /* ---------- Toast ---------- */
 
-.toast {
+/* Notes stack in one place instead of covering each other. */
+.toasts {
   position: fixed;
   left: 50%;
   top: calc(var(--gutter) + var(--safe-top));
   translate: -50% 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -878,13 +889,14 @@ button {
   text-align: center;
   text-wrap: balance;
   animation: drop-in 0.32s var(--ease);
-  z-index: 10;
 }
 
-/* While guiding, the top belongs to the next turn: notes appear above the bottom bar. */
-body:has(.ui[data-nav]) .toast {
+/* While guiding, the top belongs to the next turn: notes appear above the bottom bar and
+   Re-center. */
+body:has(.ui[data-nav]) .toasts {
   top: auto;
-  bottom: calc(var(--gutter) + var(--safe-bottom) + 96px);
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 146px);
+  flex-direction: column-reverse;
 }
 
 .offline {
@@ -1608,6 +1620,13 @@ button.via[aria-expanded='true']::after {
   color: var(--muted);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
+}
+
+/* One line each, whatever the language: the bar keeps its height. */
+.nav-eta > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-btn.big {

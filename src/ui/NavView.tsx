@@ -13,6 +13,8 @@ import {
 import { t, units } from '../i18n';
 import { LaneIcon, LocateIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
+import type { RouteStatus } from './RouteCard';
+import type { LocationStatus } from './useLocation';
 import { useNow } from './useNow';
 
 interface Props {
@@ -56,6 +58,10 @@ export function NavView({ route, mode, nav, lang, muted, following, reroute, ...
 
   let title = m?.instruction ?? '';
   let turn = m ? turnOf(m.type) : 'straight';
+  // The router's text for the destination is past tense; on the way there it reads ahead.
+  if (started && !nav.arrived && m && nav.next === route.maneuvers.length - 1) {
+    title = m.alert ?? t.destinationAhead;
+  }
   if (nav.arrived) {
     title = t.arrived;
     turn = 'arrive';
@@ -112,6 +118,57 @@ export function NavView({ route, mode, nav, lang, muted, following, reroute, ...
         <span>
           {formatDuration(eta)} · {formatDistance(remaining, lang, units)}
         </span>
+      </NavBar>
+    </>
+  );
+}
+
+interface WaitingProps {
+  status: RouteStatus;
+  location: LocationStatus;
+  destination: string;
+  muted: boolean;
+  onMute: () => void;
+  onRetry: () => void;
+  onEnd: () => void;
+}
+
+/**
+ * Guidance without a route yet: it starts from here (a start chosen elsewhere, a new
+ * connection), and that route is still on its way, cannot come without a position, or failed.
+ * End stays reachable whatever happens.
+ */
+export function NavWaiting({ status, location, destination, ...on }: WaitingProps) {
+  const noFix = status === 'locating' && (location === 'denied' || location === 'unavailable');
+  const text = noFix
+    ? location === 'denied'
+      ? t.locationDenied
+      : t.noLocation
+    : status === 'locating'
+      ? t.locating
+      : status === 'busy'
+        ? t.routeBusy
+        : status === 'failed'
+          ? t.routeFailed
+          : status === 'none'
+            ? t.noRoute
+            : t.routing;
+  const stuck = noFix || status === 'busy' || status === 'failed' || status === 'none';
+  return (
+    <>
+      <section className="nav-banner" data-state={stuck ? 'rerouting' : 'go'}>
+        <TurnIcon turn="depart" size={40} />
+        <div>
+          <p aria-live="polite">{text}</p>
+        </div>
+        {(status === 'busy' || status === 'failed') && (
+          <button type="button" className="ride-new" onClick={on.onRetry}>
+            {t.retry}
+          </button>
+        )}
+      </section>
+      <NavBar muted={on.muted} arrived={false} onMute={on.onMute} onEnd={on.onEnd}>
+        <span>{destination}</span>
       </NavBar>
     </>
   );

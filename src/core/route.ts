@@ -146,12 +146,16 @@ interface VManeuver {
   lanes?: unknown;
 }
 interface VTrip {
+  /** What `length` is counted in: the unit asked for in `directions_options`. */
+  units?: string;
   legs?: { shape?: string; maneuvers?: VManeuver[] }[];
   summary?: { length?: number; time?: number };
 }
 
 function toRoute(trip: VTrip | undefined): Route | null {
   if (!trip?.legs?.length) return null;
+  // Lengths come in the unit the request named: miles where the app shows miles.
+  const metres = trip.units === 'miles' ? 1609.344 : 1000;
   const coords: [number, number][] = [];
   const maneuvers: Maneuver[] = [];
   for (const leg of trip.legs) {
@@ -167,7 +171,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
         pre: m.verbal_pre_transition_instruction,
         post: m.verbal_post_transition_instruction,
         street: m.street_names?.[0],
-        distance: (m.length ?? 0) * 1000,
+        distance: (m.length ?? 0) * metres,
         duration: m.time ?? 0,
         begin: offset + (m.begin_shape_index ?? 0),
         exit: m.roundabout_exit_count,
@@ -185,7 +189,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
   }
   return {
     coords,
-    distance: (trip.summary?.length ?? 0) * 1000,
+    distance: (trip.summary?.length ?? 0) * metres,
     duration: trip.summary?.time ?? 0,
     maneuvers,
     bbox: [w, s, e, n],

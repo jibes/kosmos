@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { distance, type LngLat } from './core/geo';
 import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
 import { travelHeading } from './core/compass';
-import { navZoom, offRouteLimit, type NavState } from './core/nav';
+import { offRouteLimit, type NavState } from './core/nav';
 import type { Mode, TravelMode } from './core/route';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
 import { lang, t } from './i18n';
@@ -12,13 +12,13 @@ import { Controls, type Follow } from './ui/Controls';
 import { onLongPress } from './ui/gestures';
 import { pinMarker, userMarker } from './ui/markers';
 import { isNative, openAppSettings } from './ui/native';
-import { NavView } from './ui/NavView';
+import { NavView, NavWaiting } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
 import { RideView, rideWords } from './ui/RideView';
 import { RouteCard } from './ui/RouteCard';
 import { SearchBar } from './ui/SearchBar';
-import { UpdateToast } from './ui/UpdateToast';
-import { useLocation } from './ui/useLocation';
+import { Toasts, useToast } from './ui/Toasts';
+import { useLocation, type Fix } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
 import { useMap } from './ui/useMap';
 import { useNav } from './ui/useNav';
@@ -27,7 +27,7 @@ import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useRouteLayer } from './ui/useRouteLayer';
 import { motion } from './ui/motion';
-import { NO_PADDING, navPadding, padding, routePadding, touch } from './ui/layout';
+import { NO_PADDING, followNav, padding, routePadding, touch, type NavCamera } from './ui/layout';
 import {
   HINTED_KEY,
   MODE_KEY,
@@ -39,7 +39,7 @@ import {
 } from './ui/prefs';
 import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
-import { useNavTheme } from './ui/useNavTheme';
+import { useNavTheme, useStatusBar } from './ui/useNavTheme';
 import { useOffline } from './ui/useOffline';
 import { useTheme } from './ui/useTheme';
 import { systemVoice } from './ui/voice';
@@ -49,15 +49,6 @@ import { keepAwake } from './ui/wakeLock';
 const LABEL_LANG = (typeof navigator === 'undefined' ? 'en' : navigator.language)
   .split('-')[0]
   .toLowerCase();
-
-/** Status bar colours, as in index.html. */
-const STATUS_BAR = { light: '#f5f3ef', dark: '#121417' } as const;
-
-interface Toast {
-  text: string;
-  /** Buttons in the note: a choice to make now, gone with the note. */
-  actions?: { label: string; run: () => void }[];
-}
 
 interface Selection {
   place: Place;
@@ -94,13 +85,7 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
-  // The phone's status bar follows the navigation theme too, not only the system's.
-  useEffect(() => {
-    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
-      meta.dataset.system ??= meta.content;
-      meta.content = navTheme ? STATUS_BAR[navTheme] : meta.dataset.system;
-    }
-  }, [navTheme]);
+  useStatusBar(navTheme);
   const mapEl = useRef<HTMLDivElement>(null);
   const map = useMap(mapEl, theme, LABEL_LANG);
   const { fix, status, start, subscribe, background } = useLocation();
@@ -109,7 +94,7 @@ export function App() {
   const compass = useCompass();
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
-  const [toast, setToast] = useState<Toast | null>(null);
+  const { toast, showToast, dismiss } = useToast();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [active, setActive] = useState(0);
   /** Which end of the route the search bar is choosing, if any. */
@@ -145,18 +130,6 @@ export function App() {
   useEffect(() => {
     followRef.current = follow;
   }, [follow]);
-
-  const showToast = useCallback(
-    (text: string, actions?: Toast['actions']) => setToast({ text, actions }),
-    [],
-  );
-  useEffect(() => {
-    if (!toast) return;
-    // Long enough to read: a short note goes quickly, a sentence stays a while, a choice longer.
-    const ms = Math.max(toast.actions ? 6000 : 2200, toast.text.length * 70);
-    const id = setTimeout(() => setToast(null), ms);
-    return () => clearTimeout(id);
-  }, [toast]);
 
   /** Shows a place at once, then fills in its details when the lookup returns. */
   const select = useCallback((place: Place, enrich?: () => Promise<Partial<Place> | null>) => {
@@ -249,6 +222,9 @@ export function App() {
       select({ name, detail: '', ...at }, () => addressOf(name, at));
     };
     const offHold = onLongPress(map, (at) => {
+      // While guiding, the trip is settled: a start or destination changed now would send the
+      // reroutes from the wrong place.
+      if (navRef.current) return;
       lastHold.current = Date.now();
       const here = { lng: at.lng, lat: at.lat };
       const lookup = async (): Promise<Partial<Place>> => {
@@ -338,10 +314,22 @@ export function App() {
 
   // Location: the dot, and the camera while following.
   const me = useRef<ReturnType<typeof userMarker> | null>(null);
+  /**
+   * Fingers (or a mouse button) down on the map. The app's own camera moves wait meanwhile:
+   * any move resets MapLibre's gesture handlers, which would cut a pan, pinch or long-press off
+   * the moment it starts.
+   */
+  const touching = useRef(new Set<number>());
   useEffect(() => {
     if (!map) return;
     const m = userMarker(map);
     me.current = m;
+    const down = (e: PointerEvent) => touching.current.add(e.pointerId);
+    const up = (e: PointerEvent) => touching.current.delete(e.pointerId);
+    const surface = map.getCanvasContainer();
+    surface.addEventListener('pointerdown', down);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
     const stopFollowing = () => {
       setFollow('off');
       if (navRef.current) setNavFollow(false);
@@ -355,6 +343,9 @@ export function App() {
     for (const ev of looks) map.on(ev, lookAround);
     return () => {
       m.remove();
+      surface.removeEventListener('pointerdown', down);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
       map.off('dragstart', stopFollowing);
       for (const ev of looks) map.off(ev, lookAround);
     };
@@ -363,6 +354,8 @@ export function App() {
   useEffect(() => {
     if (!map || !fix || roadNavRef.current) return;
     me.current?.update(fix);
+    // A finger on the map: this fix moves the dot only; the next one catches the camera up.
+    if (touching.current.size) return;
     if (flyOnFix.current) {
       flyOnFix.current = false;
       map.flyTo({
@@ -406,13 +399,16 @@ export function App() {
           frame = 0;
           return;
         }
-        // Another camera move (e.g. the fly-in after tapping locate) runs: try again next frame.
-        if (map.isMoving()) {
+        // Another camera move (e.g. the fly-in after tapping locate) runs, or a finger is on
+        // the map: try again next frame.
+        if (map.isMoving() || touching.current.size) {
           frame = requestAnimationFrame(turn);
           return;
         }
         frame = 0;
-        map.setBearing(latest);
+        // A turn too small to see is not worth a camera move (each one is a moveend).
+        const delta = Math.abs(((latest - map.getBearing() + 540) % 360) - 180);
+        if (delta >= 0.5) map.setBearing(latest);
       };
       frame = requestAnimationFrame(turn);
     });
@@ -443,32 +439,28 @@ export function App() {
   });
 
   // Navigation: guidance on the device, camera behind the user, the router asked only to reroute.
-  const lastSnap = useRef<NavState['snap']>(null);
+  const lastView = useRef<NavCamera | null>(null);
   const followCamera = useCallback(
-    (nav: NavState, duration: number) => {
-      if (!map || !nav.snap) return;
-      map.easeTo({
-        center: nav.snap.point,
-        bearing: travelHeading(nav.snap.bearing, compass.current(), nav.moving) ?? nav.snap.bearing,
-        pitch: 55,
-        zoom: navZoom(nav.speed),
-        padding: navPadding(),
-        duration,
-        easing: (x) => x,
-      });
-    },
-    [map, compass],
+    (v: NavCamera | null, duration: number) => map && v && followNav(map, v, duration),
+    [map],
   );
   const onStep = useCallback(
-    (nav: NavState, f: { lng: number; lat: number; accuracy: number }) => {
+    (nav: NavState, f: Fix) => {
       const s = nav.snap;
-      const onLine = s && s.offset < offRouteLimit(f.accuracy);
-      me.current?.update(onLine ? { lng: s.point[0], lat: s.point[1], accuracy: f.accuracy } : f);
+      // On the line the arrow rides the route; off it (or after arriving) it is where the fix
+      // is, and so is the camera: a missed turn must not leave the user off the screen.
+      const onLine = !!s && !nav.arrived && s.offset < offRouteLimit(f.accuracy);
+      const center: [number, number] = onLine ? s.point : [f.lng, f.lat];
+      const course = nav.moving && f.heading != null && !Number.isNaN(f.heading) ? f.heading : null;
+      const bearing = onLine
+        ? travelHeading(s.bearing, compass.current(), nav.moving)
+        : (course ?? compass.current());
+      me.current?.update({ lng: center[0], lat: center[1], accuracy: f.accuracy });
       lastNavMoving.current = nav.moving;
-      me.current?.heading(s ? travelHeading(s.bearing, compass.current(), nav.moving) : null);
-      lastSnap.current = s;
+      me.current?.heading(bearing);
       if (s && map) updateNavTheme(map, s, nav.time);
-      if (navFollowRef.current) followCamera(nav, 1000);
+      lastView.current = { center, bearing, speed: nav.speed };
+      if (navFollowRef.current && !touching.current.size) followCamera(lastView.current, 1000);
     },
     [followCamera, compass, map, updateNavTheme],
   );
@@ -600,18 +592,24 @@ export function App() {
   };
 
   const arrived = navigating && (riding ? ride?.st.phase === 'arrived' : nav.arrived);
+  /** Arrived: guidance and the trip are done; the destination's card is what is left. */
+  const finish = useCallback(() => {
+    endNav();
+    closeRoute();
+  }, [endNav, closeRoute]);
   useEffect(() => {
     if (!arrived) return;
-    const id = setTimeout(endNav, ARRIVED_END_MS);
+    const id = setTimeout(finish, ARRIVED_END_MS);
     return () => clearTimeout(id);
-  }, [arrived, endNav]);
+  }, [arrived, finish]);
 
   // Back (Android) and Escape close one layer at a time; navigation needs a second press.
   const backAt = useRef(0);
   useBack(() => {
     if (about) setAbout(false);
     else if (navigating) {
-      if (arrived || Date.now() - backAt.current < BACK_TWICE_MS) endNav();
+      if (arrived) finish();
+      else if (Date.now() - backAt.current < BACK_TWICE_MS) endNav();
       else {
         backAt.current = Date.now();
         showToast(t.backToEnd);
@@ -660,7 +658,7 @@ export function App() {
               setTrip({ ...trip, from: null, at: null });
               route.retry();
             }}
-            onEnd={endNav}
+            onEnd={arrived ? finish : endNav}
           />
         )}
         {navigating && !riding && shown[chosen] && (
@@ -675,8 +673,19 @@ export function App() {
             onMute={toggleMute}
             onRecenter={() => {
               setNavFollow(true);
-              followCamera({ ...nav, snap: lastSnap.current }, 600);
+              followCamera(lastView.current, 600);
             }}
+            onEnd={arrived ? finish : endNav}
+          />
+        )}
+        {navigating && trip && !(riding ? ride : shown[chosen]) && (
+          <NavWaiting
+            status={route.status}
+            location={status}
+            destination={trip.to.name}
+            muted={muted}
+            onMute={toggleMute}
+            onRetry={route.retry}
             onEnd={endNav}
           />
         )}
@@ -774,24 +783,7 @@ export function App() {
         </button>
       </main>
       {about && <About onClose={() => setAbout(false)} />}
-      {toast && (
-        <div className="toast surface" role="status">
-          <span>{toast.text}</span>
-          {toast.actions?.map((a) => (
-            <button
-              key={a.label}
-              type="button"
-              onClick={() => {
-                setToast(null);
-                a.run();
-              }}
-            >
-              {a.label}
-            </button>
-          ))}
-        </div>
-      )}
-      {!isNative && <UpdateToast />}
+      <Toasts toast={toast} dismiss={dismiss} guiding={navigating} />
     </>
   );
 }

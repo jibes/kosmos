@@ -62,6 +62,7 @@ export function NavBar({ children, muted, arrived, onMute, onEnd }: Props) {
         type="button"
         className="nav-end"
         data-state={arrived ? 'done' : armed ? 'armed' : undefined}
+        aria-label={armed && !arrived ? t.endConfirmHint : undefined}
         onClick={() => (arrived || armed ? onEnd() : setArmed(true))}
       >
         {arrived ? t.done : armed ? t.endConfirm : t.end}
