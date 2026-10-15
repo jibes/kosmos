@@ -28,21 +28,13 @@ import { useRoute, type Trip } from './ui/useRoute';
 import { useRouteLayer } from './ui/useRouteLayer';
 import { motion } from './ui/motion';
 import { NO_PADDING, followNav, padding, routePadding, touch, type NavCamera } from './ui/layout';
-import {
-  HINTED_KEY,
-  MODE_KEY,
-  MUTED_KEY,
-  store,
-  stored,
-  storedMode,
-  storedMuted,
-} from './ui/prefs';
+import { HINTED_KEY, MODE_KEY, store, stored, storedMode } from './ui/prefs';
 import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
 import { useNavTheme, useStatusBar } from './ui/useNavTheme';
 import { useOffline } from './ui/useOffline';
 import { useTheme } from './ui/useTheme';
-import { systemVoice } from './ui/voice';
+import { systemVoice, useMuted } from './ui/voice';
 import { keepAwake } from './ui/wakeLock';
 
 /** Map labels follow the browser language even where the UI falls back to English. */
@@ -104,12 +96,12 @@ export function App() {
     pickingRef.current = picking;
   }, [picking]);
   const [navFollow, setNavFollow] = useState(true);
-  const [muted, setMuted] = useState(storedMuted);
   /** The router answer count when a reroute was asked for; `null` when none is pending. */
   const [rerouteAt, setRerouteAt] = useState<number | null>(null);
   const route = useRoute(trip, fix, lang, navigating);
   // The voice speaks the language of the words it is given: the UI's (and the router's).
   const voice = useMemo(() => systemVoice(locale), []);
+  const { muted, begin: beginVoice, toggle: toggleMute } = useMuted(voice);
   const navRef = useRef(false);
   /** Road navigation owns the camera and the arrow; public transport only follows the dot. */
   const riding = navigating && trip?.mode === 'transit';
@@ -509,6 +501,7 @@ export function App() {
 
   const startNav = () => {
     if (!trip) return;
+    beginVoice(trip.mode);
     if (trip.mode === 'transit') {
       // The connection stays as planned, from wherever it starts; the map follows the dot.
       start();
@@ -541,13 +534,6 @@ export function App() {
     me.current?.heading(null);
     map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: motion(800) });
   }, [map, voice]);
-  const toggleMute = () => {
-    setMuted((v) => {
-      store(MUTED_KEY, v ? '0' : '1');
-      if (!v) voice.stop();
-      return !v;
-    });
-  };
   useEffect(() => {
     if (!navigating) return;
     background(true);

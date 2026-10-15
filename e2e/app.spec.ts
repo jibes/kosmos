@@ -350,7 +350,13 @@ test.describe('map', () => {
     await expect(banner).toContainText('U6 leaves');
     // The walk's next turn leads, with the metres to it.
     await expect(banner.locator('p')).toHaveText('Dorotheenstraße');
-    await expect.poll(spoken).toContain('Walk to Stadtmitte.');
+    // Among people, public transport guidance starts silent; a tap lets it speak.
+    const mute = page.getByRole('button', { name: 'Mute voice' });
+    await expect(mute).toHaveAttribute('aria-pressed', 'true');
+    await page.waitForTimeout(500);
+    expect(await spoken()).toEqual([]);
+    await mute.click();
+    await expect(mute).toHaveAttribute('aria-pressed', 'false');
     // After sunset the map goes dark on public transport too.
     const night = await page
       .evaluate(() => Date.now())
@@ -1247,6 +1253,49 @@ test.describe('map', () => {
     await place.getByRole('button', { name: 'Close' }).press('Enter');
     await expect(place).toHaveCount(0);
     await expect(input).toBeFocused();
+  });
+
+  test('remembers the voice for the next drive; on foot and by bike it starts silent', async ({
+    page,
+    context,
+  }) => {
+    test.slow(); // Six trips.
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    const openRoute = async () => {
+      await page.getByRole('combobox').fill('brandenburger');
+      await page.getByRole('option').first().click();
+      await page
+        .locator('.card')
+        .getByRole('button', { name: /^Route$/ })
+        .click();
+    };
+    const card = page.locator('.card.route');
+    const mute = page.getByRole('button', { name: 'Mute voice' });
+    /** Guides in `mode`: the voice as it starts, then a tap on it if asked, then End. */
+    const trip = async (mode: string, muted: boolean, tap = false) => {
+      await card.getByRole('radio', { name: mode }).click();
+      await expect(card.locator('.summary strong')).toHaveText(/min/);
+      await card.getByRole('button', { name: 'Start', exact: true }).click();
+      await expect(mute).toHaveAttribute('aria-pressed', String(muted));
+      if (tap) {
+        await mute.click();
+        await expect(mute).toHaveAttribute('aria-pressed', String(!muted));
+      }
+      await page.getByRole('button', { name: 'End' }).click();
+      await page.getByRole('button', { name: /(Tap|Click) again to end navigation/ }).click();
+      await expect(card).toBeVisible();
+    };
+    await openRoute();
+    await trip('Car', false, true);
+    await trip('Car', true);
+    // A walk starts silent and its tap is for that walk only.
+    await trip('Walk', true, true);
+    await trip('Car', true, true);
+    await trip('Bike', true);
+    await page.reload();
+    await openRoute();
+    await trip('Car', false);
   });
 
   test('says when the map has no connection', async ({ page, context }) => {

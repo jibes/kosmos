@@ -1,6 +1,7 @@
 import type { TravelMode } from '../core/route';
 
 /** Small choices the app remembers on this device. */
+/** Voice off while driving (`useMuted`); other travel modes always start silent. */
 export const MUTED_KEY = 'kosmos.muted.v1';
 export const MODE_KEY = 'kosmos.mode.v1';
 export const HINTED_KEY = 'kosmos.hinted.v1';
