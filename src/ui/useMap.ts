@@ -7,6 +7,7 @@ import { DEFAULT_VIEW, VIEW_KEY, parseView, serializeView } from '../core/view';
 import { mapFontFaces } from './fonts';
 import { motion } from './motion';
 import { nativeLog } from './native';
+import { t } from '../i18n';
 
 // MapLibre resolves its worker next to its own module, which bundling moves; point it at the copy.
 maplibregl.setWorkerUrl(new URL(workerUrl, document.baseURI).href);
@@ -44,6 +45,8 @@ export function useMap(
       pitch: v.pitch,
       hash: 'map',
       attributionControl: false,
+      // The map region's name for screen readers, in the UI's language.
+      locale: { 'Map.Title': t.map },
       maxPitch: 75,
       // Labels fade in; with reduced motion they simply appear.
       fadeDuration: motion(180),
@@ -66,7 +69,12 @@ export function useMap(
         // Private mode or full storage: the URL hash still carries the view.
       }
     };
-    m.on('moveend', save);
+    // Compass mode turns the map every frame, each turn a moveend: save once it rests.
+    let saving = 0;
+    m.on('moveend', () => {
+      clearTimeout(saving);
+      saving = window.setTimeout(save, 500);
+    });
     // The Android CI smoke test waits for this line in logcat.
     m.once('load', () => {
       console.info('kosmos:ready');

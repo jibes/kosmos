@@ -20,6 +20,8 @@ describe('geo', () => {
   it('formats hemispheres', () => {
     expect(formatLngLat({ lng: 13.405, lat: 52.52 })).toBe('52.52000° N, 13.40500° E');
     expect(formatLngLat({ lng: -43.2, lat: -22.9 }, 1)).toBe('22.9° S, 43.2° W');
+    // German writes east as O, with a decimal comma.
+    expect(formatLngLat({ lng: 13.405, lat: 52.52 }, 5, 'de-DE')).toBe('52,52000° N, 13,40500° O');
     expect(plainLngLat({ lng: 13.405, lat: 52.52 })).toBe('52.520000, 13.405000');
   });
 

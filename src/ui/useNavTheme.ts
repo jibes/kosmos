@@ -36,8 +36,12 @@ function tunnelLines(map: maplibregl.Map): Pt[][] {
 export function useNavTheme(active: boolean) {
   const [dark, setDark] = useState<boolean | null>(null);
   const lastTunnel = useRef(-Infinity);
-  /** Tunnels near the user, read from the loaded tiles every few seconds, not on every fix. */
+  /**
+   * Tunnels near the user, read from the loaded tiles every few seconds, not on every fix; tiles
+   * that arrive meanwhile are read on the next fix, so the tunnel ahead is never missed.
+   */
   const tunnels = useRef<{ at: number; lines: Pt[][] }>({ at: -Infinity, lines: [] });
+  const watched = useRef<maplibregl.Map | null>(null);
   // Each drive decides afresh; the last one's night or tunnel says nothing about this one.
   const [wasActive, setWasActive] = useState(active);
   if (wasActive !== active) {
@@ -52,6 +56,12 @@ export function useNavTheme(active: boolean) {
   }, [active]);
 
   const update = useCallback((map: maplibregl.Map, s: Snap, time: number) => {
+    if (watched.current !== map) {
+      watched.current = map;
+      map.on('sourcedata', (e) => {
+        if (e.sourceId === MAP_SOURCE && e.tile) tunnels.current.at = -Infinity;
+      });
+    }
     const [lng, lat] = s.point;
     if (time - tunnels.current.at > TUNNEL_READ_MS) {
       tunnels.current = { at: time, lines: tunnelLines(map) };

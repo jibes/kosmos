@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { isOsmId, lookupUrl, parseLookup, type Details } from '../core/details';
-import { getJson, nominatimSlot } from './http';
+import { getJson, nominatimSlot, nominatimWait } from './http';
 
 const cache = new Map<string, Details>();
 
@@ -12,8 +12,16 @@ export function usePlaceDetails(osm: string | undefined, lang: string): Details 
     if (!osm || !isOsmId(osm) || cache.has(osm)) return;
     const ctrl = new AbortController();
     // Nominatim: one request a second; flicking through places waits its turn, and a card
-    // closed before its turn never asks.
-    const timer = setTimeout(() => {
+    // closed before its turn never asks, nor holds up the next one: the slot is taken only
+    // when it is used.
+    let timer = 0;
+    const ask = () => {
+      const wait = nominatimWait();
+      if (wait) {
+        timer = window.setTimeout(ask, wait);
+        return;
+      }
+      nominatimSlot();
       getJson(lookupUrl(osm, lang), ctrl.signal)
         .then((r) => {
           const details = r.ok ? parseLookup(r.json) : {};
@@ -21,7 +29,8 @@ export function usePlaceDetails(osm: string | undefined, lang: string): Details 
           if (!ctrl.signal.aborted) setResult({ osm, details });
         })
         .catch(() => !ctrl.signal.aborted && setResult({ osm, details: {} }));
-    }, nominatimSlot());
+    };
+    ask();
     return () => {
       clearTimeout(timer);
       ctrl.abort();

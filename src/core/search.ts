@@ -1,4 +1,4 @@
-import type { LngLat } from './geo';
+import { distance, type LngLat } from './geo';
 
 /** Photon: OSM search built for search-as-you-type, unlike Nominatim's usage policy. */
 export const PHOTON_URL = 'https://photon.komoot.io';
@@ -12,6 +12,8 @@ export interface Place extends LngLat {
   bbox?: [number, number, number, number];
   /** Metres from where the search looked, for places found by category. */
   distance?: number;
+  /** A place without a name of its own (a toilet, a cash machine): called by its kind. */
+  unnamed?: boolean;
   /** The OSM object (`N123`, `W456`), when the search knows it; details are looked up by it. */
   osm?: string;
 }
@@ -41,6 +43,8 @@ export function reverseUrl({ lng, lat }: LngLat, lang: string): string {
 
 interface PhotonProps {
   name?: string;
+  /** What the object is to Photon: `house`, `street`, `city`, … */
+  type?: string;
   osm_type?: string;
   osm_id?: number;
   housenumber?: string;
@@ -104,4 +108,36 @@ export function parsePhoton(json: unknown): Place[] {
     out.push(place);
   }
   return out;
+}
+
+/**
+ * The hit nearest a point, within `radius` metres: the place a map label or a category result
+ * stands for, not another of the same name (a chain's other branch) further away.
+ */
+export function nearestWithin(hits: Place[], at: LngLat, radius: number): Place | undefined {
+  let best: Place | undefined;
+  let bestM = radius;
+  for (const h of hits) {
+    const m = distance(h, at);
+    if (m <= bestM) [best, bestM] = [h, m];
+  }
+  return best;
+}
+
+/**
+ * The address line of a reverse lookup, whatever object it found there: street and number,
+ * district, city, country. Never the name of a nearby place, which may be another one.
+ */
+export function parseAddress(json: unknown): string | null {
+  const p = (json as { features?: PhotonFeature[] } | null)?.features?.[0]?.properties;
+  if (!p) return null;
+  const road = p.street ?? (p.type === 'street' ? p.name : undefined);
+  const line = join([
+    road && (p.housenumber ? `${road} ${p.housenumber}` : road),
+    p.district ?? p.locality,
+    p.city,
+    p.state !== p.city ? p.state : undefined,
+    p.country,
+  ]);
+  return line || null;
 }

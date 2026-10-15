@@ -2,10 +2,12 @@ import { motion } from './motion';
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Category } from '../core/categories';
-import { distance } from '../core/geo';
+import { distance, type LngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { SEARCH_SOURCE } from '../core/style';
 import { findCategory } from './categorySearch';
+
+const SEARCH_LAYERS = ['search-dots', 'search-names'];
 
 /** Moved this share of the view's width, or zoomed by a step, and the results are elsewhere. */
 const MOVED_SHARE = 0.4;
@@ -19,7 +21,15 @@ export function useCategory(
   map: maplibregl.Map | null,
   lang: string,
   padding: () => maplibregl.PaddingOptions,
+  /** A route is open: the dots step aside for it and come back after, search and all. */
+  hidden: boolean,
+  /** The user's position: distances count from there when it is in view. */
+  me: LngLat | null,
 ) {
+  const meRef = useRef(me);
+  useEffect(() => {
+    meRef.current = me;
+  });
   const [active, setActive] = useState<Category | null>(null);
   const [moved, setMoved] = useState(false);
   const [run, setRun] = useState(0);
@@ -59,7 +69,7 @@ export function useCategory(
       // A new category may zoom in from a wide view; the same one again searches in place.
       const fresh = c !== last.current;
       last.current = c;
-      const places = await findCategory(map, c, lang, fresh);
+      const places = await findCategory(map, c, lang, fresh, meRef.current);
       if (mine === token.current) {
         dots(places);
         searched.current = { places, center: map.getCenter(), zoom: map.getZoom() };
@@ -68,6 +78,21 @@ export function useCategory(
     },
     [map, lang, dots],
   );
+
+  useEffect(() => {
+    if (!map) return;
+    const show = () => {
+      for (const id of SEARCH_LAYERS) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', hidden ? 'none' : 'visible');
+      }
+    };
+    show();
+    // A theme or language change builds the style anew, with the layers visible.
+    map.on('styledata', show);
+    return () => {
+      map.off('styledata', show);
+    };
+  }, [map, hidden]);
 
   useEffect(() => {
     if (!map) return;
@@ -116,6 +141,7 @@ export function useCategory(
     const lats = places.map((p) => p.lat);
     map.fitBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)], {
       padding: padding(),
+      absolutePadding: true,
       maxZoom: 17,
       duration: motion(900),
     });

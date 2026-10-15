@@ -10,11 +10,23 @@ export function metersPerPixel(lat: number, zoom: number): number {
   return (EARTH_CIRCUMFERENCE * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 }
 
-/** `52.52000° N, 13.40500° E`; five decimals is about one metre. */
-export function formatLngLat({ lng, lat }: LngLat, digits = 5): string {
+/** East in languages that do not write it E. */
+const EAST: Record<string, string> = { de: 'O' };
+
+/**
+ * `52.52000° N, 13.40500° E`, `52,52000° N, 13,40500° O` in German: the language's decimal
+ * mark and compass letters. Five decimals is about one metre.
+ */
+export function formatLngLat({ lng, lat }: LngLat, digits = 5, lang = 'en'): string {
+  const n = (v: number) =>
+    Math.abs(v).toLocaleString(lang, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+      useGrouping: false,
+    });
   const ns = lat >= 0 ? 'N' : 'S';
-  const ew = lng >= 0 ? 'E' : 'W';
-  return `${Math.abs(lat).toFixed(digits)}° ${ns}, ${Math.abs(lng).toFixed(digits)}° ${ew}`;
+  const ew = lng >= 0 ? (EAST[lang.split('-')[0]] ?? 'E') : 'W';
+  return `${n(lat)}° ${ns}, ${n(lng)}° ${ew}`;
 }
 
 /** Plain `lat, lng` for pasting into other apps. */

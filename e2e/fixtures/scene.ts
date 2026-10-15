@@ -313,6 +313,8 @@ function city(): Layers {
       rank: 1,
     }),
     point(m(-400, 350), { class: 'museum', subclass: 'museum', name: 'Pergamonmuseum', rank: 1 }),
+    // Public toilets rarely have a name in OpenStreetMap.
+    point(m(-200, -250), { class: 'toilets', subclass: 'toilets', rank: 5 }),
   );
   layers.landuse.push(poly([rect(-2500, -2500, 2500, 2500)], { class: 'residential' }));
   layers.landcover.push(

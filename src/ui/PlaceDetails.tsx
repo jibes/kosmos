@@ -1,12 +1,21 @@
 import { useMemo } from 'react';
 import { withScheme, type Details } from '../core/details';
-import { allDay, hoursState, parseHours, weekRows, type WeekRow } from '../core/hours';
+import {
+  allDay,
+  hoursState,
+  nearDeviceClock,
+  parseHours,
+  weekRows,
+  type WeekRow,
+} from '../core/hours';
 import { formatClock } from '../core/route';
 import { fill, locale, t } from '../i18n';
 import { useNow } from './useNow';
 
-/** "18:00" today, "Tue 09:00" on another day. */
+/** "18:00" today, "Tue 09:00" on another day, "midnight" for the end of today. */
 function when(d: Date, now: Date) {
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (d.getTime() === tomorrow.getTime()) return t.midnight;
   const clock = formatClock(d, locale);
   return d.toDateString() === now.toDateString()
     ? clock
@@ -16,7 +25,9 @@ function when(d: Date, now: Date) {
 /** A Monday, to name the days of the week in the user's language. */
 const day = (d: number) =>
   new Date(2024, 0, 1 + d).toLocaleDateString(locale, { weekday: 'short' });
-const minute = (m: number) => formatClock(new Date(2024, 0, 1, 0, m), locale);
+/** A time of day; an end at midnight is the day's end, not "00:00" of it. */
+const minute = (m: number) =>
+  m > 0 && m % 1440 === 0 ? t.midnight : formatClock(new Date(2024, 0, 1, 0, m), locale);
 
 /** "Mon–Fri  09:00–18:00", "Sun  closed". */
 function rowText(r: WeekRow) {
@@ -30,12 +41,13 @@ function rowText(r: WeekRow) {
 }
 
 /** Open or closed now, and until when; the week one tap away, in the user's language. */
-function Hours({ spec }: { spec: string }) {
+function Hours({ spec, lng }: { spec: string; lng: number }) {
   const now = new Date(useNow(60_000));
-  // Monday first, as the rows count.
-  const today = (now.getDay() + 6) % 7;
+  // Monday first, as the rows count; somewhere on another clock, no day is today for certain.
+  const local = nearDeviceClock(lng, now);
+  const today = local ? (now.getDay() + 6) % 7 : -1;
   const week = useMemo(() => parseHours(spec), [spec]);
-  const st = week && hoursState(week, now);
+  const st = week && local && hoursState(week, now);
   let status = t.openingHours;
   if (st && 'always' in st && st.always) status = t.open247;
   else if (st && 'never' in st) status = t.closedNow;
@@ -66,12 +78,12 @@ function Hours({ spec }: { spec: string }) {
 }
 
 /** Opening hours, phone and website, as far as OpenStreetMap knows them. */
-export function PlaceDetails({ details }: { details: Details }) {
+export function PlaceDetails({ details, lng }: { details: Details; lng: number }) {
   const { hours, phone, website } = details;
   if (!hours && !phone && !website) return null;
   return (
     <div className="place-details">
-      {hours && <Hours spec={hours} />}
+      {hours && <Hours spec={hours} lng={lng} />}
       {(phone || website) && (
         <p className="contacts">
           {phone && <a href={`tel:${phone.replace(/[^\d+]/g, '')}`}>{phone}</a>}

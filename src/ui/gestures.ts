@@ -10,7 +10,8 @@ const SLOP_PX = 10;
 export function onLongPress(map: maplibregl.Map, cb: (at: maplibregl.LngLat) => void): () => void {
   let timer = 0;
   let origin: maplibregl.Point | null = null;
-  let firedAt = 0;
+  /** This press has already called back, by the timer or by the platform's own menu. */
+  let held = false;
 
   const cancel = () => {
     clearTimeout(timer);
@@ -18,11 +19,12 @@ export function onLongPress(map: maplibregl.Map, cb: (at: maplibregl.LngLat) => 
   };
   const start = (e: maplibregl.MapTouchEvent) => {
     cancel();
+    held = false;
     if (e.originalEvent.touches.length !== 1) return;
     origin = e.point;
     const at = e.lngLat;
     timer = window.setTimeout(() => {
-      firedAt = Date.now();
+      held = true;
       navigator.vibrate?.(12);
       cb(at);
     }, HOLD_MS);
@@ -30,9 +32,17 @@ export function onLongPress(map: maplibregl.Map, cb: (at: maplibregl.LngLat) => 
   const move = (e: maplibregl.MapTouchEvent) => {
     if (origin && origin.dist(e.point) > SLOP_PX) cancel();
   };
+  // The platform's menu may come before the timer (Android's own hold is shorter) or long
+  // after it: once per press either way.
   const context = (e: maplibregl.MapMouseEvent) => {
     e.preventDefault();
-    if (Date.now() - firedAt > 1000) cb(e.lngLat);
+    if (held) return;
+    cancel();
+    held = true;
+    cb(e.lngLat);
+  };
+  const press = () => {
+    held = false;
   };
 
   map.on('touchstart', start);
@@ -41,6 +51,7 @@ export function onLongPress(map: maplibregl.Map, cb: (at: maplibregl.LngLat) => 
   map.on('touchcancel', cancel);
   map.on('movestart', cancel);
   map.on('contextmenu', context);
+  map.on('mousedown', press);
   return () => {
     cancel();
     map.off('touchstart', start);
@@ -49,5 +60,6 @@ export function onLongPress(map: maplibregl.Map, cb: (at: maplibregl.LngLat) => 
     map.off('touchcancel', cancel);
     map.off('movestart', cancel);
     map.off('contextmenu', context);
+    map.off('mousedown', press);
   };
 }

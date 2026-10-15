@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { categoriesFor, type Category } from '../core/categories';
 import { formatDistance } from '../core/route';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
@@ -10,7 +10,40 @@ import { CloseIcon, SearchIcon } from './icons';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
 
+/** What is being searched for: by name, or a kind of place on the map. */
+export interface SearchState {
+  query: string;
+  setQuery: (q: string) => void;
+  category: Category | null;
+  setCategory: (c: Category | null) => void;
+  /** Empties the field and ends the category (its dots go with it). */
+  clear: () => void;
+}
+
+/** The search's own state, kept by whoever should outlive the bar (App, across a route). */
+export function useSearch(): SearchState {
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<Category | null>(null);
+  return useMemo(
+    () => ({
+      query,
+      setQuery,
+      category,
+      setCategory,
+      clear: () => {
+        setQuery('');
+        setCategory(null);
+      },
+    }),
+    [query, category],
+  );
+}
+
 interface Props {
+  /** Kept outside, to survive the bar being hidden; the bar keeps its own without it. */
+  search?: SearchState;
+  /** Kept in the page but out of sight (a route open over it). */
+  hidden?: boolean;
   lang: string;
   onPick: (place: Place) => void;
   /** Must be stable; it is read when a query fires. */
@@ -23,12 +56,15 @@ interface Props {
   autoFocus?: boolean;
   /** Shows a Cancel button; also what Escape does on an empty field. */
   onCancel?: () => void;
-  /** Places of a category from the map itself, nearest first; `null` ends the category. */
-  onCategory: (c: Category | null) => Promise<Place[]>;
+  /**
+   * Places of a category from the map itself, nearest first; `null` ends the category. Without
+   * it the bar searches by name only (choosing a route's start or destination).
+   */
+  onCategory?: (c: Category | null) => Promise<Place[]>;
   /** Bumped to search the category again where the map now is. */
-  categoryRun: number;
+  categoryRun?: number;
   /** The search key on a category: all its places on the map, none picked. */
-  onShowAll: () => void;
+  onShowAll?: () => void;
 }
 
 const label = (c: Category) => t[`cat_${c}`];
@@ -40,7 +76,12 @@ const TIMEOUT_MS = 5000;
 const SETTLE_MS = 5000;
 /** A fallback answer that takes longer than this is not coming. */
 const FALLBACK_MS = 8000;
+/** Answers by query and roughly where the map looked: "Hauptbahnhof" means another one elsewhere. */
 const cache = new Map<string, Place[]>();
+
+/** About 50 km across, and four zoom steps: the same search there gets the same answer. */
+const area = (b: SearchBias | undefined) =>
+  b ? `${Math.round(b.lat * 2)},${Math.round(b.lng * 2)},${Math.floor(b.zoom / 4)}` : '';
 
 /** A row of the list: a kind of place to search the map for, or a place found by name. */
 type Item = { cat: Category; place?: undefined } | { place: Place; cat?: undefined };
@@ -49,9 +90,13 @@ interface Response {
   key: string;
   places: Place[];
   status: 'done' | 'error' | 'slow';
+  /** Nominatim's answer while Photon was down: not kept, and Enter asks again. */
+  fallback?: boolean;
 }
 
 export function SearchBar({
+  search,
+  hidden,
   lang,
   bias,
   onPick,
@@ -64,12 +109,12 @@ export function SearchBar({
   categoryRun,
   onShowAll,
 }: Props) {
-  const [query, setQuery] = useState('');
+  const own = useSearch();
+  /** A kind of place chosen from the suggestions: its places come from the map, not by name. */
+  const { query, setQuery, category, setCategory } = search ?? own;
   const [response, setResponse] = useState<Response | null>(null);
   const [cursor, setCursor] = useState({ key: '', index: 0 });
   const [focused, setFocused] = useState(false);
-  /** A kind of place chosen from the suggestions: its places come from the map, not by name. */
-  const [category, setCategory] = useState<Category | null>(null);
   /** Bumped by Enter after a failed or unanswered search, to ask again. */
   const [retry, setRetry] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -87,20 +132,20 @@ export function SearchBar({
   });
 
   const q = query.trim();
-  const key = category ? `cat|${category}` : `${lang}|${q}`;
+  const key = category ? `cat|${category}` : `${lang}|${q}|${area(bias())}`;
   const cached = category ? undefined : cache.get(key);
-  const current = cached
-    ? { places: cached, status: 'done' as const }
+  const current: Omit<Response, 'key'> | null = cached
+    ? { places: cached, status: 'done' }
     : response?.key === key
       ? response
       : null;
   const status: Status = q.length < 2 ? 'idle' : (current?.status ?? 'loading');
-  // While a new query loads, the previous names stay put instead of flickering away; places of
-  // a category are never shown as if they were answers to a name, nor names for a category.
-  const sameKind = !!response && response.key.startsWith('cat|') === key.startsWith('cat|');
+  // While a new query loads, the previous names stay put instead of flickering away. A category
+  // shows only its own places: never names, nor the last category's places, to be tapped.
+  const sameKind = !!response && !category && !response.key.startsWith('cat|');
   const results = current?.places ?? (sameKind ? response.places : []);
   /** "museum", "Lebensm…": the kinds of place the text may mean, offered above the names. */
-  const suggestions = category ? [] : categoriesFor(q);
+  const suggestions = category || !onCategory ? [] : categoriesFor(q);
   const items: Item[] = [
     ...suggestions.map((cat) => ({ cat })),
     ...results.map((place) => ({ place })),
@@ -111,9 +156,10 @@ export function SearchBar({
 
   // A category asks the map, never the search server; leaving it clears its dots.
   useEffect(() => {
+    const ask = onCategoryRef.current;
+    if (!ask) return;
     let live = true;
-    onCategoryRef
-      .current(category)
+    ask(category)
       .then((places) => {
         if (!live || !category) return;
         setResponse({ key: `cat|${category}`, places, status: 'done' });
@@ -131,10 +177,12 @@ export function SearchBar({
     const ctrl = new AbortController();
     const fallback = new AbortController();
     let timedOut = false;
-    const done = (places: Place[]) => {
-      if (cache.size > 64) cache.delete(cache.keys().next().value as string);
-      cache.set(key, places);
-      setResponse({ key, places, status: 'done' });
+    const done = (places: Place[], fallback = false) => {
+      if (!fallback) {
+        if (cache.size > 64) cache.delete(cache.keys().next().value as string);
+        cache.set(key, places);
+      }
+      setResponse({ key, places, status: 'done', fallback });
       if (jumpFor.current === key) {
         jumpFor.current = null;
         if (places[0]) {
@@ -189,7 +237,7 @@ export function SearchBar({
       }
       const places = await viaNominatim().catch(() => null);
       if (fallback.signal.aborted) return;
-      if (places) done(places);
+      if (places) done(places, true);
       else setResponse({ key, places: [], status });
     }, DEBOUNCE_MS);
     return () => {
@@ -224,22 +272,28 @@ export function SearchBar({
   const choice = (it: Item) => (it.cat ? choose(it.cat) : pick(it.place));
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Keys while an input method composes a word belong to it: Enter commits the word.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const n = items.length;
-      if (n)
-        setActive(
-          (Math.max(active, e.key === 'ArrowDown' ? -1 : 0) + (e.key === 'ArrowDown' ? 1 : n - 1)) %
-            n,
-        );
+      if (!n) return;
+      const next =
+        (Math.max(active, e.key === 'ArrowDown' ? -1 : 0) + (e.key === 'ArrowDown' ? 1 : n - 1)) %
+        n;
+      setActive(next);
+      // The row the arrows reached stays in sight in a long list.
+      requestAnimationFrame(() =>
+        document.getElementById(`${listId}-${next}`)?.scrollIntoView({ block: 'nearest' }),
+      );
     } else if (e.key === 'Enter' && category && active < 0) {
       // "Restaurants" + search: show them all where they are, without choosing one.
       // Close the list first, so the fit measures the map the user will see.
       input.current?.blur();
-      if (results.length) requestAnimationFrame(onShowAll);
+      if (results.length && onShowAll) requestAnimationFrame(onShowAll);
     } else if (
       e.key === 'Enter' &&
-      (status === 'error' || status === 'slow') &&
+      (status === 'error' || status === 'slow' || (current?.fallback && !results.length)) &&
       !suggestions.length
     ) {
       askedFor.current = key;
@@ -267,7 +321,9 @@ export function SearchBar({
         ? t.noneHere
         : t.noResults
       : status === 'error'
-        ? t.searchOffline
+        ? navigator.onLine
+          ? t.searchSlow
+          : t.searchOffline
         : status === 'slow'
           ? t.searchSlow
           : '';
@@ -275,7 +331,7 @@ export function SearchBar({
   const showList = open && (status !== 'idle' || suggestions.length > 0);
 
   return (
-    <div className="search" data-open={showList || undefined}>
+    <div className="search" data-open={showList || undefined} hidden={hidden}>
       {showList && (
         <ul className="results surface" id={listId} role="listbox">
           {items.map((it, i) => (
@@ -342,13 +398,16 @@ export function SearchBar({
           placeholder={placeholder ?? t.search}
           aria-label={placeholder ?? t.search}
           autoFocus={autoFocus}
-          aria-controls={listId}
+          aria-controls={showList ? listId : undefined}
+          aria-autocomplete="list"
           aria-expanded={showList}
           aria-activedescendant={showList && items[active] ? `${listId}-${active}` : undefined}
           role="combobox"
           value={query}
           onChange={(e) => {
             edited.current = Date.now();
+            // An Enter pressed for the old text does not jump for the new one.
+            jumpFor.current = null;
             setQuery(e.target.value);
             // Editing the name of a chosen category goes back to searching by name.
             setCategory(null);

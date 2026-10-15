@@ -73,6 +73,9 @@ export function parseHours(spec: string): Week | null {
     if (!spans) return null;
     for (const d of which) perDay[d] = spans;
   }
+  // Never open on any weekday: the spec speaks of holidays or closing days only ("PH off",
+  // "Su,PH off"), and says nothing about the rest of the week.
+  if (perDay.every((spans) => !spans.length)) return null;
   return perDay.flatMap((spans, d) =>
     spans.map(([s, e]): [number, number] => [d * DAY + s, d * DAY + e]),
   );
@@ -82,6 +85,20 @@ export type HoursState =
   | { open: true; always: true }
   | { open: boolean; always?: false; /** When it closes or opens next. */ change: Date }
   | { open: false; never: true };
+
+/** Beyond this many hours from the device's own zone, a place's clock is another one. */
+const ZONE_SLACK_H = 2;
+
+/**
+ * Whether a place keeps about the device's clock: the zone its longitude suggests lies within
+ * two hours of the device's standard time. Hours elsewhere are shown, but open or closed now is
+ * not guessed from a clock that says nothing about them (New York seen from Berlin).
+ */
+export function nearDeviceClock(lng: number, now: Date): boolean {
+  const offset = (month: number) => new Date(now.getFullYear(), month, 1).getTimezoneOffset();
+  const standard = -Math.max(offset(0), offset(6)) / 60;
+  return Math.abs(standard - lng / 15) <= ZONE_SLACK_H;
+}
 
 /** Minutes since Monday 00:00 in local time. */
 const minuteOfWeek = (d: Date) => ((d.getDay() + 6) % 7) * DAY + d.getHours() * 60 + d.getMinutes();

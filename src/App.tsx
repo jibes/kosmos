@@ -1,20 +1,17 @@
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { distance, type LngLat } from './core/geo';
-import { parsePhoton, reverseUrl, searchUrl, type Place } from './core/search';
+import type { Place } from './core/search';
 import type { Mode, TravelMode } from './core/route';
-import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
 import { lang, locale, t } from './i18n';
 import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
-import { onLongPress } from './ui/gestures';
 import { pinMarker, userMarker } from './ui/markers';
 import { isNative, openAppSettings } from './ui/native';
 import { NavView, NavWaiting } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
 import { connectionStart, RideView, rideWords } from './ui/RideView';
 import { RouteCard } from './ui/RouteCard';
-import { SearchBar } from './ui/SearchBar';
+import { SearchBar, useSearch } from './ui/SearchBar';
 import { Toasts, useToast } from './ui/Toasts';
 import { useLocation } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
@@ -32,6 +29,7 @@ import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
 import { useNavTheme, useStatusBar } from './ui/useNavTheme';
 import { useOffline } from './ui/useOffline';
+import { addressOf, useMapTaps, type Enrich } from './ui/useMapTaps';
 import { useHint } from './ui/useHint';
 import { useTheme } from './ui/useTheme';
 import { systemVoice, useMuted } from './ui/voice';
@@ -51,19 +49,6 @@ interface Selection {
 const ARRIVED_END_MS = 60_000;
 /** A second back press within this ends navigation. */
 const BACK_TWICE_MS = 3000;
-
-async function fetchPlaces(url: string): Promise<Place[]> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(String(res.status));
-  return parsePhoton(await res.json());
-}
-
-/** The address line for a place known only by name and position (a map label or POI). */
-async function addressOf(name: string, at: LngLat) {
-  const hits = await fetchPlaces(searchUrl(name, lang, { ...at, zoom: 14 }, 3));
-  const hit = hits.find((p) => distance(p, at) < 30_000);
-  return hit ? { detail: hit.detail, ...(hit.osm ? { osm: hit.osm } : {}) } : null;
-}
 
 export function App() {
   const systemTheme = useTheme();
@@ -120,21 +105,28 @@ export function App() {
   }, [trip]);
   const pending = useRef(0);
   const flyOnFix = useRef(false);
-  const lastHold = useRef(0);
   const followRef = useRef(follow);
   useEffect(() => {
     followRef.current = follow;
   }, [follow]);
 
-  /** Shows a place at once, then fills in its details when the lookup returns. */
-  const select = useCallback((place: Place, enrich?: () => Promise<Partial<Place> | null>) => {
+  /**
+   * Shows a place at once, then fills in its details when the lookup returns. Looking at a place
+   * stops following (the camera would tug it away) and any late fly to the first fix.
+   */
+  const select = useCallback((place: Place, enrich?: Enrich) => {
     const token = ++pending.current;
+    flyOnFix.current = false;
+    setFollow('off');
     setSelection({ place, loading: !!enrich });
     enrich?.()
       .catch(() => null)
       .then((extra) => {
         if (token !== pending.current) return;
-        setSelection({ place: { ...place, ...extra }, loading: false });
+        const full = { ...place, ...extra };
+        setSelection({ place: full, loading: false });
+        // A route opened meanwhile goes there by its name too, not "Dropped pin".
+        setTrip((tr) => (tr?.to === place ? { ...tr, to: full } : tr));
       });
   }, []);
 
@@ -178,97 +170,16 @@ export function App() {
     pin.current.setLngLat([sel.lng, sel.lat]).addTo(map);
   }, [map, sel?.lng, sel?.lat]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Taps on labels select them; a long press drops a pin anywhere.
-  useEffect(() => {
-    if (!map) return;
-    const onClick = (e: maplibregl.MapMouseEvent) => {
-      if (Date.now() - lastHold.current < 700) return;
-      if (tripRef.current) {
-        const { x, y } = e.point;
-        const [alt] = map.queryRenderedFeatures(
-          [
-            [x - 8, y - 8],
-            [x + 8, y + 8],
-          ],
-          { layers: [ROUTE_ALT_LAYER] },
-        );
-        if (alt) setActive(Number(alt.properties.index));
-        return;
-      }
-      const layers = LABEL_LAYERS.filter((id) => map.getLayer(id));
-      const { x, y } = e.point;
-      const [f] = map.queryRenderedFeatures(
-        [
-          [x - 10, y - 10],
-          [x + 10, y + 10],
-        ],
-        { layers },
-      );
-      const props = f?.properties ?? {};
-      const name = (props[`name:${LABEL_LANG}`] ?? props.name) as string | undefined;
-      if (!f || !name) {
-        clear();
-        return;
-      }
-      const at: LngLat =
-        f.geometry.type === 'Point'
-          ? { lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }
-          : e.lngLat;
-      select({ name, detail: '', ...at }, () => addressOf(name, at));
-    };
-    const offHold = onLongPress(map, (at) => {
-      // While guiding, the trip is settled: a start or destination changed now would send the
-      // reroutes from the wrong place.
-      if (navRef.current) return;
-      lastHold.current = Date.now();
-      const here = { lng: at.lng, lat: at.lat };
-      const lookup = async (): Promise<Partial<Place>> => {
-        const [hit] = await fetchPlaces(reverseUrl(here, lang));
-        return hit
-          ? { name: hit.name, detail: hit.detail, ...(hit.osm ? { osm: hit.osm } : {}) }
-          : { detail: t.noAddress };
-      };
-      // With a route open, a point on the map becomes its start or its destination.
-      if (tripRef.current) {
-        const set = (end: 'from' | 'to') => {
-          const pin: Place = { name: t.droppedPin, detail: '', ...here };
-          setActive(0);
-          setTrip((tr) => (tr ? { ...tr, [end]: pin } : tr));
-          void lookup()
-            .catch(() => null)
-            .then((extra) =>
-              setTrip((tr) =>
-                tr && tr[end] === pin ? { ...tr, [end]: { ...pin, ...extra } } : tr,
-              ),
-            );
-        };
-        showToast(t.droppedPin, [
-          { label: t.startHere, run: () => set('from') },
-          { label: t.goHere, run: () => set('to') },
-        ]);
-        return;
-      }
-      select({ name: t.droppedPin, detail: '', ...here }, lookup);
-    });
-    // The pointer shows what a click does: a label without a route open, an alternative with one.
-    const pointer = (alt: boolean) => () => {
-      if (!!tripRef.current === alt) map.getCanvas().style.cursor = 'pointer';
-    };
-    const [onLabel, onAlt] = [pointer(false), pointer(true)];
-    const grab = () => (map.getCanvas().style.cursor = '');
-    const layers = [...LABEL_LAYERS];
-    map.on('click', onClick);
-    map.on('mouseenter', layers, onLabel);
-    map.on('mouseleave', layers, grab);
-    map.on('mouseenter', ROUTE_ALT_LAYER, onAlt);
-    map.on('mouseleave', ROUTE_ALT_LAYER, grab);
-    return () => {
-      offHold();
-      map.off('click', onClick);
-      map.off('mouseenter', layers, onLabel).off('mouseleave', layers, grab);
-      map.off('mouseenter', ROUTE_ALT_LAYER, onAlt).off('mouseleave', ROUTE_ALT_LAYER, grab);
-    };
-  }, [map, select, clear, showToast]);
+  useMapTaps(map, {
+    labelLang: LABEL_LANG,
+    select,
+    clear,
+    showToast,
+    tripRef,
+    navRef,
+    setActive,
+    setTrip,
+  });
 
   const pick = useCallback(
     (place: Place) => {
@@ -287,10 +198,21 @@ export function App() {
       }
       setFollow('off');
       // A place found by category comes from the map; its address comes from Photon.
-      select(place, place.distance === undefined ? undefined : () => addressOf(place.name, place));
+      select(
+        place,
+        place.distance === undefined
+          ? undefined
+          : () => addressOf(place.unnamed ? '' : place.name, place),
+      );
       const [w, s, e, n] = place.bbox ?? [0, 0, 0, 0];
       if (place.bbox && (e - w > 0.002 || n - s > 0.002)) {
-        map.fitBounds(place.bbox, { padding: padding(), maxZoom: 17, duration: motion(1600) });
+        // Its own padding only: an earlier pick's stays on the camera and would count twice.
+        map.fitBounds(place.bbox, {
+          padding: padding(),
+          absolutePadding: true,
+          maxZoom: 17,
+          duration: motion(1600),
+        });
       } else {
         const zoom = Math.max(map.getZoom(), 16);
         map.flyTo({
@@ -305,7 +227,12 @@ export function App() {
   );
 
   /** Places of a category, from the map's tiles; their dots stay until the search ends. */
-  const category = useCategory(map, LABEL_LANG, routePadding);
+  /** The ride's whole trip, open under its banner: a step of its own for Back. */
+  const [tripList, setTripList] = useState(false);
+  if (tripList && !riding) setTripList(false);
+  /** What is searched for, kept while a route covers the search bar, dots and all. */
+  const search = useSearch();
+  const category = useCategory(map, LABEL_LANG, routePadding, !!trip, fix);
 
   const bias = useCallback(() => {
     if (!map) return undefined;
@@ -331,13 +258,17 @@ export function App() {
     surface.addEventListener('pointerdown', down);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
+    // The user's own move: a fix arriving late no longer flies the map away from it.
     const stopFollowing = () => {
+      flyOnFix.current = false;
       setFollow('off');
       if (navRef.current) setNavFollow(false);
     };
     // While navigating, a pinch or twist to look around holds the camera too (Re-centre returns).
     const lookAround = (e: { originalEvent?: Event }) => {
-      if (e.originalEvent && navRef.current) setNavFollow(false);
+      if (!e.originalEvent) return;
+      flyOnFix.current = false;
+      if (navRef.current) setNavFollow(false);
     };
     const looks = ['zoomstart', 'rotatestart', 'pitchstart'] as const;
     map.on('dragstart', stopFollowing);
@@ -352,7 +283,11 @@ export function App() {
     };
   }, [map]);
 
+  /** The newest fix, and whether a catch-up waits for the camera to stop. */
+  const latestFix = useRef(fix);
+  const catchingUp = useRef(false);
   useEffect(() => {
+    latestFix.current = fix;
     if (!map || !fix || (roadNavRef.current && trackingRef.current)) return;
     me.current?.update(fix);
     if (roadNavRef.current) {
@@ -378,11 +313,17 @@ export function App() {
       });
     } else if (followRef.current === 'position') {
       // Never cut short a running camera move (the fly-in after tapping locate would stop at
-      // globe zoom); catch up when it ends, since underground no further fix may come.
-      const follow = () => map.easeTo({ center: [fix.lng, fix.lat], duration: motion(800) });
+      // globe zoom); catch up when it ends, to the newest fix, since underground no further
+      // fix may come.
+      const follow = () => {
+        const f = latestFix.current;
+        if (f) map.easeTo({ center: [f.lng, f.lat], duration: motion(800) });
+      };
       if (!map.isMoving()) follow();
-      else {
+      else if (!catchingUp.current) {
+        catchingUp.current = true;
         map.once('moveend', () => {
+          catchingUp.current = false;
           if (followRef.current === 'position' && !map.isMoving()) follow();
         });
       }
@@ -609,7 +550,8 @@ export function App() {
   useBack((via) => {
     if (about) setAbout(false);
     else if (navigating) {
-      if (arrived) finish();
+      if (riding && tripList) setTripList(false);
+      else if (arrived) finish();
       else if (Date.now() - backAt.current < BACK_TWICE_MS) endNav();
       else {
         backAt.current = Date.now();
@@ -618,6 +560,7 @@ export function App() {
     } else if (picking) setPicking(null);
     else if (trip) closeRoute();
     else if (selection) clear();
+    else if (search.query) search.clear();
     else return false;
     return true;
   });
@@ -657,6 +600,8 @@ export function App() {
               route.retry();
             }}
             onEnd={arrived ? finish : endNav}
+            open={tripList}
+            onOpen={setTripList}
           />
         )}
         {navigating && !riding && shown[chosen] && (
@@ -730,26 +675,30 @@ export function App() {
                   onRoute={openRoute}
                 />
               )}
-              {(!trip || picking) && (
+              <SearchBar
+                search={search}
+                hidden={!!trip}
+                lang={lang}
+                bias={bias}
+                onPick={pick}
+                onCategory={category.onCategory}
+                categoryRun={category.run}
+                onShowAll={category.showAll}
+                collapsed={!!selection}
+                onFocus={clear}
+              />
+              {/* A route's start or destination: by name only, its own field. */}
+              {picking && (
                 <SearchBar
-                  key={picking ?? 'place'}
+                  key={picking}
                   lang={lang}
                   bias={bias}
                   onPick={pick}
-                  onCategory={category.onCategory}
-                  categoryRun={category.run}
-                  onShowAll={category.showAll}
-                  collapsed={!!selection && !picking}
-                  onFocus={picking ? () => undefined : clear}
-                  placeholder={
-                    picking === 'start'
-                      ? t.searchStart
-                      : picking === 'end'
-                        ? t.searchEnd
-                        : undefined
-                  }
-                  autoFocus={!!picking}
-                  onCancel={picking ? () => setPicking(null) : undefined}
+                  collapsed={false}
+                  onFocus={() => undefined}
+                  placeholder={picking === 'start' ? t.searchStart : t.searchEnd}
+                  autoFocus
+                  onCancel={() => setPicking(null)}
                 />
               )}
             </>

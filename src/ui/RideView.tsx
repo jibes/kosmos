@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { FRESH_MS, type RidePrompt, type RideState } from '../core/ride';
 import type { Place } from '../core/search';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
@@ -6,7 +5,7 @@ import type { Transit, TransitLeg } from '../core/transit';
 import { capital, fill, t, units } from '../i18n';
 import { LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
-import { LineChip, TransitLegs, lineName } from './TransitParts';
+import { LineChip, TransitLegs, lineName, platformWord, sayPlatformOf } from './TransitParts';
 
 interface Props {
   transit: Transit;
@@ -22,6 +21,9 @@ interface Props {
   /** Asking for a new connection, or none came and the old one stands. */
   connecting: 'idle' | 'asking' | 'failed';
   onEnd: () => void;
+  /** The whole connection, every stop and turn, open under the banner (Back closes it). */
+  open: boolean;
+  onOpen: (open: boolean) => void;
 }
 
 /**
@@ -59,7 +61,7 @@ export function rideWords(transit: Transit, p: RidePrompt, destination: string, 
     case 'cancelled':
       return fill(t.sayCancelled, { line: lineName(leg) });
     case 'platform':
-      return fill(t.sayPlatform, { line: lineName(leg), track: leg.from.track ?? '' });
+      return fill(sayPlatformOf(leg), { line: lineName(leg), track: leg.from.track ?? '' });
     case 'delay':
       return fill(t.sayDelay, { line: lineName(leg), n: leg.delay });
     default:
@@ -69,14 +71,12 @@ export function rideWords(transit: Transit, p: RidePrompt, destination: string, 
 
 /** On the way by public transport: one line saying what to do now, the arrival at the bottom. */
 export function RideView(props: Props) {
-  const { transit, st, destination, lang, muted, following, connecting, ...on } = props;
-  /** The whole connection, every stop and turn, under the banner. */
-  const [open, setOpen] = useState(false);
+  const { transit, st, destination, lang, muted, following, connecting, open, ...on } = props;
   const clock = (ms: number) => formatClock(new Date(ms), lang);
   const leg = transit.legs[st.leg] as TransitLeg | undefined;
   const next = transit.legs[st.leg + 1];
   const ride = leg?.ride ? leg : next?.ride ? next : undefined;
-  const platform = ride?.from.track ? ` · ${t.platform} ${ride.from.track}` : '';
+  const platform = ride?.from.track ? ` · ${platformWord(ride)} ${ride.from.track}` : '';
   const minutes = ride ? Math.round((ride.start - st.time) / 60_000) : 0;
   // Beyond an hour (tomorrow morning) the time itself says more than "in 380 min".
   const when =
@@ -94,7 +94,7 @@ export function RideView(props: Props) {
       : st.cancelled
         ? fill(t.lineCancelled, { line: lineName(ride) })
         : moved
-          ? `${lineName(ride)} · ${t.platform} ${ride.from.track}`
+          ? `${lineName(ride)} · ${platformWord(ride)} ${ride.from.track}`
           : '';
   const left = (transit.end - st.time) / 1000;
 
@@ -157,7 +157,7 @@ export function RideView(props: Props) {
             className="ride-toggle"
             aria-expanded={open}
             aria-label={t.showTrip}
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => on.onOpen(!open)}
           />
           {icon}
           <div>

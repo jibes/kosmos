@@ -9,8 +9,13 @@ export function About({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     const d = dialog.current;
+    // Closed by any way, focus goes back to what opened it, not to the page.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     d?.showModal();
-    return () => d?.close();
+    return () => {
+      d?.close();
+      opener?.focus();
+    };
   }, []);
 
   return (

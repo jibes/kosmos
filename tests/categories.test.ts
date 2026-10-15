@@ -25,6 +25,24 @@ describe('categories', () => {
     expect(categoriesFor('sch').length).toBe(2);
   });
 
+  it('reads plurals and inflections, and offers nothing a short word only begins', () => {
+    expect(categoriesFor('Supermärkte')).toEqual(['groceries']);
+    expect(categoriesFor('Kirchen')).toEqual(['worship']);
+    expect(categoriesFor('Bäckereien')).toEqual(['groceries']);
+    expect(categoriesFor('Krankenhäuser')).toEqual(['doctor']);
+    expect(categoriesFor('Metzgerei')).toEqual(['groceries']);
+    expect(categoriesFor('churches')).toEqual(['worship']);
+    expect(categoriesFor('schools')).toEqual(['school']);
+    expect(categoriesFor('hospitals')).toEqual(['doctor']);
+    expect(categoriesFor('cinemas')).toEqual(['theatre']);
+    expect(categoriesFor('ATMs')).toEqual(['bank']);
+    expect(categoriesFor('petrol station')).toEqual(['fuel']);
+    expect(categoriesFor('WC')).toEqual(['toilets']);
+    // A park is green, then perhaps a place to park; a bar is not a barber.
+    expect(categoriesFor('Park')).toEqual(['park', 'parking']);
+    expect(categoriesFor('bar')).toEqual(['bar']);
+  });
+
   it('leaves names to the place search', () => {
     expect(categoriesFor('Brandenburger Tor')).toEqual([]);
     expect(categoriesFor('Alexanderplatz')).toEqual([]);
@@ -34,6 +52,10 @@ describe('categories', () => {
     expect(isOf('pharmacy', { name: 'DM', subclass: 'chemist' })).toBe(true);
     expect(isOf('museum', { name: 'Galerie', subclass: 'gallery' })).toBe(true);
     expect(isOf('museum', { subclass: 'museum' })).toBe(false);
+    // Toilets, cash machines and car parks rarely have a name: their kind is enough.
+    expect(isOf('toilets', { subclass: 'toilets' })).toBe(true);
+    expect(isOf('bank', { subclass: 'atm' })).toBe(true);
+    expect(isOf('bank', { subclass: 'bank' })).toBe(false);
     expect(isOf('museum', { name: 'Kino', subclass: 'cinema' })).toBe(false);
   });
 

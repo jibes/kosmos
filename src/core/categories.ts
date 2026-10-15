@@ -45,6 +45,8 @@ const TABLE = {
       'backerei',
       'bakery',
       'metzger',
+      'metzgerei',
+      'fleischerei',
       'butcher',
     ],
   },
@@ -76,9 +78,14 @@ const TABLE = {
       'fuel',
       'gas station',
       'petrol',
+      'petrol station',
       'ladestation',
       'charging',
     ],
+  },
+  park: {
+    tags: ['park', 'garden', 'nature_reserve'],
+    words: ['park', 'parks', 'parkanlage', 'garten', 'garden', 'grunanlage', 'naturschutzgebiet'],
   },
   parking: {
     tags: ['parking', 'bicycle_parking'],
@@ -201,22 +208,60 @@ export const fold = (s: string) =>
     .trim();
 
 /**
- * The categories a query may mean, best first: a word named exactly, then words it begins
- * (from 3 letters). At most `limit`, so a short prefix does not crowd out places by name.
+ * A word and the forms it may stand for without its plural or inflection: "Supermärkte",
+ * "Kirchen", "Krankenhäuser", "churches", "ATMs" find the word the table names.
+ */
+function forms(q: string): string[] {
+  const out = [q];
+  for (const end of ['ies', 'es', 'en', 'er', 'n', 's', 'e']) {
+    if (q.length > end.length + 2 && q.endsWith(end)) out.push(q.slice(0, -end.length));
+  }
+  if (q.endsWith('ies')) out.push(`${q.slice(0, -3)}y`);
+  return out;
+}
+
+/**
+ * A beginning counts from 3 letters ("kir" → Kirche); a short word that is itself a kind of
+ * place ("bar") offers no longer ones it begins ("barber").
+ */
+const PREFIX_MIN = 3;
+const BESIDE_EXACT_MIN = 4;
+
+/**
+ * The categories a query may mean, best first: a word named exactly (or as its plural), then
+ * words it begins. At most `limit`, so a short prefix does not crowd out places by name.
  */
 export function categoriesFor(query: string, limit = 2): Category[] {
   const q = fold(query);
-  if (q.length < 3) return [];
-  const exact = CATEGORY_IDS.filter((c) => (TABLE[c].words as readonly string[]).includes(q));
-  const begun = CATEGORY_IDS.filter(
-    (c) => !exact.includes(c) && TABLE[c].words.some((w) => w.startsWith(q)),
+  if (q.length < 2) return [];
+  const qs = forms(q);
+  const exact = CATEGORY_IDS.filter((c) =>
+    qs.some((f) => (TABLE[c].words as readonly string[]).includes(f)),
   );
+  const begun =
+    q.length < (exact.length ? BESIDE_EXACT_MIN : PREFIX_MIN)
+      ? []
+      : CATEGORY_IDS.filter(
+          (c) => !exact.includes(c) && TABLE[c].words.some((w) => w.startsWith(q)),
+        );
   return [...exact, ...begun].slice(0, limit);
 }
 
-/** A named place of the category, from a `poi` feature's properties. */
+/**
+ * Kinds of place that mostly have no name in OpenStreetMap (a public toilet, a cash machine, a
+ * car park); found anyway, and called by what they are.
+ */
+export const UNNAMED = ['atm', 'toilets', 'parking', 'bicycle_parking', 'playground'] as const;
+export type Unnamed = (typeof UNNAMED)[number];
+
+/** Whether a nameless place of this subclass is still worth finding: its kind is its name. */
+export const unnamedKind = (subclass: unknown): Unnamed | undefined =>
+  (UNNAMED as readonly unknown[]).includes(subclass) ? (subclass as Unnamed) : undefined;
+
+/** A place of the category, from a `poi` feature's properties: named, or of a nameless kind. */
 export const isOf = (c: Category, p: Record<string, unknown>): boolean =>
-  !!p.name && (TABLE[c].tags as readonly unknown[]).includes(p.subclass);
+  (!!p.name || !!unnamedKind(p.subclass)) &&
+  (TABLE[c].tags as readonly unknown[]).includes(p.subclass);
 
 export interface Poi extends LngLat {
   name: string;

@@ -10,6 +10,11 @@ const count = (n: number, one: string, many: string) =>
 /** What to call a ride: its line ("U6"), or else its kind of vehicle ("bus"). */
 export const lineName = (leg: TransitLeg) => leg.line ?? t[`veh_${vehicleOf(leg.mode) ?? 'other'}`];
 
+/** Buses and trams leave from a stand ("Steig"), trains from a platform ("Gleis"). */
+const onRoad = (leg: TransitLeg) => ['bus', 'tram'].includes(vehicleOf(leg.mode) ?? '');
+export const platformWord = (leg: TransitLeg) => (onRoad(leg) ? t.stand : t.platform);
+export const sayPlatformOf = (leg: TransitLeg) => (onRoad(leg) ? t.sayStand : t.sayPlatform);
+
 /** A line as people know it: its number in its own colour, with the kind of vehicle. */
 export function LineChip({ leg, big }: { leg: TransitLeg; big?: boolean }) {
   const vehicle = vehicleOf(leg.mode);
@@ -157,7 +162,7 @@ export function TransitLegs({ transit, lang, current, passed = 0, destination }:
                   <span>{l.from.name}</span>
                   {l.from.track && (
                     <small>
-                      {t.platform} {l.from.track}
+                      {platformWord(l)} {l.from.track}
                     </small>
                   )}
                 </p>

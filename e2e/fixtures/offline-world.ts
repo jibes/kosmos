@@ -192,6 +192,12 @@ export const liveTrip = { cancelled: false };
 export const transitRequests: URLSearchParams[] = [];
 
 /** Every routing request the app made, for assertions. */
+/** Every Photon search the app made, by its text. */
+export const photonSearches: string[] = [];
+
+/** The planet build the TileJSON names, as OpenFreeMap renews it every week or so. */
+export const tileset = { build: '20261001_001001_pt' };
+
 export const routeRequests: { costing: string; from: Pt; to: Pt }[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
@@ -205,16 +211,19 @@ export async function offlineWorld(context: BrowserContext) {
       contentType: 'application/json',
       body: JSON.stringify({
         tilejson: '3.0.0',
-        tiles: ['https://tiles.openfreemap.org/fixture/{z}/{x}/{y}.pbf'],
+        tiles: [`https://tiles.openfreemap.org/planet/${tileset.build}/{z}/{x}/{y}.pbf`],
         minzoom: 0,
         maxzoom: 14,
       }),
     }),
   );
-  await context.route(/tiles\.openfreemap\.org\/fixture\/(\d+)\/(\d+)\/(\d+)\.pbf/, (route) => {
-    const [, z, x, y] = /\/(\d+)\/(\d+)\/(\d+)\.pbf/.exec(route.request().url())!.map(Number);
-    return route.fulfill({ contentType: 'application/x-protobuf', body: tile(z, x, y) });
-  });
+  await context.route(
+    /tiles\.openfreemap\.org\/planet\/[^/]+\/(\d+)\/(\d+)\/(\d+)\.pbf/,
+    (route) => {
+      const [, z, x, y] = /\/(\d+)\/(\d+)\/(\d+)\.pbf/.exec(route.request().url())!.map(Number);
+      return route.fulfill({ contentType: 'application/x-protobuf', body: tile(z, x, y) });
+    },
+  );
   // Every glyph the Inter font faces do not cover comes back empty.
   await context.route(/tiles\.openfreemap\.org\/fonts\//, (route) =>
     route.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) }),
@@ -232,9 +241,26 @@ export async function offlineWorld(context: BrowserContext) {
             osm_type: 'W',
             osm_id: 518071791,
           }),
-          photonPoint(13.0, 52.4, { name: 'Brandenburg an der Havel', country: 'Deutschland' }),
+          photonPoint(13.0, 52.4, {
+            name: 'Brandenburg an der Havel',
+            country: 'Deutschland',
+            // A town: an extent to fit, [minLon, maxLat, maxLon, minLat].
+            extent: [12.45, 52.47, 12.65, 52.36],
+          }),
         ]
-      : [];
+      : /einstein/i.test(q)
+        ? // Another branch of the same name, 2 km away; the tapped one is not in the index.
+          [
+            photonPoint(CENTER.lng + 0.03, CENTER.lat, {
+              name: 'Café Einstein',
+              street: 'Kurfürstenstraße',
+              city: 'Berlin',
+              osm_type: 'N',
+              osm_id: 777,
+            }),
+          ]
+        : [];
+    photonSearches.push(q);
     return route.fulfill({ contentType: 'application/json', body: photon(hits) });
   });
   await context.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {

@@ -7,8 +7,10 @@ import {
   lookupRequests,
   nominatimSearches,
   offlineWorld,
+  photonSearches,
   routeRequests,
   liveTrip,
+  tileset,
   transitRequests,
   tripRequests,
 } from './fixtures/offline-world';
@@ -52,6 +54,7 @@ async function idle(page: Page) {
 
 test.beforeEach(({ page }) => {
   liveTrip.cancelled = false;
+  tileset.build = '20261001_001001_pt';
   const errors: string[] = [];
   consoleErrors.set(page, errors);
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -90,6 +93,20 @@ async function jump(
       bearing: v.bearing ?? 0,
     });
   }, view);
+  await idle(page);
+}
+
+/**
+ * Wide screens: the map the user sees lies beside the panel, and category distances count from
+ * its middle. Puts the view's centre there, as a user looking at it would.
+ */
+async function centreBeside(page: Page) {
+  await page.evaluate(() => {
+    if (!matchMedia('(min-width: 900px), (orientation: landscape) and (min-width: 560px)').matches)
+      return;
+    const left = document.querySelector('.panel')!.getBoundingClientRect().right;
+    window.kosmos!.panBy([-left / 2, 0], { duration: 0 });
+  });
   await idle(page);
 }
 
@@ -421,8 +438,11 @@ test.describe('map', () => {
       })
       .toEqual({ left: 0, top: 0, right: 0, clear: true });
     await shot(page, info, 'riding');
-    await banner.click();
+    // Back (here Escape) closes the trip first, and guidance goes on.
+    await page.keyboard.press('Escape');
     await expect(trip).toHaveCount(0);
+    await expect(page.locator('.toast')).toHaveCount(0);
+    await expect(banner).toBeVisible();
     await minutes(20);
     await expect(banner).toContainText('Next stop', { timeout: 10_000 });
     await expect.poll(spoken).toContain('Get off at the next stop, Unter den Linden.');
@@ -746,7 +766,9 @@ test.describe('map', () => {
     const input = page.getByRole('combobox');
     await input.fill('restaurant');
     await input.press('Enter');
-    await expect(page.getByRole('option').first()).toContainText('Zur Letzten Instanz');
+    await expect(page.getByRole('option').filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(
+      1,
+    );
     await input.fill('brandenburger');
     await page.waitForTimeout(300);
     await expect(page.getByRole('option').filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(
@@ -757,7 +779,7 @@ test.describe('map', () => {
 
   test('finds places by category from the map, nearest first', async ({ page }, info) => {
     await jump(page, { ...CENTER, zoom: 11 });
-    await idle(page);
+    await centreBeside(page);
     const input = page.getByRole('combobox');
     // The word offers the kind of place as the top row; Enter takes it.
     await input.fill('restaurant');
@@ -1128,9 +1150,10 @@ test.describe('map', () => {
     const input = page.getByRole('combobox');
     await input.fill('restaurant');
     await input.press('Enter');
-    await expect(page.getByRole('option').first()).toContainText('Zur Letzten Instanz', {
-      timeout: 5000,
-    });
+    await expect(page.getByRole('option').filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(
+      1,
+      { timeout: 5000 },
+    );
   });
 
   test('Enter jumps to the first result, even before results load', async ({ page }) => {
@@ -1240,6 +1263,12 @@ test.describe('map', () => {
     await page.locator('.toast').getByRole('button', { name: 'Go here' }).click();
     await expect(card.locator('.ends')).not.toContainText('Brandenburger Tor');
     await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(CENTER.lng, 3);
+    // The pin moves to the new destination: it no longer marks the old one.
+    await idle(page);
+    const end = await screenAt(page, CENTER.lng, CENTER.lat);
+    const pin = (await page.locator('.pin').boundingBox())!;
+    expect(Math.abs(pin.x + pin.width / 2 - end.x)).toBeLessThan(4);
+    expect(Math.abs(pin.y + pin.height - end.y)).toBeLessThan(16);
   });
 
   test('offers another way when there is no route', async ({ page, context }) => {
@@ -1482,8 +1511,121 @@ test.describe('map', () => {
     const cafe = { lng: CENTER.lng + 140 / 67800, lat: CENTER.lat - 170 / 111200 };
     await jump(page, { ...cafe, zoom: 17 });
     const at = await screenAt(page, cafe.lng, cafe.lat);
+    const asked = lookupRequests.length;
     await page.mouse.click(at.x, at.y);
-    await expect(page.locator('.card').getByRole('heading')).toHaveText('Café Einstein');
+    const card = page.locator('.card');
+    await expect(card.getByRole('heading')).toHaveText('Café Einstein');
+    // The only Café Einstein the search knows is another branch, 2 km away: not its address,
+    // nor its hours. The address is the spot's own.
+    await expect(card).toContainText('Unter den Linden 5, Berlin, Deutschland');
+    await expect(card).not.toContainText('Kurfürstenstraße');
+    expect(lookupRequests.length).toBe(asked);
+  });
+
+  test('keeps a category search across a route, its dots out of the way meanwhile', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await jump(page, { ...CENTER, zoom: 13 });
+    await centreBeside(page);
+    const input = page.getByRole('combobox');
+    await input.fill('Restaurants');
+    await input.press('Enter');
+    const options = page.getByRole('option');
+    await expect(options).toHaveCount(3, { timeout: 10_000 });
+    const dots = () =>
+      page.evaluate(async () => {
+        const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
+        return ((await src.getData()) as GeoJSON.FeatureCollection).features.length;
+      });
+    const shown = () =>
+      page.evaluate(
+        () => window.kosmos!.getLayoutProperty('search-dots', 'visibility') ?? 'visible',
+      );
+    await options.first().click();
+    const card = page.locator('.card');
+    await card.getByRole('button', { name: /^Route$/ }).click();
+    await expect(page.locator('.card.route')).toBeVisible();
+    // The route has the map: the restaurants step aside.
+    await expect.poll(shown).toBe('none');
+    await page.locator('.card.route').getByRole('button', { name: /close/i }).click();
+    // Back from the route, the search is still there to compare the next one.
+    await expect.poll(shown).toBe('visible');
+    expect(await dots()).toBe(3);
+    await expect(input).toHaveValue('Restaurants');
+    await card.getByRole('button', { name: /close/i }).click();
+    // Escape (Back on Android) ends the search too, before anything else happens.
+    await page.locator('canvas.maplibregl-canvas').focus();
+    await page.keyboard.press('Escape');
+    await expect(input).toHaveValue('');
+    await expect.poll(dots).toBe(0);
+  });
+
+  test('finds nameless places by their kind', async ({ page }) => {
+    await jump(page, { ...CENTER, zoom: 15 });
+    const input = page.getByRole('combobox');
+    await input.fill('WC');
+    const options = page.getByRole('option');
+    await expect(options.first()).toHaveText(/Toilets/);
+    await input.press('Enter');
+    await expect(options).toHaveCount(1, { timeout: 10_000 });
+    await expect(options.first()).toContainText('Toilet');
+    await options.first().click();
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Toilet');
+    await expect(page.locator('.card')).toContainText('Unter den Linden 5');
+  });
+
+  test('asks the search again for the same words somewhere else', async ({ page }) => {
+    const input = page.getByRole('combobox');
+    const search = async () => {
+      await input.fill('');
+      await input.fill('brandenburger');
+      await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name);
+    };
+    await jump(page, { ...CENTER, zoom: 12 });
+    await search();
+    const asked = photonSearches.length;
+    await search();
+    // The same words over the same area: answered from memory.
+    expect(photonSearches.length).toBe(asked);
+    await input.blur();
+    await jump(page, { lng: 11.58, lat: 48.14, zoom: 12 });
+    await search();
+    // The last answer shows while the new one comes; the new one is asked for.
+    await expect.poll(() => photonSearches.length).toBe(asked + 1);
+  });
+
+  test('fits a town after a point was picked', async ({ page }) => {
+    // Small enough that a camera padding counted twice leaves no room at all.
+    await page.setViewportSize({ width: 390, height: 700 });
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await idle(page);
+    await input.fill('brandenburg');
+    await page.getByRole('option', { name: /Havel/ }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.kosmos!.getZoom()), { timeout: 8000 })
+      .toBeLessThan(12);
+  });
+
+  test('a route to a dropped pin takes its address once it comes', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    // The address takes its time; the route is asked for at once.
+    await page.route(/photon\.komoot\.io\/reverse/, async (route) => {
+      await new Promise((done) => setTimeout(done, 1500));
+      await route.fallback();
+    });
+    await jump(page, { ...CENTER, zoom: 16 });
+    const at = await screenAt(page, CENTER.lng, CENTER.lat);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    const card = page.locator('.card');
+    await expect(card.getByRole('heading')).toHaveText('Dropped pin');
+    await card.getByRole('button', { name: /^Route$/ }).click();
+    await expect(page.locator('.card.route .ends')).toContainText('Unter den Linden 5');
   });
 
   test('remembers the travel mode; Escape closes one layer at a time', async ({
@@ -1627,6 +1769,8 @@ test.describe('map', () => {
     await expect(dialog).toContainText('GPL-3.0-or-later');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
+    // Focus goes back to what opened it.
+    await expect(page.getByRole('button', { name: /OpenStreetMap/ })).toBeFocused();
   });
 });
 
@@ -1639,6 +1783,37 @@ test('works offline after the first visit', async ({ context, page }) => {
   await page.reload();
   await expect(page.getByRole('combobox')).toBeVisible();
   await expect(page.locator('canvas.maplibregl-canvas')).toBeVisible();
+});
+
+test('keeps the areas viewed for offline use across a new planet build', async ({
+  context,
+  page,
+}) => {
+  await offlineWorld(context);
+  await page.goto('./');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  // Now under the service worker: the tiles of what is viewed are kept.
+  await page.reload();
+  await idle(page);
+  await jump(page, { ...CENTER, zoom: 14 });
+  // Later, somewhere else, online: OpenFreeMap has a new build, and the TileJSON names it.
+  await jump(page, { lng: CENTER.lng + 1, lat: CENTER.lat + 1, zoom: 14 });
+  tileset.build = '20261008_001001_pt';
+  await page.reload();
+  await idle(page);
+  // Offline, back where the user was: the new build's tiles were never fetched there. (The
+  // fixture would still answer while "offline"; now no tile comes from the network.)
+  await context.setOffline(true);
+  await context.route(/\.pbf$/, (route) => route.abort('internetdisconnected'));
+  await page.evaluate(
+    ([lng, lat]) => window.kosmos!.jumpTo({ center: [lng, lat] }),
+    [CENTER.lng, CENTER.lat],
+  );
+  const drawn = () =>
+    page.evaluate(
+      () => window.kosmos!.queryRenderedFeatures().filter((f) => f.source === 'omt').length,
+    );
+  await expect.poll(drawn, { timeout: 10_000 }).toBeGreaterThan(0);
 });
 
 test.describe('in Britain', () => {

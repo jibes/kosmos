@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allDay, hoursState, parseHours, weekRows } from '../src/core/hours';
+import { allDay, hoursState, nearDeviceClock, parseHours, weekRows } from '../src/core/hours';
 
 // 2026-10-12 is a Monday.
 const at = (day: number, hh: number, mm = 0) => new Date(2026, 9, 12 + day, hh, mm);
@@ -49,7 +49,21 @@ describe('opening hours', () => {
     expect(parseHours('Mo-Fr 09:00+')).toBeNull();
     expect(parseHours('"by appointment"')).toBeNull();
     expect(parseHours('')).toBeNull();
-    expect(state('off', at(0, 10))).toEqual({ open: false, never: true });
+    // Holidays or closing days alone say nothing about the rest of the week: shown as written,
+    // not "closed every day".
+    expect(parseHours('PH off')).toBeNull();
+    expect(parseHours('Su,PH off')).toBeNull();
+    expect(parseHours('PH 10:00-14:00')).toBeNull();
+    expect(parseHours('off')).toBeNull();
+  });
+
+  it('guesses open or closed only on about the clock of the device', () => {
+    const now = new Date(2026, 9, 15, 10);
+    const here = -new Date(2026, 0, 1).getTimezoneOffset() / 60;
+    expect(nearDeviceClock(here * 15, now)).toBe(true);
+    // Eight hours of longitude away is another clock, whatever the device's zone.
+    expect(nearDeviceClock(here * 15 + 120, now)).toBe(false);
+    expect(nearDeviceClock(here * 15 - 120, now)).toBe(false);
   });
 });
 

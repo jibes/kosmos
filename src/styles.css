@@ -625,6 +625,12 @@ h2[tabindex='-1']:focus-visible {
   transition: bottom 0.25s var(--ease);
 }
 
+/* Typing: the result list has the room, the map buttons step aside (a small phone with the
+   keyboard up would put them over the results). */
+.ui:has(.search[data-open]:not([hidden])) .controls {
+  visibility: hidden;
+}
+
 .ctl {
   display: grid;
   place-items: center;
@@ -978,7 +984,7 @@ h2[tabindex='-1']:focus-visible {
    Re-center, across the width. */
 .ui[data-nav] .notes {
   right: calc(var(--gutter) + var(--safe-right));
-  bottom: calc(var(--gutter) + var(--safe-bottom) + 168px);
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 184px);
   align-items: center;
   text-align: center;
 }
@@ -1456,7 +1462,8 @@ h2[tabindex='-1']:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: calc(100% - 120px - var(--safe-top) - var(--safe-bottom));
+  /* Clear of Re-centre below it. */
+  max-height: calc(100% - 196px - var(--safe-top) - var(--safe-bottom));
 }
 
 /* In the column, not placed on the screen: relative only anchors the tap target, so the
@@ -1792,10 +1799,11 @@ button.via[aria-expanded='true']::after {
   color: var(--muted);
 }
 
+/* Above the credit and the speed, not beside them: a 360 px phone has no room for both. */
 .recenter {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--gutter) + var(--safe-bottom) + 90px);
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 128px);
   translate: -50% 0;
   display: flex;
   align-items: center;
@@ -2072,6 +2080,11 @@ button.via[aria-expanded='true']::after {
   .recenter {
     left: calc(50% + var(--side-end) / 2);
     bottom: calc(var(--gutter) + var(--safe-bottom) + 44px);
+  }
+
+  /* The bar is below it in the column; Re-centre is beside it on the map. */
+  .ride-top {
+    max-height: calc(100% - 120px - var(--safe-top) - var(--safe-bottom));
   }
 
   .speed {

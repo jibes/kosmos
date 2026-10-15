@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { parsePhoton, reverseUrl, searchUrl } from '../src/core/search';
+import {
+  nearestWithin,
+  parseAddress,
+  parsePhoton,
+  reverseUrl,
+  searchUrl,
+  type Place,
+} from '../src/core/search';
 
 const feature = (properties: object, coordinates = [13.405, 52.52]) => ({
   type: 'Feature',
@@ -110,5 +117,50 @@ describe('parsePhoton', () => {
       ],
     });
     expect(q.osm).toBeUndefined();
+  });
+});
+
+describe('a label tapped on the map', () => {
+  const tapped = { lng: 13.405, lat: 52.52 };
+  const lidl = (dLng: number, osm: string): Place => ({
+    name: 'Lidl',
+    detail: osm,
+    lng: tapped.lng + dLng,
+    lat: tapped.lat,
+    osm,
+  });
+
+  it('is the nearest place of its name, not the first one Photon lists', () => {
+    // 0.003° of longitude is about 200 m here, 0.0005° about 34 m.
+    const hits = [lidl(0.02, 'N1'), lidl(0.0005, 'N2'), lidl(0.001, 'N3')];
+    expect(nearestWithin(hits, tapped, 150)?.osm).toBe('N2');
+  });
+
+  it('is none of them when every same-named place is further away: another branch', () => {
+    expect(nearestWithin([lidl(0.003, 'N1'), lidl(0.02, 'N2')], tapped, 150)).toBeUndefined();
+  });
+
+  it('gets the address of its spot, never the name of a neighbour', () => {
+    const json = {
+      features: [
+        feature({
+          name: 'Bäckerei Nebenan',
+          type: 'house',
+          street: 'Unter den Linden',
+          housenumber: '77',
+          district: 'Mitte',
+          city: 'Berlin',
+          state: 'Berlin',
+          country: 'Deutschland',
+        }),
+      ],
+    };
+    expect(parseAddress(json)).toBe('Unter den Linden 77, Mitte, Berlin, Deutschland');
+    // A street itself: its name is the road.
+    const street = {
+      features: [feature({ name: 'Friedrichstraße', type: 'street', city: 'Berlin' })],
+    };
+    expect(parseAddress(street)).toBe('Friedrichstraße, Berlin');
+    expect(parseAddress({ features: [] })).toBeNull();
   });
 });

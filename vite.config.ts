@@ -71,7 +71,9 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
           {
-            // Tiles are immutable per planet build; the TileJSON names the current build.
+            // Tile URLs name the planet build, and the TileJSON names a new one every week or
+            // so. Kept without it, an area viewed once still shows offline after the next
+            // build; each tile is fetched anew once it expires.
             urlPattern: ({ url }) =>
               url.origin === 'https://tiles.openfreemap.org' && /\.pbf$/.test(url.pathname),
             handler: 'CacheFirst',
@@ -79,6 +81,12 @@ export default defineConfig({
               cacheName: 'kosmos-tiles-v1',
               expiration: { maxEntries: 4000, maxAgeSeconds: 45 * DAY, purgeOnQuotaError: true },
               cacheableResponse: { statuses: [0, 200] },
+              plugins: [
+                {
+                  cacheKeyWillBeUsed: async ({ request }) =>
+                    request.url.replace(/\/planet\/[^/]+\//, '/planet/any/'),
+                },
+              ],
             },
           },
           {
