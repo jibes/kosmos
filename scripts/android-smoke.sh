@@ -52,39 +52,59 @@ if ! grep -q "kosmos:ready" "$OUT/logcat.txt"; then
 fi
 [ "$fail" = 0 ] || exit "$fail"
 
-# Guidance's location service, as Start leaves it once location is allowed: started with
-# location switched off, then switched on. The service is not exported; root may start it.
+# Guidance's location service, as Start leaves it once location is allowed. The service is not
+# exported; root may start it. The app stays in front with the screen on, as at Start.
 if ! adb root; then
   echo "::error::this emulator image does not allow root, which starting the service needs"
   exit 1
 fi
 adb wait-for-device
+adb shell svc power stayon true
+adb shell input keyevent KEYCODE_WAKEUP
 for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION POST_NOTIFICATIONS; do
   adb shell pm grant "$PKG" "android.permission.$p"
 done
-adb shell cmd location set-location-enabled false
-adb logcat -c
-adb shell am start-foreground-service -n "$PKG/.NavLocationService"
-sleep 4
-adb shell dumpsys activity services "$PKG" > "$OUT/services.txt"
-if ! grep -q "NavLocationService" "$OUT/services.txt" || ! grep -q "isForeground=true" "$OUT/services.txt"; then
-  echo "::error::the location service is not running in the foreground"
-  cat "$OUT/services.txt"
-  fail=1
-fi
-adb shell cmd location set-location-enabled true
-for _ in $(seq 1 15); do
-  adb emu geo fix 13.4050 52.5200 >/dev/null
-  adb logcat -d | grep -q "navigation: first fix" && break
-  sleep 2
-done
-adb logcat -d > "$OUT/logcat-service.txt"
-if ! grep -q "navigation: first fix" "$OUT/logcat-service.txt"; then
-  echo "::error::no fix reached the location service after location was switched on"
-  fail=1
-fi
-if grep -E "FATAL EXCEPTION|AndroidRuntime.*$PKG" "$OUT/logcat-service.txt"; then
-  echo "::error::kOSMos crashed while guiding"
-  fail=1
-fi
+
+# Starts the service with location on or off, switches it on, and waits for the service to log
+# its first fix while the emulator's GPS reports a position.
+guide() {
+  local name="$1" location="$2"
+  adb shell am stopservice -n "$PKG/.NavLocationService" >/dev/null 2>&1 || true
+  adb shell cmd location set-location-enabled "$location"
+  adb logcat -c
+  adb shell am start-foreground-service -n "$PKG/.NavLocationService"
+  adb shell am start -n "$PKG/.MainActivity" >/dev/null
+  sleep 3
+  adb shell dumpsys activity services "$PKG" > "$OUT/services-$name.txt"
+  if ! grep -q "isForeground=true" "$OUT/services-$name.txt"; then
+    echo "::error::$name: the location service is not running in the foreground"
+    grep -iE "ServiceRecord|isForeground|foregroundServiceType|types" "$OUT/services-$name.txt" || true
+    return 1
+  fi
+  adb shell cmd location set-location-enabled true
+  for _ in $(seq 1 20); do
+    adb emu geo fix 13.4050 52.5200 >/dev/null
+    adb logcat -d | grep -q "navigation: first fix" && break
+    sleep 2
+  done
+  adb logcat -d > "$OUT/logcat-$name.txt"
+  if ! grep -q "navigation: first fix" "$OUT/logcat-$name.txt"; then
+    echo "::error::$name: no fix reached the location service"
+    adb shell dumpsys location > "$OUT/location-$name.txt" || true
+    echo "--- dumpsys location (kOSMos, providers)"
+    grep -iE "kosmos|gps provider|network provider|enabled|Location setting" "$OUT/location-$name.txt" | head -40 || true
+    echo "--- logcat (app, location)"
+    grep -iE "kOSMos|LocationManager|LocationProvider|Gnss|ActivityManager.*kosmos" "$OUT/logcat-$name.txt" | tail -40 || true
+    return 1
+  fi
+  if grep -E "FATAL EXCEPTION|AndroidRuntime.*$PKG" "$OUT/logcat-$name.txt"; then
+    echo "::error::$name: kOSMos crashed while guiding"
+    return 1
+  fi
+  echo "$name: $(grep -o 'navigation: first fix from [a-z]*' "$OUT/logcat-$name.txt" | head -1)"
+}
+
+# Location on at Start; then off at Start and switched on later (the service must recover).
+guide on true || fail=1
+guide off-then-on false || fail=1
 exit "$fail"
