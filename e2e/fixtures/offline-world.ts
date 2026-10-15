@@ -184,7 +184,9 @@ export const nominatimSearches: URLSearchParams[] = [];
 export const lookupRequests: URLSearchParams[] = [];
 
 /** Every Transitous departure check the app made. */
-export const stopTimesRequests: URLSearchParams[] = [];
+export const tripRequests: URLSearchParams[] = [];
+/** What the live trip says; a test may cancel the U6 (and must set it back). */
+export const liveTrip = { cancelled: false };
 
 /** Every Transitous plan request the app made. */
 export const transitRequests: URLSearchParams[] = [];
@@ -261,18 +263,39 @@ export async function offlineWorld(context: BrowserContext) {
     });
   });
   // The first U6 (planned at minute 8) runs three minutes late and moved to platform 3.
-  await context.route(/api\.transitous\.org\/api\/v5\/stoptimes/, (route) => {
-    stopTimesRequests.push(new URL(route.request().url()).searchParams);
+  await context.route(/api\.transitous\.org\/api\/v5\/trip/, (route) => {
+    tripRequests.push(new URL(route.request().url()).searchParams);
     const at = (min: number) => new Date(planDepart + min * 60_000).toISOString();
     return route.fulfill({
       contentType: 'application/json',
       headers: { 'access-control-allow-origin': '*' },
       body: JSON.stringify({
-        stopTimes: [
+        startTime: at(0),
+        endTime: at(40),
+        legs: [
           {
+            mode: 'SUBWAY',
             tripId: 'u6-3',
             realTime: true,
-            place: { name: 'Stadtmitte', departure: at(11), scheduledDeparture: at(8), track: '3' },
+            cancelled: liveTrip.cancelled,
+            startTime: at(0),
+            endTime: at(40),
+            from: { name: 'Alt-Mariendorf', stopId: 'de:alt-mariendorf', departure: at(0) },
+            intermediateStops: [
+              {
+                name: 'Stadtmitte',
+                stopId: 'de:stadtmitte',
+                arrival: at(11),
+                departure: at(11),
+                scheduledDeparture: at(8),
+                track: '3',
+                scheduledTrack: '2',
+              },
+              { name: 'Französische Straße', arrival: at(15) },
+              { name: 'Friedrichstraße', arrival: at(19) },
+              { name: 'Unter den Linden', arrival: at(23) },
+            ],
+            to: { name: 'Alt-Tegel', stopId: 'de:alt-tegel', arrival: at(40) },
           },
         ],
       }),

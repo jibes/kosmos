@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import { clockValue, departureAt, vehicleOf, type Transit, type TransitLeg } from '../core/transit';
 import { t, units } from '../i18n';
@@ -61,6 +61,11 @@ export function DepartTime({
   const shown = clockValue(at ?? now);
   const [draft, setDraft] = useState(shown);
   const [editing, setEditing] = useState(false);
+  // The parent re-renders on every fix with a new callback: the settle timer must not restart.
+  const latest = useRef({ shown, onDepart });
+  useEffect(() => {
+    latest.current = { shown, onDepart };
+  });
 
   // Typing 0-8-:-3-0 passes through several valid times; ask only for the one left standing.
   useEffect(() => {
@@ -68,10 +73,10 @@ export function DepartTime({
     const id = setTimeout(() => {
       setEditing(false);
       const next = departureAt(draft, Date.now());
-      if (next !== null && draft !== shown) onDepart(next);
+      if (next !== null && draft !== latest.current.shown) latest.current.onDepart(next);
     }, 800);
     return () => clearTimeout(id);
-  }, [draft, editing, shown, onDepart]);
+  }, [draft, editing]);
 
   return (
     <div className="depart">

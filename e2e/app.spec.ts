@@ -8,8 +8,9 @@ import {
   nominatimSearches,
   offlineWorld,
   routeRequests,
-  stopTimesRequests,
+  liveTrip,
   transitRequests,
+  tripRequests,
 } from './fixtures/offline-world';
 
 declare global {
@@ -50,6 +51,7 @@ async function idle(page: Page) {
 }
 
 test.beforeEach(({ page }) => {
+  liveTrip.cancelled = false;
   const errors: string[] = [];
   consoleErrors.set(page, errors);
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -349,7 +351,7 @@ test.describe('map', () => {
     // The first connection: walk minutes 3–8, U6 8–20 with stops at 12 and 16, walk 20–25.
     // A departure check finds it three minutes late: 11–23, stops at 15 and 19.
     const banner = page.locator('.nav-banner');
-    const checks = stopTimesRequests.length;
+    const checks = tripRequests.length;
     await expect(banner).toContainText('Walk to Stadtmitte');
     await expect(banner).toContainText('U6 leaves');
     // The walk's next turn leads, with the metres to it.
@@ -378,8 +380,11 @@ test.describe('map', () => {
       .toContainEqual(expect.stringMatching(/^Take the U6 towards Alt-Tegel/));
     // Within ten minutes of departure: one check, which brings the live platform.
     await expect(banner).toContainText('Platform 3', { timeout: 10_000 });
-    expect(stopTimesRequests.length).toBe(checks + 1);
-    expect(stopTimesRequests.at(-1)!.get('stopId')).toBe('de:stadtmitte');
+    expect(tripRequests.length).toBe(checks + 1);
+    expect(tripRequests.at(-1)!.get('tripId')).toBe('u6-3');
+    // What changed is said, once each: the new platform and the delay.
+    await expect.poll(spoken).toContain('U6 now leaves from platform 3.');
+    await expect.poll(spoken).toContain('U6 is 3 minutes late.');
     // The map follows the dot to the stop and keeps it on screen.
     await idle(page);
     const dot = await page.locator('.me').boundingBox();
@@ -421,7 +426,7 @@ test.describe('map', () => {
     await minutes(20);
     await expect(banner).toContainText('Next stop', { timeout: 10_000 });
     await expect.poll(spoken).toContain('Get off at the next stop, Unter den Linden.');
-    expect(stopTimesRequests.length).toBe(checks + 1);
+    expect(tripRequests.length).toBe(checks + 1);
 
     await minutes(24);
     await go(to.lng, stopLat);
@@ -430,6 +435,50 @@ test.describe('map', () => {
     await expect(banner).toContainText('You have arrived');
     await page.getByRole('button', { name: 'Done' }).click();
     await expect(banner).toHaveCount(0);
+  });
+
+  test('plans a new connection from the stop when the position is old', async ({
+    page,
+    context,
+  }) => {
+    await page.evaluate(() => {
+      const w = window as unknown as { offset: number };
+      w.offset = 0;
+      const now = Date.now.bind(Date);
+      Date.now = () => now() + w.offset;
+    });
+    const minutes = (n: number) =>
+      page.evaluate((ms) => ((window as unknown as { offset: number }).offset = ms), n * 60_000);
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const stopLat = (from.lat + SEARCH_HIT.lat) / 2 + 0.002;
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    // The live trip says the U6 does not run.
+    liveTrip.cancelled = true;
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Public transport' }).click();
+    await expect(card.locator('.legs .line').first()).toHaveText('U6');
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    const banner = page.locator('.nav-banner');
+    await minutes(6);
+    await go(from.lng, stopLat);
+    await expect(banner).toContainText('U6 is cancelled', { timeout: 10_000 });
+    // In the station, no fix for a while: the new plan starts at the stop, not the old fix.
+    await minutes(7);
+    const asked = transitRequests.length;
+    await banner.getByRole('button', { name: 'New connection' }).click();
+    await expect.poll(() => transitRequests.length).toBe(asked + 1);
+    const [lat, lng] = transitRequests.at(-1)!.get('fromPlace')!.split(',').map(Number);
+    expect(lat).toBeCloseTo(stopLat, 4);
+    expect(lng).toBeCloseTo(from.lng, 4);
   });
 
   test('navigates turn by turn with spoken prompts', async ({ page, context }, info) => {

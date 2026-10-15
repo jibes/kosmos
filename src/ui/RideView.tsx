@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { RidePrompt, RideState } from '../core/ride';
+import { FRESH_MS, type RidePrompt, type RideState } from '../core/ride';
+import type { Place } from '../core/search';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import type { Transit, TransitLeg } from '../core/transit';
 import { capital, fill, t, units } from '../i18n';
@@ -18,7 +19,20 @@ interface Props {
   onMute: () => void;
   onRecenter: () => void;
   onNewConnection: () => void;
+  /** Asking for a new connection, or none came and the old one stands. */
+  connecting: 'idle' | 'asking' | 'failed';
   onEnd: () => void;
+}
+
+/**
+ * Where a new connection starts: from the rider's position while it is fresh (`null`), else from
+ * the stop they are at or making for; underground the last fix may lie kilometres back.
+ */
+export function connectionStart(transit: Transit, st: RideState, now: number): Place | null {
+  if (st.fix && now - st.fix.time < FRESH_MS) return null;
+  const leg = transit.legs[Math.min(st.leg, transit.legs.length - 1)];
+  const stop = st.phase === 'wait' ? leg.from : leg.to;
+  return { name: stop.name, detail: '', lng: stop.lng, lat: stop.lat };
 }
 
 /** Where a leg ends, in words: the last one ends at the destination. */
@@ -40,13 +54,22 @@ export function rideWords(transit: Transit, p: RidePrompt, destination: string, 
       });
     case 'next':
       return fill(t.sayNext, { stop: endName(transit, p.leg, destination) });
+    case 'missed':
+      return fill(t.sayMissed, { line: lineName(leg) });
+    case 'cancelled':
+      return fill(t.sayCancelled, { line: lineName(leg) });
+    case 'platform':
+      return fill(t.sayPlatform, { line: lineName(leg), track: leg.from.track ?? '' });
+    case 'delay':
+      return fill(t.sayDelay, { line: lineName(leg), n: leg.delay });
     default:
       return t.arrived;
   }
 }
 
 /** On the way by public transport: one line saying what to do now, the arrival at the bottom. */
-export function RideView({ transit, st, destination, lang, muted, following, ...on }: Props) {
+export function RideView(props: Props) {
+  const { transit, st, destination, lang, muted, following, connecting, ...on } = props;
   /** The whole connection, every stop and turn, under the banner. */
   const [open, setOpen] = useState(false);
   const clock = (ms: number) => formatClock(new Date(ms), lang);
@@ -55,7 +78,25 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
   const ride = leg?.ride ? leg : next?.ride ? next : undefined;
   const platform = ride?.from.track ? ` · ${t.platform} ${ride.from.track}` : '';
   const minutes = ride ? Math.round((ride.start - st.time) / 60_000) : 0;
-  const when = minutes > 0 ? fill(t.inMin, { n: minutes }) : t.departsNow;
+  // Beyond an hour (tomorrow morning) the time itself says more than "in 380 min".
+  const when =
+    minutes > 60 && ride
+      ? clock(ride.start)
+      : minutes > 0
+        ? fill(t.inMin, { n: minutes })
+        : t.departsNow;
+  // What changed, for screen readers too (the voice may be off): gone, cancelled, new platform.
+  const moved = ride?.from.scheduledTrack && ride.from.track !== ride.from.scheduledTrack;
+  const change = !ride
+    ? ''
+    : st.missed
+      ? fill(t.hasLeft, { line: lineName(ride) })
+      : st.cancelled
+        ? fill(t.lineCancelled, { line: lineName(ride) })
+        : moved
+          ? `${lineName(ride)} · ${t.platform} ${ride.from.track}`
+          : '';
+  const left = (transit.end - st.time) / 1000;
 
   let icon = <ModeIcon mode="foot" size={40} />;
   let big = '';
@@ -124,17 +165,22 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
             <p aria-live="polite">{title}</p>
             {goal && <small>{capital(goal)}</small>}
             {sub && <small>{capital(sub)}</small>}
+            {connecting === 'failed' && <small>{t.noRoute}</small>}
+            <span className="sr-only" aria-live="polite">
+              {change && capital(change)}
+            </span>
           </div>
           {(st.missed || st.cancelled) && (
             <button
               type="button"
               className="ride-new"
+              disabled={connecting === 'asking'}
               onClick={(e) => {
                 e.stopPropagation();
                 on.onNewConnection();
               }}
             >
-              {t.newConnection}
+              {connecting === 'asking' ? t.routing : t.newConnection}
             </button>
           )}
         </section>
@@ -159,10 +205,18 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
       )}
 
       <NavBar muted={muted} arrived={st.phase === 'arrived'} onMute={on.onMute} onEnd={on.onEnd}>
-        <strong>{clock(transit.end)}</strong>
-        <span>
-          {formatDuration(Math.max(0, (transit.end - st.time) / 1000))} · {destination}
-        </span>
+        {/* Time left leads, as on the road; due or late, the arrival time itself. */}
+        {st.phase === 'arrived' ? (
+          <strong>{destination}</strong>
+        ) : (
+          <>
+            <strong>{left > 60 ? formatDuration(left) : clock(transit.end)}</strong>
+            <span>
+              {left > 60 && `${fill(t.arriveAt, { time: clock(transit.end) })} · `}
+              {destination}
+            </span>
+          </>
+        )}
       </NavBar>
     </>
   );

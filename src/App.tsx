@@ -12,7 +12,7 @@ import { pinMarker, userMarker } from './ui/markers';
 import { isNative, openAppSettings } from './ui/native';
 import { NavView, NavWaiting } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
-import { RideView, rideWords } from './ui/RideView';
+import { connectionStart, RideView, rideWords } from './ui/RideView';
 import { RouteCard } from './ui/RouteCard';
 import { SearchBar } from './ui/SearchBar';
 import { Toasts, useToast } from './ui/Toasts';
@@ -95,6 +95,8 @@ export function App() {
     pickingRef.current = picking;
   }, [picking]);
   const [navFollow, setNavFollow] = useState(true);
+  /** The router answer count when a new connection was asked for. */
+  const [connAt, setConnAt] = useState<number | null>(null);
   const route = useRoute(trip, fix, lang, navigating);
   // The voice speaks the language of the words it is given: the UI's (and the router's).
   const voice = useMemo(() => systemVoice(locale), []);
@@ -469,6 +471,12 @@ export function App() {
     trackingRef.current = guidance.tracking;
   }, [guidance.tracking]);
 
+  // A new connection: the one followed stays until the answer comes, then the first of it.
+  if (connAt !== null && route.settled !== connAt && !route.kept) {
+    setConnAt(null);
+    setActive(0);
+  }
+  const connecting = connAt === null ? 'idle' : route.settled === connAt ? 'asking' : 'failed';
   const ride = useRide({
     transit: shown[chosen]?.transit,
     active: riding,
@@ -524,6 +532,7 @@ export function App() {
   };
   const endNav = useCallback(() => {
     setNavigating(false);
+    setConnAt(null);
     // At once, not after the next render: a compass reading in between would bring the arrow back.
     navRef.current = false;
     roadNavRef.current = false;
@@ -638,9 +647,14 @@ export function App() {
               setFollow('position');
               if (fix) map?.easeTo({ center: [fix.lng, fix.lat], duration: motion(600) });
             }}
+            connecting={connecting}
             onNewConnection={() => {
-              setActive(0);
-              setTrip({ ...trip, from: null, at: null });
+              setConnAt(route.settled);
+              setTrip({
+                ...trip,
+                from: connectionStart(ride.transit, ride.st, Date.now()),
+                at: null,
+              });
               route.retry();
             }}
             onEnd={arrived ? finish : endNav}

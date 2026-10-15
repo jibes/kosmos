@@ -13,8 +13,12 @@ export interface Stop {
   lng: number;
   lat: number;
   track?: string;
+  /** The platform the timetable planned, when live data moved it. */
+  scheduledTrack?: string;
   /** The timetable's stop id, for asking about departures there. */
   id?: string;
+  /** The vehicle no longer calls here (live data). */
+  skipped?: boolean;
 }
 
 /** A turn on a walk: where it is along the walk and onto which street. */
@@ -119,9 +123,12 @@ interface MPlace {
   lat?: number;
   lon?: number;
   track?: string;
+  scheduledTrack?: string;
   stopId?: string;
+  arrival?: string;
   departure?: string;
   scheduledDeparture?: string;
+  cancelled?: boolean;
 }
 interface MLeg {
   mode?: string;
@@ -155,7 +162,9 @@ const stop = (p: MPlace | undefined): Stop => ({
   lng: p?.lon ?? 0,
   lat: p?.lat ?? 0,
   ...(p?.track ? { track: p.track } : {}),
+  ...(p?.scheduledTrack ? { scheduledTrack: p.scheduledTrack } : {}),
   ...(p?.stopId ? { id: p.stopId } : {}),
+  ...(p?.cancelled ? { skipped: true } : {}),
 });
 
 /** MOTIS step directions as the arrows kOSMos draws; stairs and lifts read as straight on. */
@@ -274,59 +283,79 @@ export function parseMotis(json: unknown): Route[] {
 /** Check the boarding departure (delay, platform, cancellation) once, in the last ten minutes. */
 export const DEPARTURE_CHECK_MS = 10 * 60_000;
 
-/** Departures at a ride's boarding stop around its time; one request answers for one ride. */
-export function stopTimesUrl(leg: TransitLeg, lang: string): string | null {
-  if (!leg.ride || !leg.trip || !leg.from.id) return null;
-  const p = new URLSearchParams({
-    stopId: leg.from.id,
-    time: new Date(leg.start - leg.delay * 60_000 - 5 * 60_000).toISOString(),
-    n: '12',
-    language: lang,
-  });
-  return `${TRANSIT_URL}/api/v5/stoptimes?${p}`;
+/**
+ * The ride's own vehicle (`/api/v5/trip`): every stop of its trip with live times, platforms and
+ * cancellations. One request answers for one ride, at any station, however busy.
+ */
+export function tripUrl(leg: TransitLeg, lang: string): string | null {
+  if (!leg.ride || !leg.trip) return null;
+  return `${TRANSIT_URL}/api/v5/trip?${new URLSearchParams({ tripId: leg.trip, language: lang })}`;
 }
 
+type MStop = MPlace & { arrival?: string };
+
 /**
- * The connection with ride `i` moved to its live departure: start, end and stops shift by the
- * same amount, platform and cancellation come from the stop. `null` when the trip is not there.
+ * The connection with ride `i` on its vehicle's live times: departure and platform where it is
+ * boarded, arrival where it is left and at each stop between, stops it no longer calls at, and
+ * cancellation. The walk after the ride moves with the arrival; the next ride keeps its own
+ * time. `null` when the answer does not hold the boarding stop.
  */
-export function withDeparture(transit: Transit, i: number, json: unknown): Transit | null {
+export function withLiveTrip(transit: Transit, i: number, json: unknown): Transit | null {
   const leg = transit.legs[i];
-  const times = (
-    json as {
-      stopTimes?: {
-        tripId?: string;
-        place?: MPlace;
-        cancelled?: boolean;
-        tripCancelled?: boolean;
-      }[];
-    } | null
-  )?.stopTimes;
-  const hit = times?.find((st) => st.tripId === leg?.trip);
-  const departure = Date.parse(hit?.place?.departure ?? '');
-  if (!leg || !hit || !Number.isFinite(departure)) return null;
+  const legs = (json as MItinerary | null)?.legs;
+  const ride =
+    legs?.find((l) => l.tripId === leg?.trip) ?? legs?.find((l) => !OWN_WAY.has(l.mode ?? ''));
+  if (!leg || !ride) return null;
+  const places = [ride.from, ...(ride.intermediateStops ?? []), ride.to].filter(
+    (p): p is MStop => !!p,
+  );
+  // By the timetable's stop id where both have one, else by name (one trip calls once at each).
+  const find = (s: Stop) =>
+    places.find((p) => (s.id && p.stopId ? p.stopId === s.id : p.name === s.name));
+  const board = find(leg.from);
+  const departure = Date.parse(board?.departure ?? '');
+  if (!board || !Number.isFinite(departure)) return null;
+  const alight = find(leg.to);
+  const arrival = Date.parse(alight?.arrival ?? '');
   const shift = departure - leg.start;
-  const scheduled = Date.parse(hit.place?.scheduledDeparture ?? '');
+  const end = Number.isFinite(arrival) ? arrival : leg.end + shift;
+  const scheduled = Date.parse(board.scheduledDeparture ?? '');
   const moved: TransitLeg = {
     ...leg,
     start: departure,
-    end: leg.end + shift,
-    via: leg.via.map((v) => (v.arrival === undefined ? v : { ...v, arrival: v.arrival + shift })),
+    end,
+    via: leg.via.map((v) => {
+      const p = find(v);
+      const a = Date.parse(p?.arrival ?? '');
+      return {
+        ...v,
+        ...(Number.isFinite(a)
+          ? { arrival: a }
+          : v.arrival !== undefined
+            ? { arrival: v.arrival + shift }
+            : {}),
+        ...(p?.cancelled ? { skipped: true } : {}),
+      };
+    }),
     delay: Number.isFinite(scheduled) ? Math.round((departure - scheduled) / 60_000) : leg.delay,
-    from: { ...leg.from, ...(hit.place?.track ? { track: hit.place.track } : {}) },
-    cancelled: !!(hit.cancelled || hit.tripCancelled),
+    from: {
+      ...leg.from,
+      ...(board.track ? { track: board.track } : {}),
+      ...(board.scheduledTrack ? { scheduledTrack: board.scheduledTrack } : {}),
+    },
+    cancelled: !!(ride.cancelled || board.cancelled || alight?.cancelled),
   };
-  // The walk after the ride moves with it; the next ride keeps its own time.
+  const later = end - leg.end;
   let walking = true;
-  const legs = transit.legs.map((l, k) => {
+  const out = transit.legs.map((l, k) => {
     if (k === i) return moved;
     if (k < i || !walking || l.ride) {
       if (k > i) walking = false;
       return l;
     }
-    return { ...l, start: l.start + shift, end: l.end + shift };
+    return { ...l, start: l.start + later, end: l.end + later };
   });
-  return { ...transit, legs, end: legs[legs.length - 1].end };
+  return { ...transit, legs: out, end: out[out.length - 1].end };
 }
 
 export type Vehicle = 'bus' | 'tram' | 'subway' | 'train' | 'ferry' | 'cable' | 'plane';

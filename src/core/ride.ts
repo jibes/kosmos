@@ -32,7 +32,12 @@ export type Phase = 'walk' | 'wait' | 'ride' | 'arrived';
 
 export interface Fix extends LngLat {
   time: number;
+  /** Metres, when known: a stop is "here" within it, never tighter than `AT_STOP_M`. */
+  accuracy?: number;
 }
+
+/** How close to a stop counts as at it with this fix. */
+const atStop = (fix: Fix) => Math.max(AT_STOP_M, Math.min(fix.accuracy ?? 0, 100));
 
 export interface RideState {
   /** Index of the current leg; `legs.length` once arrived. */
@@ -51,10 +56,26 @@ export interface RideState {
   fix: Fix | null;
   time: number;
   spoken: string[];
+  /** A ride entered on the timetable alone (no fix at its departure): the next fix may still
+   * show the rider at the stop, and the vehicle gone. */
+  blind: number | null;
+  /** Metres along the current ride's line at the last fix on it. */
+  rideAt: number | null;
 }
 
-/** Metres along a line to the point nearest `p`, and how far `p` is from the line. */
-function project(coords: [number, number][], p: LngLat) {
+/**
+ * Metres along a line to the point nearest `p`, and how far `p` is from the line. With
+ * `window`, a match within it wins over a nearer one elsewhere: a line that comes back along
+ * the same street must not jump the rider to its other side.
+ */
+function project(coords: [number, number][], p: LngLat, window?: [number, number]) {
+  const all = projectIn(coords, p);
+  if (!window) return all;
+  const near = projectIn(coords, p, window);
+  return near.offset < NEAR_LINE_M ? { ...near, total: all.total } : all;
+}
+
+function projectIn(coords: [number, number][], p: LngLat, window?: [number, number]) {
   const k = Math.cos(p.lat * RAD);
   const xy = ([lng, lat]: [number, number]) => [
     (lng - p.lng) * RAD * R * k,
@@ -68,7 +89,14 @@ function project(coords: [number, number][], p: LngLat) {
     const dx = bx - ax;
     const dy = by - ay;
     const len = Math.hypot(dx, dy);
-    const f = len ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (len * len))) : 0;
+    let f = len ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / (len * len))) : 0;
+    if (window && len) {
+      if (walked + len < window[0] || walked > window[1]) {
+        walked += len;
+        continue;
+      }
+      f = Math.max((window[0] - walked) / len, Math.min((window[1] - walked) / len, f));
+    }
     const d = Math.hypot(ax + f * dx, ay + f * dy);
     if (d < best.offset) Object.assign(best, { along: walked + f * len, offset: d });
     walked += len;
@@ -82,11 +110,18 @@ const metres = (a: LngLat, b: LngLat) => {
   return Math.hypot((b.lng - a.lng) * k, b.lat - a.lat) * RAD * R;
 };
 
-/** Every stop of a ride after boarding, the last one being where to get off. */
+/** Every stop of a ride after boarding, the last one being where to get off; stops the
+ * vehicle no longer calls at (live data) are not counted. */
 const stopsOf = (l: TransitLeg): (Stop & { arrival?: number })[] => [
-  ...l.via,
+  ...l.via.filter((v) => !v.skipped),
   { ...l.to, arrival: l.end },
 ];
+
+/** Where each stop lies along the ride's line, never going back (lines that loop). */
+function stopsAlong(l: TransitLeg, stops: Stop[]): number[] {
+  let last = 0;
+  return stops.map((s) => (last = Math.max(last, project(l.coords, s).along)));
+}
 
 function legDone(legs: TransitLeg[], i: number, fix: Fix | null, time: number): boolean {
   const l = legs[i];
@@ -95,38 +130,93 @@ function legDone(legs: TransitLeg[], i: number, fix: Fix | null, time: number): 
   if (l.ride) {
     // A vehicle that does not run is never ridden; the rider needs another connection.
     if (l.cancelled || time < l.start) return false;
-    if (fix && d < MISSED_M) return time >= l.end - 60_000;
-    // Still on the line and short of the stop after the planned arrival: running late.
-    if (fix && project(l.coords, fix).offset < NEAR_LINE_M) return time >= l.end + LATE_MAX_MS;
+    // No position (underground): the timetable moves the rider on.
+    if (!fix) return time >= l.end + 120_000;
+    // At the stop to get off, whenever: a vehicle ahead of its timetable too.
+    if (d < atStop(fix)) return true;
+    const on = project(l.coords, fix);
+    if (on.offset < NEAR_LINE_M) {
+      const stops = stopsOf(l);
+      const before = stops.length > 1 ? stopsAlong(l, stops).at(-2)! : 0;
+      // Past the stop before it and nearly there, when due: getting off (a big station's
+      // point may lie a way from its platforms). Never at the stop before, however close.
+      if (on.along > before + 30 && d < MISSED_M && time >= l.end - 60_000) return true;
+      // At the end of the line already.
+      if (on.along >= on.total - 30) return true;
+      // On the line and short of the stop: riding, late or not, for up to an hour.
+      return time >= l.end + LATE_MAX_MS;
+    }
+    // Away from the line and from the stop: the timetable decides.
     return time >= l.end + 120_000;
   }
   if (next?.ride) {
-    // No position: trust the timetable once the vehicle has left.
+    // No position: trust the timetable once the vehicle has left (provisionally, see `blind`).
     if (!fix) return time >= next.start;
     // Nothing to catch: the walk ends at the stop, where the rider learns it does not run.
-    if (next.cancelled) return d < AT_STOP_M;
+    if (next.cancelled) return d < atStop(fix);
     // At the stop in time; after departure only a fix carried along the line means on board.
-    if (time <= next.start + DEPART_GRACE_MS) return d < AT_STOP_M;
+    if (time <= next.start + DEPART_GRACE_MS) return d < atStop(fix);
     const on = project(next.coords, fix);
-    return on.offset < ON_LINE_M && on.along > PAST_STOP_M;
+    return on.offset < Math.max(ON_LINE_M, fix.accuracy ?? 0) && on.along > PAST_STOP_M;
   }
-  if (fix && d < AT_STOP_M) return true;
-  return !fix && time >= l.end + 120_000;
+  // The destination: only a position there says so, never the timetable alone.
+  return !!fix && d < atStop(fix);
 }
 
 function evaluate(tr: Transit, prev: RideState, seen: Fix | null, time: number): RideState {
   const legs = tr.legs;
   const fix = seen && time - seen.time < FRESH_MS ? seen : null;
   let leg = prev.leg;
-  while (leg < legs.length && legDone(legs, leg, fix, time)) leg++;
-  const base = { ...prev, leg, fix: seen, time, missed: false, cancelled: false, turn: null };
+  let blind = prev.blind;
+  // Boarded on the timetable alone: a first fix still at the stop, not along the line, after
+  // the departure, means the vehicle left without the rider.
+  if (fix && blind !== null && leg === blind) {
+    const l = legs[blind];
+    const on = project(l.coords, fix);
+    if (
+      time > l.start + DEPART_GRACE_MS &&
+      metres(fix, l.from) < MISSED_M &&
+      on.along < PAST_STOP_M
+    )
+      leg = blind - 1;
+    blind = null;
+  }
+  // At the destination itself, from the last ride on: arrived, whatever the timetable says.
+  let lastRide = -1;
+  legs.forEach((l, i) => l.ride && (lastRide = i));
+  const dest = legs[legs.length - 1]?.to;
+  if (fix && dest && leg >= lastRide && metres(fix, dest) < atStop(fix)) leg = legs.length;
+  while (leg < legs.length && legDone(legs, leg, fix, time)) {
+    // A walk to a vehicle done without a position is only provisional.
+    if (!fix && !legs[leg].ride && legs[leg + 1]?.ride) blind = leg + 1;
+    leg++;
+  }
+  const rideAt = leg === prev.leg ? prev.rideAt : null;
+  const base = {
+    ...prev,
+    leg,
+    blind,
+    rideAt,
+    fix: seen,
+    time,
+    missed: false,
+    cancelled: false,
+    turn: null,
+  };
   if (leg >= legs.length) return { ...base, phase: 'arrived', stopsLeft: 0, toGo: 0 };
 
   const l = legs[leg];
   if (!l.ride) {
     const on = fix && project(l.coords, fix);
     const near = on && on.offset < NEAR_LINE_M ? on : null;
-    const toGo = near ? Math.max(0, near.total - near.along) : l.distance;
+    // Off the walk's line, as the crow flies; without a fresh fix, what it was.
+    const toGo = near
+      ? Math.max(0, near.total - near.along)
+      : fix
+        ? metres(fix, l.to)
+        : prev.leg === leg && prev.phase === 'walk' && prev.toGo > 0
+          ? prev.toGo
+          : l.distance;
     // The next real turn ahead; "depart" and "straight on" are not worth saying.
     const step = near
       ? l.steps.find((s) => s.at > near.along + 5 && s.turn !== 'straight' && s.turn !== 'depart')
@@ -145,9 +235,18 @@ function evaluate(tr: Transit, prev: RideState, seen: Fix | null, time: number):
   if (time < l.start) return { ...base, phase: 'wait', stopsLeft: stops.length, toGo: 0 };
   // Position along the line where there is one; otherwise stops whose arrival is still ahead.
   let left: number;
-  const on = fix && project(l.coords, fix);
+  // From the last position on the line, a vehicle covers at most this much: no jumping to
+  // the other side of a line that comes back along the same street.
+  const reach: [number, number] | undefined =
+    base.rideAt !== null && fix && prev.fix
+      ? [base.rideAt - 100, base.rideAt + 200 + 40 * Math.max(0, (fix.time - prev.fix.time) / 1000)]
+      : undefined;
+  const on = fix && project(l.coords, fix, reach);
   if (on && on.offset < NEAR_LINE_M) {
-    left = stops.filter((s) => project(l.coords, s).along > on.along + 30).length;
+    const along = stopsAlong(l, stops);
+    const margin = Math.max(30, fix.accuracy ?? 0);
+    left = along.filter((a) => a > on.along + margin).length;
+    base.rideAt = on.along;
   } else {
     left = stops.filter(
       (s, i) => (s.arrival ?? l.start + ((i + 1) / stops.length) * (l.end - l.start)) > time,
@@ -168,6 +267,8 @@ export function initialRide(tr: Transit, time: number, fix: Fix | null = null): 
     fix: null,
     time,
     spoken: [],
+    blind: null,
+    rideAt: null,
   };
   return evaluate(tr, empty, fix, time);
 }
@@ -177,7 +278,8 @@ export function rideStep(tr: Transit, st: RideState, fix: Fix | null, time: numb
   return evaluate(tr, st, fix ?? st.fix, time);
 }
 
-export type RidePromptKind = 'walk' | 'board' | 'next' | 'arrived';
+export type RidePromptKind =
+  'walk' | 'board' | 'next' | 'arrived' | 'missed' | 'cancelled' | 'platform' | 'delay';
 
 export interface RidePrompt {
   key: string;
@@ -186,21 +288,42 @@ export interface RidePrompt {
   leg: number;
 }
 
-/** What to say now, if anything; each prompt is said once (see `markRideSpoken`). */
+/** A delay this long, in minutes, is worth saying. */
+const SAY_DELAY_MIN = 3;
+
+/**
+ * What to say now, if anything; each prompt is said once (see `markRideSpoken`). Besides the
+ * way, what changed: a departure missed or cancelled, a new platform, a delay (each new value
+ * once), so a rider with the phone in a pocket hears it.
+ */
 export function ridePrompt(tr: Transit, st: RideState): RidePrompt | null {
   const said = (k: string) => st.spoken.includes(k);
-  const ask = (kind: RidePromptKind, leg: number) =>
-    said(`${leg}:${kind}`) ? null : { key: `${leg}:${kind}`, kind, leg };
+  const ask = (kind: RidePromptKind, leg: number, what = '') => {
+    const key = `${leg}:${kind}${what ? `:${what}` : ''}`;
+    return said(key) ? null : { key, kind, leg };
+  };
+  /** Changes to the ride about to be boarded. */
+  const changes = (i: number) => {
+    const r = tr.legs[i];
+    if (st.cancelled) return ask('cancelled', i);
+    if (r.from.track && r.from.scheduledTrack && r.from.track !== r.from.scheduledTrack) {
+      const p = ask('platform', i, r.from.track);
+      if (p) return p;
+    }
+    return r.delay >= SAY_DELAY_MIN ? ask('delay', i, String(r.delay)) : null;
+  };
   if (st.phase === 'arrived') return ask('arrived', tr.legs.length);
   if (st.phase === 'walk') {
     const walk = ask('walk', st.leg);
     if (walk) return walk;
     const next = tr.legs[st.leg + 1];
-    return next?.ride && !st.missed && !st.cancelled && st.time >= next.start - BOARD_AHEAD_MS
-      ? ask('board', st.leg + 1)
-      : null;
+    if (!next?.ride) return null;
+    if (st.missed) return ask('missed', st.leg + 1);
+    const change = changes(st.leg + 1);
+    if (change || st.cancelled) return change;
+    return st.time >= next.start - BOARD_AHEAD_MS ? ask('board', st.leg + 1) : null;
   }
-  if (st.phase === 'wait') return st.cancelled ? null : ask('board', st.leg);
+  if (st.phase === 'wait') return changes(st.leg) ?? (st.cancelled ? null : ask('board', st.leg));
   return st.stopsLeft === 1 ? ask('next', st.leg) : null;
 }
 

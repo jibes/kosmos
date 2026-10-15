@@ -4,11 +4,11 @@ import {
   clockValue,
   departureAt,
   parseMotis,
-  stopTimesUrl,
   textOn,
   transitUrl,
   vehicleOf,
-  withDeparture,
+  tripUrl,
+  withLiveTrip,
 } from '../src/core/transit';
 
 const at = (hh: number, mm: number, day = 13) => new Date(2026, 9, day, hh, mm).getTime();
@@ -205,46 +205,65 @@ describe('departure check', () => {
     ],
   };
 
-  it('asks the boarding stop for departures around the scheduled time', () => {
-    const url = new URL(stopTimesUrl(transit().legs[0], 'de')!);
-    expect(url.pathname).toBe('/api/v5/stoptimes');
-    expect(url.searchParams.get('stopId')).toBe('a');
-    expect(url.searchParams.get('time')).toBe('2026-10-13T11:55:00.000Z');
-    expect(stopTimesUrl(transit().legs[1], 'de')).toBeNull();
-  });
-
-  it('moves the ride and the walk after it to the live departure', () => {
-    const live = withDeparture(transit(), 0, {
-      stopTimes: [
-        { tripId: 'other', place: { departure: '2026-10-13T12:01:00Z' } },
-        {
-          tripId: 't1',
-          place: {
+  /** The bus's whole trip: from its origin, past A (boarded), M, B (left), to its end. */
+  const trip = (over: Record<string, unknown> = {}) => ({
+    legs: [
+      {
+        mode: 'BUS',
+        tripId: 't1',
+        cancelled: false,
+        from: { name: 'ORIGIN', stopId: 'o', departure: '2026-10-13T11:40:00Z' },
+        intermediateStops: [
+          {
+            name: 'A',
+            stopId: 'a',
             departure: '2026-10-13T12:04:00Z',
             scheduledDeparture: '2026-10-13T12:00:00Z',
             track: '7',
+            scheduledTrack: '5',
           },
-        },
-      ],
-    })!;
+          { name: 'M', arrival: '2026-10-13T12:16:00Z' },
+          { name: 'B', arrival: '2026-10-13T12:27:00Z' },
+        ],
+        to: { name: 'TERMINUS', arrival: '2026-10-13T12:45:00Z' },
+        ...over,
+      },
+    ],
+  });
+
+  it("asks for the vehicle's own trip", () => {
+    const url = new URL(tripUrl(transit().legs[0], 'de')!);
+    expect(url.pathname).toBe('/api/v5/trip');
+    expect(url.searchParams.get('tripId')).toBe('t1');
+    expect(tripUrl(transit().legs[1], 'de')).toBeNull();
+  });
+
+  it('moves the ride to its live times, and the walk after it with the arrival', () => {
+    const live = withLiveTrip(transit(), 0, trip())!;
     const [ride, walk] = live.legs;
-    expect(ride).toMatchObject({ delay: 4, from: { track: '7' }, cancelled: false });
+    expect(ride).toMatchObject({
+      delay: 4,
+      from: { track: '7', scheduledTrack: '5' },
+      cancelled: false,
+    });
     expect(ride.start).toBe(Date.parse('2026-10-13T12:04:00Z'));
-    expect(ride.end).toBe(Date.parse('2026-10-13T12:24:00Z'));
-    expect(ride.via[0].arrival).toBe(Date.parse('2026-10-13T12:14:00Z'));
-    expect(walk.end).toBe(Date.parse('2026-10-13T12:34:00Z'));
+    expect(ride.end).toBe(Date.parse('2026-10-13T12:27:00Z'));
+    expect(ride.via[0].arrival).toBe(Date.parse('2026-10-13T12:16:00Z'));
+    expect(walk.end).toBe(Date.parse('2026-10-13T12:37:00Z'));
     expect(live.end).toBe(walk.end);
   });
 
-  it('reports a cancellation and ignores an answer without the trip', () => {
-    const cancelled = withDeparture(transit(), 0, {
-      stopTimes: [
-        { tripId: 't1', tripCancelled: true, place: { departure: '2026-10-13T12:00:00Z' } },
-      ],
-    });
-    expect(cancelled?.legs[0].cancelled).toBe(true);
-    expect(withDeparture(transit(), 0, { stopTimes: [] })).toBeNull();
-    expect(withDeparture(transit(), 0, null)).toBeNull();
+  it('marks stops no longer called at, and a cancelled trip', () => {
+    const skip = trip();
+    (skip.legs[0].intermediateStops[1] as { cancelled?: boolean }).cancelled = true;
+    expect(withLiveTrip(transit(), 0, skip)!.legs[0].via[0].skipped).toBe(true);
+    expect(withLiveTrip(transit(), 0, trip({ cancelled: true }))!.legs[0].cancelled).toBe(true);
+  });
+
+  it('ignores an answer without the boarding stop', () => {
+    expect(withLiveTrip(transit(), 0, { legs: [] })).toBeNull();
+    expect(withLiveTrip(transit(), 0, null)).toBeNull();
+    expect(withLiveTrip(transit(), 0, trip({ intermediateStops: [] }))).toBeNull();
   });
 });
 

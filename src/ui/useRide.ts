@@ -7,7 +7,7 @@ import {
   type RidePrompt,
   type RideState,
 } from '../core/ride';
-import { DEPARTURE_CHECK_MS, stopTimesUrl, withDeparture, type Transit } from '../core/transit';
+import { DEPARTURE_CHECK_MS, tripUrl, withLiveTrip, type Transit } from '../core/transit';
 import { getJson } from './http';
 import type { Fix } from './useLocation';
 import type { Voice } from './voice';
@@ -32,7 +32,7 @@ interface Options {
 
 /**
  * Follows a public transport connection on every fix and every few seconds. Asks Transitous
- * only once per ride, in the last ten minutes before boarding, for the live departure.
+ * only once per ride, in the last ten minutes before boarding, for its vehicle's live trip.
  */
 export function useRide(o: Options) {
   const planned = o.active ? o.transit : undefined;
@@ -68,12 +68,12 @@ export function useRide(o: Options) {
       const leg = live.legs[i];
       if (!leg?.ride || checked.has(i) || st.phase === 'ride') return;
       if (now < leg.start - DEPARTURE_CHECK_MS || now - started < FRESH_PLAN_MS) return;
-      const url = stopTimesUrl(leg, opts.current.lang);
+      const url = tripUrl(leg, opts.current.lang);
       if (!url) return;
       checked.add(i);
       getJson(url, ctrl.signal)
         .then((r) => {
-          const next = r.ok && withDeparture(live, i, r.json);
+          const next = r.ok && withLiveTrip(live, i, r.json);
           if (!next || ctrl.signal.aborted) return;
           live = next;
           update(null);

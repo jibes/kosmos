@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { initialRide, markRideSpoken, ridePrompt, rideStep, type Fix } from '../src/core/ride';
+import {
+  FRESH_MS,
+  initialRide,
+  markRideSpoken,
+  ridePrompt,
+  rideStep,
+  type Fix,
+} from '../src/core/ride';
 import { encodePolyline } from '../src/core/route';
 import { parseMotis, type Transit } from '../src/core/transit';
 
@@ -153,7 +160,8 @@ describe('ride', () => {
       { fix: at(m(0, 50), min(8.6)), time: min(8.6) },
     ]);
     expect(st).toMatchObject({ leg: 0, phase: 'walk', missed: true });
-    expect(said).toEqual(['0:walk']);
+    // Said once, and no boarding promised for a vehicle that has gone.
+    expect(said).toEqual(['0:walk', '1:missed']);
   });
 
   it('shows the next real turn of a walk, with the metres to it', () => {
@@ -212,9 +220,134 @@ describe('ride', () => {
     };
     let st = initialRide(cancelled, min(6.5), at(m(0, 300), min(6.5)));
     expect(st).toMatchObject({ phase: 'walk', cancelled: true });
-    expect(ridePrompt(cancelled, markRideSpoken(st, '0:walk'))).toBeNull();
+    // Said once that it does not run; never "board".
+    const p = ridePrompt(cancelled, markRideSpoken(st, '0:walk'));
+    expect(p).toMatchObject({ kind: 'cancelled', leg: 1 });
+    st = markRideSpoken(markRideSpoken(st, '0:walk'), p!.key);
+    expect(ridePrompt(cancelled, st)).toBeNull();
     st = rideStep(cancelled, st, at(s1, min(9)), min(9));
     expect(st).toMatchObject({ phase: 'wait', cancelled: true });
     expect(ridePrompt(cancelled, st)).toBeNull();
+  });
+});
+
+describe('getting off and arriving', () => {
+  // A tram with stops 280 m apart; due at the last but one a minute before the end.
+  const a = m(0, 0);
+  const b = m(280, 0);
+  const c = m(560, 0);
+  const d = m(840, 0);
+  const tram: Transit = parseMotis({
+    itineraries: [
+      {
+        startTime: iso(0),
+        endTime: iso(10),
+        legs: [
+          leg('TRAM', a, d, 0, 6, {
+            displayName: 'M1',
+            legGeometry: { points: encodePolyline([a, b, c, d]), precision: 6 },
+            intermediateStops: [
+              place(b, 'B', { arrival: iso(3) }),
+              place(c, 'C', { arrival: iso(5) }),
+            ],
+          }),
+          leg('WALK', d, m(840, -200), 6, 10, { distance: 200 }),
+        ],
+      },
+    ],
+  })[0].transit!;
+
+  it('does not end the ride at the stop before, however close and late', () => {
+    let st = initialRide(tram, min(1), at(m(100, 2), min(1)));
+    st = rideStep(tram, st, at(m(560, 3), min(5.2)), min(5.2));
+    expect(st).toMatchObject({ leg: 0, phase: 'ride', stopsLeft: 1 });
+    st = rideStep(tram, st, at(m(838, 2), min(6)), min(6));
+    expect(st).toMatchObject({ leg: 1, phase: 'walk' });
+  });
+
+  it('gets off at the stop whenever the vehicle is early', () => {
+    let st = initialRide(tram, min(1), at(m(100, 2), min(1)));
+    st = rideStep(tram, st, at(m(842, 1), min(3.5)), min(3.5));
+    expect(st.phase).toBe('walk');
+  });
+
+  it('never says "arrived" on the timetable alone', () => {
+    let st = initialRide(tram, min(1), at(m(100, 2), min(1)));
+    // Underground from here on: no fix at all for an hour.
+    for (const t of [10, 20, 40, 60]) st = rideStep(tram, st, null, min(t));
+    expect(st.phase).not.toBe('arrived');
+    st = rideStep(tram, st, at(m(840, -195), min(61)), min(61));
+    expect(st.phase).toBe('arrived');
+  });
+
+  it('counts only the stops the vehicle still calls at', () => {
+    const skipping: Transit = {
+      ...tram,
+      legs: tram.legs.map((l) =>
+        l.ride
+          ? { ...l, via: l.via.map((v) => (v.name === 'B' ? { ...v, skipped: true } : v)) }
+          : l,
+      ),
+    };
+    const st = initialRide(skipping, min(1), at(m(20, 2), min(1)));
+    expect(st.stopsLeft).toBe(2);
+  });
+});
+
+describe('a gap in GPS at the departure', () => {
+  it('turns a ride entered on the timetable into a missed departure once a fix says so', () => {
+    const { st, said } = replay([
+      { fix: at(m(0, 300), min(6)), time: min(6) },
+      // In the station hall: no fix while the U6 leaves at 8.
+      { fix: null, time: min(8.2) },
+      { fix: null, time: min(9) },
+      // Back above ground, still by the stop.
+      { fix: at(m(30, 380), min(9.5)), time: min(9.5) },
+    ]);
+    expect(st).toMatchObject({ leg: 0, phase: 'walk', missed: true });
+    expect(said).toContain('1:missed');
+  });
+
+  it('keeps the ride when the fix is along the line', () => {
+    const { st } = replay([
+      { fix: at(m(0, 300), min(6)), time: min(6) },
+      { fix: null, time: min(8.2) },
+      { fix: at(m(600, 401), min(10)), time: min(10) },
+    ]);
+    expect(st).toMatchObject({ leg: 1, phase: 'ride' });
+  });
+});
+
+describe('walking', () => {
+  it('counts straight to the stop off the line, and keeps the count without a fix', () => {
+    let st = initialRide(transit, min(1), at(m(300, 100), min(1)));
+    expect(st.toGo).toBeCloseTo(Math.hypot(300, 300), -1);
+    st = rideStep(transit, st, null, min(1.5) + FRESH_MS);
+    expect(st.toGo).toBeCloseTo(Math.hypot(300, 300), -1);
+  });
+
+  it('counts a stop as reached within the accuracy of a poor fix', () => {
+    const st = initialRide(transit, min(7), { ...at(m(60, 400), min(7)), accuracy: 80 });
+    expect(st.phase).toBe('wait');
+  });
+});
+
+describe('what changed', () => {
+  it('says a new platform and a delay once each', () => {
+    const live: Transit = {
+      ...transit,
+      legs: transit.legs.map((l) =>
+        l.ride ? { ...l, delay: 4, from: { ...l.from, track: '3', scheduledTrack: '1' } } : l,
+      ),
+    };
+    let st = initialRide(live, min(1), at(m(0, 100), min(1)));
+    const said: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const p = ridePrompt(live, st);
+      if (!p) break;
+      said.push(p.kind);
+      st = markRideSpoken(st, p.key);
+    }
+    expect(said).toEqual(['walk', 'platform', 'delay']);
   });
 });

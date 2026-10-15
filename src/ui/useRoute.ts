@@ -64,6 +64,12 @@ export function useRoute(
 ) {
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // A route closed and opened again asks afresh: the last answer (a timetable especially) is old.
+  const [open, setOpen] = useState(!!trip);
+  if (open !== !!trip) {
+    setOpen(!!trip);
+    if (!trip) setResult(null);
+  }
   const last = useRef<{ key: string; from: LngLat; attempt: number; at: number } | null>(null);
   const inflight = useRef<AbortController | null>(null);
   const key = trip ? tripKey(trip) : '';
