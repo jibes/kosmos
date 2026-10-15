@@ -36,10 +36,11 @@ export function Toasts({
   guiding: boolean;
 }) {
   return (
-    <div className="toasts">
+    // Always there, so screen readers announce a note as it appears.
+    <div className="toasts" role="status">
       {!isNative && <UpdateToast hidden={guiding} />}
       {toast && (
-        <div className="toast surface" role="status">
+        <div className="toast surface">
           <span>{toast.text}</span>
           {toast.actions?.map((a) => (
             <button

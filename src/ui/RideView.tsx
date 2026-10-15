@@ -2,10 +2,10 @@ import { useState } from 'react';
 import type { RidePrompt, RideState } from '../core/ride';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import type { Transit, TransitLeg } from '../core/transit';
-import { fill, t, units } from '../i18n';
+import { capital, fill, t, units } from '../i18n';
 import { LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
-import { LineChip, TransitLegs } from './TransitParts';
+import { LineChip, TransitLegs, lineName } from './TransitParts';
 
 interface Props {
   transit: Transit;
@@ -34,7 +34,7 @@ export function rideWords(transit: Transit, p: RidePrompt, destination: string, 
       return fill(t.sayWalk, { stop: endName(transit, p.leg, destination) });
     case 'board':
       return fill(leg.headsign ? t.sayBoard : t.sayBoardPlain, {
-        line: leg.line ?? t.transit,
+        line: lineName(leg),
         dir: leg.headsign ?? '',
         time: clock(leg.start),
       });
@@ -75,17 +75,17 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
       big = formatDistance(st.toGo, lang, units);
       title = walkTo;
     }
-    if (ride && st.cancelled) sub = fill(t.lineCancelled, { line: ride.line ?? t.transit });
-    else if (ride && st.missed) sub = fill(t.hasLeft, { line: ride.line ?? t.transit });
+    if (ride && st.cancelled) sub = fill(t.lineCancelled, { line: lineName(ride) });
+    else if (ride && st.missed) sub = fill(t.hasLeft, { line: lineName(ride) });
     else if (ride)
-      sub = `${fill(t.leaves, { line: ride.line ?? t.transit, time: clock(ride.start) })}${platform}`;
+      sub = `${fill(t.leaves, { line: lineName(ride), time: clock(ride.start) })}${platform}`;
   } else if (st.phase === 'wait' && leg) {
     icon = <LineChip leg={leg} big />;
     big = when;
-    title = leg.headsign ? `→ ${leg.headsign}` : (leg.line ?? t.transit);
+    title = leg.headsign ? `→ ${leg.headsign}` : lineName(leg);
     sub = st.cancelled
-      ? fill(t.lineCancelled, { line: leg.line ?? t.transit })
-      : `${fill(t.leaves, { line: leg.line ?? t.transit, time: clock(leg.start) })}${platform}`;
+      ? fill(t.lineCancelled, { line: lineName(leg) })
+      : `${fill(t.leaves, { line: lineName(leg), time: clock(leg.start) })}${platform}`;
     if (st.cancelled) big = t.cancelled;
   } else if (st.phase === 'ride' && leg) {
     icon = <LineChip leg={leg} big />;
@@ -120,10 +120,10 @@ export function RideView({ transit, st, destination, lang, muted, following, ...
           />
           {icon}
           <div>
-            {big && <strong>{big}</strong>}
+            {big && <strong>{capital(big)}</strong>}
             <p aria-live="polite">{title}</p>
-            {goal && <small>{goal}</small>}
-            {sub && <small>{sub}</small>}
+            {goal && <small>{capital(goal)}</small>}
+            {sub && <small>{capital(sub)}</small>}
           </div>
           {(st.missed || st.cancelled) && (
             <button

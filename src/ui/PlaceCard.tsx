@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { lang, t } from '../i18n';
+import { focusSearch, useFocusOnMount } from './a11y';
 import { CloseIcon, RouteIcon, ShareIcon } from './icons';
 import { copy, share } from './native';
 import { PlaceDetails } from './PlaceDetails';
@@ -19,6 +20,7 @@ interface Props {
 export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) {
   const [copied, setCopied] = useState(false);
   const details = usePlaceDetails(place.osm, lang);
+  const heading = useFocusOnMount<HTMLHeadingElement>();
 
   const onShare = async () => {
     const result = await share({
@@ -39,20 +41,32 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) 
     <Sheet className="card surface" busy={loading} peek={<strong>{place.name}</strong>}>
       <header>
         <div className="card-title">
-          <h2>{place.name}</h2>
+          <h2 ref={heading} tabIndex={-1}>
+            {place.name}
+          </h2>
           {place.detail ? (
             <p>{place.detail}</p>
           ) : (
             loading && <p className="shimmer" aria-hidden="true" />
           )}
         </div>
-        <button type="button" className="icon-btn round" aria-label={t.close} onClick={onClose}>
+        <button
+          type="button"
+          className="icon-btn round"
+          aria-label={t.close}
+          onClick={(e) => {
+            onClose();
+            // Closed from the keyboard (no pointer): carry on in the search field.
+            if (e.detail === 0) focusSearch();
+          }}
+        >
           <CloseIcon size={16} />
         </button>
       </header>
       {details && <PlaceDetails details={details} />}
-      <button type="button" className="coords" onClick={onCopy} aria-label={t.copy}>
+      <button type="button" className="coords" onClick={onCopy}>
         {copied ? t.copied : formatLngLat(place)}
+        <span className="sr-only">, {t.copy}</span>
       </button>
       <div className="actions">
         <button type="button" className="action primary" onClick={onRoute}>

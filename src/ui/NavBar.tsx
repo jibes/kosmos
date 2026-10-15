@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { t } from '../i18n';
+import { touch } from './layout';
 
 export const SoundIcon = ({ off }: { off: boolean }) => (
   <svg
@@ -52,7 +53,7 @@ export function NavBar({ children, muted, arrived, onMute, onEnd }: Props) {
       <button
         type="button"
         className="icon-btn round big"
-        aria-label={muted ? t.unmute : t.mute}
+        aria-label={t.mute}
         aria-pressed={muted}
         onClick={onMute}
       >
@@ -62,7 +63,9 @@ export function NavBar({ children, muted, arrived, onMute, onEnd }: Props) {
         type="button"
         className="nav-end"
         data-state={arrived ? 'done' : armed ? 'armed' : undefined}
-        aria-label={armed && !arrived ? t.endConfirmHint : undefined}
+        aria-label={
+          armed && !arrived ? (touch() ? t.endConfirmHint : t.endConfirmHintClick) : undefined
+        }
         onClick={() => (arrived || armed ? onEnd() : setArmed(true))}
       >
         {arrived ? t.done : armed ? t.endConfirm : t.end}

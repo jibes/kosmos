@@ -284,12 +284,21 @@ export function SearchBar({
               {note}
             </li>
           )}
-          {status === 'loading' && !items.length && <li className="r-empty r-loading" />}
+          {status === 'loading' && !items.length && (
+            <li className="r-empty r-loading" role="presentation" />
+          )}
         </ul>
       )}
       {open && q.length < 2 && <p className="hint">{touch() ? t.hint : t.hintMouse}</p>}
       <p className="sr-only" role="status">
-        {showList ? note || (items.length ? fill(t.resultsCount, { n: items.length }) : '') : ''}
+        {showList
+          ? note ||
+            (results.length === 1
+              ? t.oneResult
+              : results.length
+                ? fill(t.resultsCount, { n: results.length })
+                : '')
+          : ''}
       </p>
       <label className="bar surface">
         <SearchIcon />
@@ -304,7 +313,7 @@ export function SearchBar({
           autoFocus={autoFocus}
           aria-controls={listId}
           aria-expanded={showList}
-          aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
+          aria-activedescendant={showList && items[active] ? `${listId}-${active}` : undefined}
           role="combobox"
           value={query}
           onChange={(e) => {

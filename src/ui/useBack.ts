@@ -7,19 +7,22 @@ import { isNative } from './native';
  * closed something). With nothing left to close, back sends the app to the background instead
  * of quitting it, so navigation and the map survive a stray press.
  */
-export function useBack(handler: () => boolean) {
+export function useBack(handler: (via: 'back' | 'escape') => boolean) {
   const latest = useRef(handler);
   useEffect(() => {
     latest.current = handler;
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement)) latest.current();
+      // A held key repeats; only a fresh press steps back.
+      if (e.key === 'Escape' && !e.repeat && !(e.target instanceof HTMLInputElement)) {
+        latest.current('escape');
+      }
     };
     window.addEventListener('keydown', onKey);
     const listener = isNative
       ? NativeApp.addListener('backButton', () => {
-          if (!latest.current()) void NativeApp.minimizeApp();
+          if (!latest.current('back')) void NativeApp.minimizeApp();
         })
       : null;
     return () => {

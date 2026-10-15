@@ -453,7 +453,7 @@ test.describe('map', () => {
     // The router's alert says no distance; the spoken prompt adds it.
     await expect
       .poll(async () => (await spoken()).find((w) => w.includes('Unter den Linden')))
-      .toMatch(/^In \d+ meters, turn right onto Unter den Linden\.$/);
+      .toMatch(/^In \d+ metres, turn right onto Unter den Linden\.$/);
     await expect(page.locator('.me.nav')).toHaveCount(1);
     await idle(page);
     await shot(page, info, 'navigating');
@@ -531,7 +531,7 @@ test.describe('map', () => {
     const banner = page.locator('.nav-banner');
     await expect(banner).toContainText(/Location is off|location is not available|Waiting/);
     await page.getByRole('button', { name: 'End' }).click();
-    await page.getByRole('button', { name: 'Tap again to end navigation' }).click();
+    await page.getByRole('button', { name: /(Tap|Click) again to end navigation/ }).click();
     await expect(banner).toHaveCount(0);
     await expect(card).toBeVisible();
   });
@@ -584,7 +584,7 @@ test.describe('map', () => {
     // End next to Mute asks for a second tap.
     await page.getByRole('button', { name: 'End' }).click();
     await expect(page.locator('.nav-banner')).toHaveCount(1);
-    await page.getByRole('button', { name: 'Tap again to end navigation' }).click();
+    await page.getByRole('button', { name: /(Tap|Click) again to end navigation/ }).click();
     await expect.poll(theme).toBe('dark');
   });
 
@@ -714,6 +714,16 @@ test.describe('map', () => {
     const borchardt = await page.evaluate(() =>
       window.kosmos!.project([13.405 + 500 / 67800, 52.52 - 400 / 111200]),
     );
+    // Drawn under the pointer first: a busy test machine may still be placing it.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ x, y }) =>
+            window.kosmos!.queryRenderedFeatures([x, y]).some((f) => f.source === 'search'),
+          borchardt,
+        ),
+      )
+      .toBe(true);
     await page.mouse.click(borchardt.x, borchardt.y);
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Borchardt');
     await page.locator('.card').getByRole('button', { name: /close/i }).click();
@@ -823,10 +833,11 @@ test.describe('map', () => {
       'https://www.example.org/tor',
     );
     await hours.click();
+    // The week in the user's language and clock, not OpenStreetMap's syntax.
     await expect(card.locator('.hours li')).toHaveText([
-      'Mo-Fr 09:00-18:00',
-      'Sa 10:00-14:00',
-      'Su off',
+      /^Mon–Fri 09:00\sAM–06:00\sPM$/,
+      /^Sat 10:00\sAM–02:00\sPM$/,
+      'Sun closed',
     ]);
     await shot(page, info, 'hours');
     expect(lookupRequests.length).toBe(asked + 1);
@@ -960,10 +971,7 @@ test.describe('map', () => {
     await expect(page.locator('.me')).toBeVisible();
     // From the globe it flies there; the button is not switched to following.
     await expect.poll(() => page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThan(14);
-    await expect(page.locator('.controls > button').first()).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    await expect(page.locator('.controls > button').first()).toHaveAttribute('data-follow', 'off');
   });
 
   test('says how to drop a pin once, on the first visit', async ({ page }) => {
@@ -1190,6 +1198,40 @@ test.describe('map', () => {
     await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
   });
 
+  test('works from the keyboard: cards take focus, arrows choose, closing returns to search', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name);
+    await input.press('Enter');
+    const place = page.locator('.card');
+    await expect(place.getByRole('heading')).toBeFocused();
+
+    await place.getByRole('button', { name: /^Route$/ }).press('Enter');
+    const card = page.locator('.card.route');
+    await expect(card.getByRole('heading', { name: `Route to ${SEARCH_HIT.name}` })).toBeFocused();
+    // The travel modes are one Tab stop; arrows move and choose, as with native radios.
+    await expect(card.locator('.modes [tabindex="0"]')).toHaveCount(1);
+    await card.getByRole('radio', { name: 'Car' }).focus();
+    await page.keyboard.press('ArrowRight');
+    const bike = card.getByRole('radio', { name: 'Bike' });
+    await expect(bike).toBeFocused();
+    await expect(bike).toHaveAttribute('aria-checked', 'true');
+    await expect.poll(() => routeRequests.at(-1)?.costing).toBe('bicycle');
+    await expect(card.locator('.modes [tabindex="0"]')).toHaveAttribute('aria-label', 'Bike');
+
+    // Back to the place, whose heading has focus again; closing it carries on in the search.
+    await page.keyboard.press('Escape');
+    await expect(place.getByRole('heading')).toBeFocused();
+    await place.getByRole('button', { name: 'Close' }).press('Enter');
+    await expect(place).toHaveCount(0);
+    await expect(input).toBeFocused();
+  });
+
   test('says when the map has no connection', async ({ page, context }) => {
     const note = page.getByRole('status').filter({ hasText: 'The map needs a connection' });
     await context.setOffline(true);
@@ -1217,6 +1259,26 @@ test('works offline after the first visit', async ({ context, page }) => {
   await page.reload();
   await expect(page.getByRole('combobox')).toBeVisible();
   await expect(page.locator('canvas.maplibregl-canvas')).toBeVisible();
+});
+
+test.describe('in Britain', () => {
+  test.use({ locale: 'en-GB' });
+
+  test('shows the time on the 24-hour clock, and miles', async ({ context, page }) => {
+    await offlineWorld(context);
+    await page.goto('./');
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const summary = page.locator('.card.route .summary span');
+    await expect(summary).toContainText(' mi');
+    await expect(summary).toHaveText(/arrival \d{2}:\d{2}$/);
+  });
 });
 
 test.describe('in the US', () => {

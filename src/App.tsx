@@ -6,7 +6,7 @@ import { travelHeading } from './core/compass';
 import { offRouteLimit, type NavState } from './core/nav';
 import type { Mode, TravelMode } from './core/route';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER } from './core/style';
-import { lang, t } from './i18n';
+import { lang, locale, t } from './i18n';
 import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
 import { onLongPress } from './ui/gestures';
@@ -108,7 +108,8 @@ export function App() {
   /** The router answer count when a reroute was asked for; `null` when none is pending. */
   const [rerouteAt, setRerouteAt] = useState<number | null>(null);
   const route = useRoute(trip, fix, lang, navigating);
-  const voice = useMemo(() => systemVoice(navigator.language || lang), []);
+  // The voice speaks the language of the words it is given: the UI's (and the router's).
+  const voice = useMemo(() => systemVoice(locale), []);
   const navRef = useRef(false);
   /** Road navigation owns the camera and the arrow; public transport only follows the dot. */
   const riding = navigating && trip?.mode === 'transit';
@@ -460,7 +461,8 @@ export function App() {
       me.current?.heading(bearing);
       if (s && map) updateNavTheme(map, s, nav.time);
       lastView.current = { center, bearing, speed: nav.speed };
-      if (navFollowRef.current && !touching.current.size) followCamera(lastView.current, 1000);
+      if (navFollowRef.current && !touching.current.size)
+        followCamera(lastView.current, motion(1000));
     },
     [followCamera, compass, map, updateNavTheme],
   );
@@ -496,7 +498,7 @@ export function App() {
     voice,
     muted,
     lang,
-    say: (tr, p) => rideWords(tr, p, trip?.to.name ?? '', lang),
+    say: (tr, p) => rideWords(tr, p, trip?.to.name ?? '', locale),
   });
   // Public transport turns the map dark after sunset too; tunnels are the driver's concern.
   const rideFix = ride?.st.fix;
@@ -605,14 +607,14 @@ export function App() {
 
   // Back (Android) and Escape close one layer at a time; navigation needs a second press.
   const backAt = useRef(0);
-  useBack(() => {
+  useBack((via) => {
     if (about) setAbout(false);
     else if (navigating) {
       if (arrived) finish();
       else if (Date.now() - backAt.current < BACK_TWICE_MS) endNav();
       else {
         backAt.current = Date.now();
-        showToast(t.backToEnd);
+        showToast(via === 'escape' ? t.escToEnd : t.backToEnd);
       }
     } else if (picking) setPicking(null);
     else if (trip) closeRoute();
@@ -645,7 +647,7 @@ export function App() {
             transit={ride.transit}
             st={ride.st}
             destination={trip.to.name}
-            lang={lang}
+            lang={locale}
             muted={muted}
             following={follow !== 'off'}
             onMute={toggleMute}
@@ -666,14 +668,14 @@ export function App() {
             route={shown[chosen]}
             mode={roadMode}
             nav={nav}
-            lang={lang}
+            lang={locale}
             muted={muted}
             following={navFollow}
             reroute={rerouteState}
             onMute={toggleMute}
             onRecenter={() => {
               setNavFollow(true);
-              followCamera(lastView.current, 600);
+              followCamera(lastView.current, motion(600));
             }}
             onEnd={arrived ? finish : endNav}
           />
@@ -702,7 +704,7 @@ export function App() {
                   active={chosen}
                   status={route.status}
                   location={status}
-                  lang={lang}
+                  lang={locale}
                   onMode={setMode}
                   onActive={setActive}
                   onChangeStart={() => setPicking('start')}
@@ -778,7 +780,12 @@ export function App() {
             }}
           />
         )}
-        <button type="button" className="credit" onClick={() => setAbout(true)}>
+        <button
+          type="button"
+          className="credit"
+          aria-label={`© OpenStreetMap · ${t.about}`}
+          onClick={() => setAbout(true)}
+        >
           © OpenStreetMap
         </button>
       </main>

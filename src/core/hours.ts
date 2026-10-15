@@ -122,3 +122,32 @@ export function hoursState(week: Week, now: Date): HoursState {
   const next = spans.map(([s]) => s).find((s) => s > m)!;
   return { open: false, change: at(next) };
 }
+
+/** Days with the same hours, Monday 0 to Sunday 6, and those hours in minutes of the day. */
+export interface WeekRow {
+  from: number;
+  to: number;
+  /** Start and end minute; an end past 1440 runs into the next morning. */
+  spans: [number, number][];
+}
+
+/** Open the whole day, midnight to midnight: said in words, not "00:00–00:00". */
+export const allDay = (spans: [number, number][]) =>
+  spans.length === 1 && spans[0][0] === 0 && spans[0][1] >= DAY;
+
+/** The week as people read it: runs of days with the same hours ("Mo–Fr 09:00–18:00"). */
+export function weekRows(week: Week): WeekRow[] {
+  const days = DAYS.map((_, d) =>
+    week
+      .filter(([s]) => s >= d * DAY && s < (d + 1) * DAY)
+      .map(([s, e]): [number, number] => [s - d * DAY, e - d * DAY])
+      .sort((a, b) => a[0] - b[0]),
+  );
+  const rows: WeekRow[] = [];
+  days.forEach((spans, d) => {
+    const last = rows[rows.length - 1];
+    if (last && JSON.stringify(last.spans) === JSON.stringify(spans)) last.to = d;
+    else rows.push({ from: d, to: d, spans });
+  });
+  return rows;
+}

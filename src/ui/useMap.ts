@@ -5,6 +5,7 @@ import type { Theme } from '../core/palette';
 import { ROUTE_SOURCE, SEARCH_SOURCE, buildStyle } from '../core/style';
 import { DEFAULT_VIEW, VIEW_KEY, parseView, serializeView } from '../core/view';
 import { mapFontFaces } from './fonts';
+import { motion } from './motion';
 import { nativeLog } from './native';
 
 // MapLibre resolves its worker next to its own module, which bundling moves; point it at the copy.
@@ -44,7 +45,8 @@ export function useMap(
       hash: 'map',
       attributionControl: false,
       maxPitch: 75,
-      fadeDuration: 180,
+      // Labels fade in; with reduced motion they simply appear.
+      fadeDuration: motion(180),
       validateStyle: import.meta.env.DEV,
       cancelPendingTileRequestsWhileZooming: true,
     });

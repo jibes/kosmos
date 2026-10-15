@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hoursState, parseHours } from '../src/core/hours';
+import { allDay, hoursState, parseHours, weekRows } from '../src/core/hours';
 
 // 2026-10-12 is a Monday.
 const at = (day: number, hh: number, mm = 0) => new Date(2026, 9, 12 + day, hh, mm);
@@ -50,5 +50,29 @@ describe('opening hours', () => {
     expect(parseHours('"by appointment"')).toBeNull();
     expect(parseHours('')).toBeNull();
     expect(state('off', at(0, 10))).toEqual({ open: false, never: true });
+  });
+});
+
+describe('weekRows', () => {
+  it('groups days with the same hours, closed days included', () => {
+    const rows = weekRows(parseHours('Mo-Fr 09:00-18:00; Sa 10:00-14:00')!);
+    expect(rows).toEqual([
+      { from: 0, to: 4, spans: [[540, 1080]] },
+      { from: 5, to: 5, spans: [[600, 840]] },
+      { from: 6, to: 6, spans: [] },
+    ]);
+  });
+
+  it('reads 24/7 as one row of whole days', () => {
+    const rows = weekRows(parseHours('24/7')!);
+    expect(rows).toEqual([{ from: 0, to: 6, spans: [[0, 1440]] }]);
+    expect(allDay(rows[0].spans)).toBe(true);
+    expect(allDay([[0, 1080]])).toBe(false);
+    expect(allDay([])).toBe(false);
+  });
+
+  it('keeps a night past midnight on the day it starts', () => {
+    const rows = weekRows(parseHours('Fr-Sa 22:00-03:00')!);
+    expect(rows.find((r) => r.from === 4)).toEqual({ from: 4, to: 5, spans: [[1320, 1620]] });
   });
 });

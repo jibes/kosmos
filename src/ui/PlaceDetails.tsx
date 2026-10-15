@@ -1,19 +1,35 @@
 import { useMemo } from 'react';
 import { withScheme, type Details } from '../core/details';
-import { hoursState, parseHours } from '../core/hours';
+import { allDay, hoursState, parseHours, weekRows, type WeekRow } from '../core/hours';
 import { formatClock } from '../core/route';
-import { fill, lang, t } from '../i18n';
+import { fill, locale, t } from '../i18n';
 import { useNow } from './useNow';
 
 /** "18:00" today, "Tue 09:00" on another day. */
 function when(d: Date, now: Date) {
-  const clock = formatClock(d, lang);
+  const clock = formatClock(d, locale);
   return d.toDateString() === now.toDateString()
     ? clock
-    : `${d.toLocaleDateString(lang, { weekday: 'short' })} ${clock}`;
+    : `${d.toLocaleDateString(locale, { weekday: 'short' })} ${clock}`;
 }
 
-/** Open or closed now, and until when; the hours as written one tap away. */
+/** A Monday, to name the days of the week in the user's language. */
+const day = (d: number) =>
+  new Date(2024, 0, 1 + d).toLocaleDateString(locale, { weekday: 'short' });
+const minute = (m: number) => formatClock(new Date(2024, 0, 1, 0, m), locale);
+
+/** "Mon–Fri  09:00–18:00", "Sun  closed". */
+function rowText(r: WeekRow) {
+  const days = r.from === r.to ? day(r.from) : `${day(r.from)}–${day(r.to)}`;
+  const hours = allDay(r.spans)
+    ? t.allDay
+    : r.spans.length
+      ? r.spans.map(([s, e]) => `${minute(s)}–${minute(e)}`).join(', ')
+      : t.closedDay;
+  return { days, hours };
+}
+
+/** Open or closed now, and until when; the week one tap away, in the user's language. */
 function Hours({ spec }: { spec: string }) {
   const now = new Date(useNow(60_000));
   const week = useMemo(() => parseHours(spec), [spec]);
@@ -27,13 +43,21 @@ function Hours({ spec }: { spec: string }) {
     <details className="hours">
       <summary data-open={st ? st.open : undefined}>{status}</summary>
       <ul>
-        {spec
-          .split(';')
-          .map((r) => r.trim())
-          .filter(Boolean)
-          .map((r, i) => (
-            <li key={i}>{r}</li>
-          ))}
+        {week
+          ? weekRows(week).map((r) => {
+              const { days, hours } = rowText(r);
+              return (
+                <li key={r.from}>
+                  <span>{days}</span> {hours}
+                </li>
+              );
+            })
+          : // Beyond what the app reads (holidays, months, comments): shown as written.
+            spec
+              .split(';')
+              .map((r) => r.trim())
+              .filter(Boolean)
+              .map((r, i) => <li key={i}>{r}</li>)}
       </ul>
     </details>
   );

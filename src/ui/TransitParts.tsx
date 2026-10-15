@@ -7,6 +7,9 @@ import { ModeIcon, TurnIcon, VehicleIcon } from './icons';
 const count = (n: number, one: string, many: string) =>
   n === 1 ? one : many.replace('{n}', `${n}`);
 
+/** What to call a ride: its line ("U6"), or else its kind of vehicle ("bus"). */
+export const lineName = (leg: TransitLeg) => leg.line ?? t[`veh_${vehicleOf(leg.mode) ?? 'other'}`];
+
 /** A line as people know it: its number in its own colour, with the kind of vehicle. */
 export function LineChip({ leg, big }: { leg: TransitLeg; big?: boolean }) {
   const vehicle = vehicleOf(leg.mode);
@@ -17,7 +20,8 @@ export function LineChip({ leg, big }: { leg: TransitLeg; big?: boolean }) {
       style={leg.color ? { background: leg.color, color: leg.textColor } : undefined}
     >
       {vehicle && <VehicleIcon vehicle={vehicle} size={big ? 18 : 13} />}
-      {leg.line ?? t.transit}
+      {/* No line number: the icon says the vehicle, the words say it to screen readers. */}
+      {leg.line ?? (vehicle ? <span className="sr-only">{lineName(leg)}</span> : lineName(leg))}
     </span>
   );
 }

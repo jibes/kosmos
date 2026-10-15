@@ -12,7 +12,7 @@ export function UpdateToast({ hidden }: { hidden: boolean }) {
   } = useRegisterSW();
   if (!needRefresh || hidden) return null;
   return (
-    <div className="toast surface" role="status">
+    <div className="toast surface">
       {t.updateReady}
       <button type="button" onClick={() => updateServiceWorker(true)}>
         {t.reload}

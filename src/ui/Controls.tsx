@@ -55,7 +55,6 @@ export function Controls({ map, status, follow, onLocate, onNorth }: Props) {
         className="ctl surface"
         aria-label={label}
         title={label}
-        aria-pressed={following}
         data-state={status}
         data-following={following || undefined}
         data-follow={follow}

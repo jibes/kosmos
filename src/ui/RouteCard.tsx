@@ -11,6 +11,7 @@ import {
 import { directionsUrl, geoUri } from '../core/geo';
 import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
+import { arrowRadios, focusSearch, useFocusOnMount } from './a11y';
 import { CloseIcon, LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { isNative } from './native';
 import { Sheet } from './Sheet';
@@ -62,6 +63,7 @@ export function RouteCard(props: Props) {
     : MESSAGE[status];
   const route = status === 'ready' ? routes[active] : undefined;
   const now = useNow();
+  const heading = useFocusOnMount<HTMLHeadingElement>();
   const clock = (ms: number) => formatClock(new Date(ms), lang);
   const transit = route?.transit;
   const arrival = route && clock(transit ? transit.end : now + route.duration * 1000);
@@ -88,14 +90,18 @@ export function RouteCard(props: Props) {
         )
       }
     >
+      <h2 className="sr-only" ref={heading} tabIndex={-1}>
+        {fill(t.routeTo, { name: to.name })}
+      </h2>
       <header>
-        <div className="modes" role="radiogroup" aria-label={t.travelMode}>
+        <div className="modes" role="radiogroup" aria-label={t.travelMode} onKeyDown={arrowRadios}>
           {TRAVEL_MODES.map((m) => (
             <button
               key={m}
               type="button"
               role="radio"
               aria-checked={m === mode}
+              tabIndex={m === mode ? 0 : -1}
               aria-label={t[m]}
               title={t[m]}
               onClick={() => props.onMode(m)}
@@ -108,7 +114,10 @@ export function RouteCard(props: Props) {
           type="button"
           className="icon-btn round"
           aria-label={t.close}
-          onClick={props.onClose}
+          onClick={(e) => {
+            props.onClose();
+            if (e.detail === 0) focusSearch();
+          }}
         >
           <CloseIcon size={16} />
         </button>
@@ -186,13 +195,14 @@ export function RouteCard(props: Props) {
       )}
 
       {route && routes.length > 1 && (
-        <div className="alts" role="radiogroup" aria-label={t.alternatives}>
+        <div className="alts" role="radiogroup" aria-label={t.alternatives} onKeyDown={arrowRadios}>
           {routes.map((r, i) => (
             <button
               key={i}
               type="button"
               role="radio"
               aria-checked={i === active}
+              tabIndex={i === active ? 0 : -1}
               onClick={() => props.onActive(i)}
             >
               {r.transit ? clock(r.transit.start) : formatDuration(r.duration)}
