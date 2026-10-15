@@ -32,6 +32,8 @@ export function useCompass() {
       const h = headingOf(
         {
           alpha: o.alpha,
+          beta: o.beta,
+          gamma: o.gamma,
           absolute: o.absolute || e.type === 'deviceorientationabsolute',
           webkitCompassHeading: o.webkitCompassHeading,
         },
