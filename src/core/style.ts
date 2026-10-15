@@ -566,11 +566,15 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
       'source-layer': 'poi',
       minzoom: 15,
       filter: ['all', hasName, isPoint],
+      // Below the place's point, not on it: a selected place's pin stands on the point, and a
+      // category result's name takes this spot, so the map's own copy gives way to it.
       layout: {
         'text-field': name(lang),
         'text-font': [FONT.regular],
         'text-size': lerp(15, 10.5, 18, 12.5),
         'text-max-width': 7,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.6],
         'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
         'text-padding': 6,
       },

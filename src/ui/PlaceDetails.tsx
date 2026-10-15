@@ -32,6 +32,8 @@ function rowText(r: WeekRow) {
 /** Open or closed now, and until when; the week one tap away, in the user's language. */
 function Hours({ spec }: { spec: string }) {
   const now = new Date(useNow(60_000));
+  // Monday first, as the rows count.
+  const today = (now.getDay() + 6) % 7;
   const week = useMemo(() => parseHours(spec), [spec]);
   const st = week && hoursState(week, now);
   let status = t.openingHours;
@@ -47,7 +49,7 @@ function Hours({ spec }: { spec: string }) {
           ? weekRows(week).map((r) => {
               const { days, hours } = rowText(r);
               return (
-                <li key={r.from}>
+                <li key={r.from} data-today={(r.from <= today && today <= r.to) || undefined}>
                   <span>{days}</span> {hours}
                 </li>
               );

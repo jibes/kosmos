@@ -290,8 +290,24 @@ export function formatDuration(s: number): string {
   return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
 }
 
+/** Whether a locale reads the time on a 12-hour clock, cached: asked for every time shown. */
+const twelve = new Map<string, boolean>();
+const isTwelve = (lang: string) => {
+  let h = twelve.get(lang);
+  if (h === undefined) {
+    const cycle = new Intl.DateTimeFormat(lang, { hour: 'numeric' }).resolvedOptions().hourCycle;
+    h = cycle === 'h11' || cycle === 'h12';
+    twelve.set(lang, h);
+  }
+  return h;
+};
+
+/** "06:05" on a 24-hour clock, as timetables write it; "6:05 AM" on a 12-hour one. */
 export function formatClock(date: Date, lang: string): string {
-  return date.toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(lang, {
+    hour: isTwelve(lang) ? 'numeric' : '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export type Turn =
@@ -307,6 +323,19 @@ export type Turn =
   | 'arrive'
   | 'depart'
   | 'ferry';
+
+/** Turns the arrow says all about: becomes, continue, left/right, U-turn, merge. */
+const PLAIN_TURNS = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 37, 38]);
+
+/**
+ * The banner's line for a maneuver, read at a glance: the street for a plain turn (the arrow
+ * shows which way, and the street is what the signs say), else the router's sentence without
+ * its full stop. Speech and screen readers keep the whole sentence.
+ */
+export function bannerText(m: Pick<Maneuver, 'type' | 'instruction' | 'street'>): string {
+  if (m.street && PLAIN_TURNS.has(m.type)) return m.street;
+  return m.instruction.replace(/\.$/, '');
+}
 
 /** Collapses Valhalla's 39 maneuver types into the dozen arrows a person reads. */
 export function turnOf(type: number): Turn {

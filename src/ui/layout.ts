@@ -5,16 +5,28 @@ import { navZoom } from '../core/nav';
 export const wide = () =>
   matchMedia('(min-width: 900px), (orientation: landscape) and (min-width: 560px)').matches;
 
+/** The side layout's gutter, as in styles.css. */
+const WIDE_GUTTER = 16;
+
+/** The side column's width (panel, banner, bar): `--side-w` in styles.css. */
+export const sideWidth = () => Math.min(400, Math.max(320, innerWidth * 0.48));
+
+/** Where the map beside the column begins, plus a margin. */
+const beside = (margin: number) => Math.round(WIDE_GUTTER + sideWidth() + margin);
+
 /** Keeps a selected place clear of the panel that describes it, before the card is measured. */
 export const padding = () =>
   wide()
-    ? { top: 48, bottom: 48, left: 440, right: 48 }
+    ? { top: 48, bottom: 48, left: beside(24), right: 48 }
     : { top: 96, bottom: 300, left: 32, right: 32 };
 
-/** While navigating, the user sits low on screen so more of the road ahead shows. */
+/**
+ * While navigating, the user sits low on screen so more of the road ahead shows: about a
+ * quarter of the height from the bottom beside the column, where nothing else is.
+ */
 export const navPadding = () =>
   wide()
-    ? { top: Math.round(innerHeight * 0.3), bottom: 60, left: 440, right: 0 }
+    ? { top: Math.round(innerHeight * 0.55), bottom: 16, left: beside(WIDE_GUTTER), right: 0 }
     : { top: Math.round(innerHeight * 0.42), bottom: 110, left: 0, right: 0 };
 
 export const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -22,7 +34,7 @@ export const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
 /** Fits a route, a place or category results into the map area the panel leaves free, measured. */
 export const routePadding = () => {
   const panel = document.querySelector('.panel')?.getBoundingClientRect();
-  if (wide()) return { top: 64, bottom: 64, left: (panel?.right ?? 420) + 48, right: 96 };
+  if (wide()) return { top: 64, bottom: 64, left: (panel?.right ?? beside(0)) + 48, right: 96 };
   const bottom = panel && panel.height ? innerHeight - panel.top + 24 : 380;
   return { top: 96, bottom: Math.min(bottom, innerHeight - 220), left: 40, right: 80 };
 };
@@ -48,7 +60,7 @@ export function startBearing(route: { coords: [number, number][] }): number {
 /** Room around an overview while guiding: the banner on top, the bar at the bottom. */
 const overviewPadding = () =>
   wide()
-    ? { top: 64, bottom: 64, left: 480, right: 64 }
+    ? { top: 64, bottom: 64, left: beside(64), right: 64 }
     : { top: Math.round(innerHeight * 0.3), bottom: 150, left: 48, right: 48 };
 
 /**

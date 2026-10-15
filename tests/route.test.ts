@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bannerText,
   classifyError,
   decodePolyline,
   encodePolyline,
+  formatClock,
   formatDistance,
   formatDuration,
   parseValhalla,
@@ -160,6 +162,29 @@ describe('formatting', () => {
     expect(formatDuration(10)).toBe('1 min');
     expect(formatDuration(42 * 60)).toBe('42 min');
     expect(formatDuration(125 * 60)).toBe('2 h 05');
+  });
+
+  it('writes times as the locale reads them: no leading zero on a 12-hour clock', () => {
+    const morning = new Date(2024, 0, 1, 6, 5);
+    // ICU spaces "AM" with a narrow no-break space or a plain one, depending on its version.
+    expect(formatClock(morning, 'en-US').replace(/\s/u, ' ')).toBe('6:05 AM');
+    expect(formatClock(morning, 'en-GB')).toBe('06:05');
+    expect(formatClock(morning, 'de-DE')).toBe('06:05');
+  });
+
+  it('leads the banner with the street for a plain turn, the sentence otherwise', () => {
+    const right = { type: 10, instruction: 'Turn right onto Unter den Linden.' };
+    expect(bannerText({ ...right, street: 'Unter den Linden' })).toBe('Unter den Linden');
+    // No street to show: the sentence, without its full stop.
+    expect(bannerText(right)).toBe('Turn right onto Unter den Linden');
+    // A roundabout's exit or a ramp's sign is more than the arrow says.
+    const exit = { type: 26, instruction: 'Enter the roundabout and take the 2nd exit.' };
+    expect(bannerText({ ...exit, street: 'Ring' })).toBe(
+      'Enter the roundabout and take the 2nd exit',
+    );
+    expect(bannerText({ type: 1, instruction: 'Drive south.', street: 'Friedrichstraße' })).toBe(
+      'Drive south',
+    );
   });
 
   it('maps errors and turns', () => {

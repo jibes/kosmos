@@ -3,7 +3,7 @@ import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { lang, t } from '../i18n';
 import { focusSearch, useFocusOnMount } from './a11y';
-import { CloseIcon, RouteIcon, ShareIcon } from './icons';
+import { CloseIcon, CopyIcon, RouteIcon, ShareIcon } from './icons';
 import { copy, share } from './native';
 import { PlaceDetails } from './PlaceDetails';
 import { Sheet } from './Sheet';
@@ -64,8 +64,9 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) 
         </button>
       </header>
       {details && <PlaceDetails details={details} />}
-      <button type="button" className="coords" onClick={onCopy}>
+      <button type="button" className="coords" title={t.copy} onClick={onCopy}>
         {copied ? t.copied : formatLngLat(place)}
+        {!copied && <CopyIcon size={13} />}
         <span className="sr-only">, {t.copy}</span>
       </button>
       <div className="actions">

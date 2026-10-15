@@ -1,6 +1,7 @@
 import { laneSize, lanesNeeded, laneViews } from '../core/lanes';
 import type { NavState } from '../core/nav';
 import {
+  bannerText,
   formatClock,
   formatDistance,
   formatDuration,
@@ -61,17 +62,19 @@ export function NavView(props: Props) {
   const then = guiding && m && after && m.distance <= THEN_M ? after : undefined;
 
   let title = m?.instruction ?? '';
+  // On screen the street, where the arrow says the rest; the sentence is for screen readers.
+  let shown = m ? bannerText(m) : '';
   let turn = m ? turnOf(m.type) : 'straight';
   // The router's text for the destination is past tense; on the way there it reads ahead.
   if (started && !nav.arrived && m && nav.next === route.maneuvers.length - 1) {
-    title = m.alert ?? t.destinationAhead;
+    title = shown = m.alert ?? t.destinationAhead;
   }
   if (nav.arrived) {
-    title = t.arrived;
+    title = shown = t.arrived;
     turn = 'arrive';
   } else if (rerouting) {
     // Not the old route's arrow: while asking it says nothing about where to turn.
-    title = reroute === 'failed' ? t.rerouteFailed : t.rerouting;
+    title = shown = reroute === 'failed' ? t.rerouteFailed : t.rerouting;
     turn = reroute === 'failed' ? 'uturn' : 'depart';
   }
   // What the user should know besides the instruction: no position yet, or a poor one.
@@ -87,13 +90,22 @@ export function NavView(props: Props) {
         <div>
           {guiding && toNext != null && <strong>{formatDistance(toNext, lang, units)}</strong>}
           {/* Only the instruction is announced: the distance changes with every fix. */}
-          <p aria-live="polite">{title}</p>
+          <p aria-live="polite">
+            {shown === title ? (
+              title
+            ) : (
+              <>
+                <span aria-hidden="true">{shown}</span>
+                <span className="sr-only">{title}</span>
+              </>
+            )}
+          </p>
           {note && <small>{note}</small>}
           {then && (
             <p className="nav-then">
               {t.then}
               <TurnIcon turn={turnOf(then.type)} size={18} />
-              <span>{then.instruction}</span>
+              <span>{bannerText(then)}</span>
             </p>
           )}
         </div>

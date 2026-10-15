@@ -34,6 +34,27 @@ describe('buildStyle', () => {
     for (const c of used) expect(allowed).toContain(c);
   });
 
+  it('hangs place labels below their point, where a pin standing on it leaves them readable', () => {
+    const poi = buildStyle({ theme: 'light', lang: 'en' }).layers.find((l) => l.id === 'label-poi');
+    expect(poi?.layout).toMatchObject({ 'text-anchor': 'top' });
+  });
+
+  it('keeps streets and water apart from buildings and land at night', () => {
+    // WCAG relative luminance: how far apart two fills read, not as text but as shapes.
+    const lum = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => {
+        const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: string, b: string) => (lum(a) + 0.05) / (lum(b) + 0.05);
+    const d = palettes.dark;
+    expect(ratio(d.roadMinor, d.building)).toBeGreaterThan(1.25);
+    expect(ratio(d.roadMinor, d.land)).toBeGreaterThan(1.25);
+    expect(ratio(d.water, d.land)).toBeGreaterThan(1.1);
+  });
+
   it('keeps both palettes structurally identical', () => {
     const keys = (p: Palette) => Object.keys(p).sort();
     expect(keys(palettes.light)).toEqual(keys(palettes.dark));

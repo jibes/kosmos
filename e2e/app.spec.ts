@@ -275,7 +275,7 @@ test.describe('map', () => {
     await expect(legs.locator('.stops li')).toHaveText([/Französische Straße/, /Friedrichstraße/]);
     await expect(legs.locator('.ride time').first()).toHaveAttribute('data-late');
     await expect(legs.locator('.walk')).toHaveCount(2);
-    await expect(card.locator('.summary')).toContainText('No change');
+    await expect(card.locator('.summary')).toContainText('Direct');
     // Two connections and walking the whole way; each tile names its lines with their vehicle.
     const tiles = card.locator('.alts [role=radio]');
     await expect(tiles).toHaveCount(3);
@@ -513,8 +513,10 @@ test.describe('map', () => {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
 
     const banner = page.locator('.nav-banner');
-    // The position already known counts at once: the first turn ahead, with its distance.
-    await expect(banner).toContainText('Turn right onto Unter den Linden.');
+    // The position already known counts at once: the first turn ahead, with its distance. The
+    // arrow says which way; the line says the street, the sentence is for screen readers.
+    await expect(banner.locator('p [aria-hidden]')).toHaveText('Unter den Linden');
+    await expect(banner.locator('p .sr-only')).toHaveText('Turn right onto Unter den Linden.');
     await expect(banner.locator('strong')).toHaveText(/km$/);
     await expect(page.locator('.me.nav')).toHaveCount(1);
     await expect(page.locator('.panel')).toBeHidden();
@@ -826,6 +828,16 @@ test.describe('map', () => {
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Borchardt');
     await page.locator('.card').getByRole('button', { name: /close/i }).click();
 
+    // Up close, the map's own label of a result gives way to the result's name: never twice.
+    await jump(page, { lng: 13.405 + 500 / 67800, lat: 52.52 - 400 / 111200, zoom: 17 });
+    const named = (layer: string) =>
+      page.evaluate(
+        (l) => window.kosmos!.queryRenderedFeatures({ layers: [l] }).map((f) => f.properties.name),
+        layer,
+      );
+    await expect.poll(() => named('search-names')).toContain('Borchardt');
+    expect(await named('label-poi')).not.toContain('Borchardt');
+
     // Typed in German, groceries: supermarket and bakery in view.
     await jump(page, { ...CENTER, zoom: 15 });
     await input.fill('Lebensmittel');
@@ -931,12 +943,13 @@ test.describe('map', () => {
       'https://www.example.org/tor',
     );
     await hours.click();
-    // The week in the user's language and clock, not OpenStreetMap's syntax.
+    // The week in the user's language and clock, not OpenStreetMap's syntax; today stands out.
     await expect(card.locator('.hours li')).toHaveText([
-      /^Mon–Fri 09:00\sAM–06:00\sPM$/,
-      /^Sat 10:00\sAM–02:00\sPM$/,
+      /^Mon–Fri 9:00\sAM–6:00\sPM$/,
+      /^Sat 10:00\sAM–2:00\sPM$/,
       'Sun closed',
     ]);
+    await expect(card.locator('.hours li[data-today]')).toHaveCount(1);
     await shot(page, info, 'hours');
     expect(lookupRequests.length).toBe(asked + 1);
     expect(lookupRequests.at(-1)!.get('osm_ids')).toBe('W518071791');
@@ -1180,14 +1193,33 @@ test.describe('map', () => {
     await expect(page.locator('.controls > button').first()).toHaveAttribute('data-follow', 'off');
   });
 
-  test('says how to drop a pin once, on the first visit', async ({ page }) => {
+  test('says how to drop a pin once, the first time the map shows streets', async ({ page }) => {
+    // From the globe, where a pin means nothing: no note.
+    await jump(page, { ...CENTER, zoom: 2 });
     await page.evaluate(() => localStorage.removeItem('kosmos.hinted.v1'));
+    // The fixture marks every other test as hinted already.
     await page.goto('./?hint');
+    await idle(page);
     const note = page.locator('.toast');
+    await page.waitForTimeout(2000);
+    await expect(note).toHaveCount(0);
+
+    // Streets: the note comes, stays long enough to try it, and lets taps through to the map.
+    await jump(page, { ...CENTER, zoom: 16 });
     await expect(note).toHaveText(/(Long-press|Right-click) anywhere to drop a pin/);
+    await page.waitForTimeout(4000);
+    await expect(note).toBeVisible();
+    expect(await note.evaluate((e) => getComputedStyle(e).pointerEvents)).toBe('none');
+    // Doing it opens a card, and the note goes.
+    const at = await screenAt(page, CENTER.lng, CENTER.lat);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    await expect(page.locator('.card').getByRole('heading')).toBeVisible();
+    await expect(note).toHaveCount(0);
+
+    // Said once.
     await page.reload();
     await idle(page);
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2500);
     await expect(note).toHaveCount(0);
   });
 
@@ -1225,11 +1257,16 @@ test.describe('map', () => {
       .getByRole('button', { name: /^Route$/ })
       .click();
     const card = page.locator('.card.route');
+    const start = card.getByRole('button', { name: 'Start', exact: true });
+    await expect(card.locator('.route-msg')).toContainText('No route by car');
+    // No dead Start: the way on is another mode, each named.
+    await expect(start).toHaveCount(0);
     const other = card.getByRole('group', { name: 'Try another way' });
-    await expect(other).toBeVisible();
-    await other.getByRole('button', { name: 'Walk' }).click();
+    await expect(other.getByRole('button')).toHaveText(['By bike', 'On foot', 'Public transport']);
+    await other.getByRole('button', { name: 'On foot' }).click();
     await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
     await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await expect(start).toBeEnabled();
   });
 
   test('keeps a place card on screen with a phone held sideways', async ({ page }) => {
@@ -1246,6 +1283,80 @@ test.describe('map', () => {
     await expect
       .poll(async () => (await page.locator('.pin').boundingBox())!.x, { timeout: 8000 })
       .toBeGreaterThan(box.x + box.width);
+
+    // The hours open, the card scrolls, and Route and Share stay at its foot, in reach.
+    await card.locator('.hours summary').click();
+    await expect(card.locator('.hours li')).toHaveCount(3);
+    const hit = async (name: string) => {
+      const b = (await card.getByRole('button', { name, exact: true }).boundingBox())!;
+      return page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.closest('button')?.textContent,
+        { x: b.x + b.width / 2, y: b.y + b.height / 2 },
+      );
+    };
+    expect(await card.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
+    expect(await hit('Route')).toBe('Route');
+    expect(await hit('Share')).toBe('Share');
+  });
+
+  test('guides beside the map with a phone held sideways', async ({ page, context }) => {
+    const [width, height] = [915, 412];
+    await page.setViewportSize({ width, height });
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({
+      latitude: CENTER.lat + 0.01,
+      longitude: CENTER.lng + 0.01,
+      accuracy: 5,
+    });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    // The route card takes the whole height: no room kept for the search bar it replaced.
+    await card.locator('.steps summary').click();
+    await expect
+      .poll(async () => {
+        const b = (await card.boundingBox())!;
+        return b.y + b.height;
+      })
+      .toBeGreaterThan(height - 24);
+    const column = (await page.locator('.panel').boundingBox())!;
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+
+    // One column before and after Start.
+    const banner = page.locator('.nav-banner');
+    await expect(banner).toBeVisible();
+    const bar = page.locator('.nav-bar');
+    // Measured once risen: the animation starts it slightly smaller.
+    await bar.evaluate((e) => Promise.all(e.getAnimations().map((a) => a.finished)));
+    expect((await banner.boundingBox())!.width).toBeCloseTo(column.width, 0);
+    expect((await bar.boundingBox())!.width).toBeCloseTo(column.width, 0);
+    // The credit in the corner, not floating over the road.
+    const credit = (await page.locator('.credit').boundingBox())!;
+    expect(credit.x + credit.width).toBeGreaterThan(width - 40);
+    expect(credit.y + credit.height).toBeGreaterThan(height - 40);
+    // The arrow beside the column and low: most of the map is the road ahead.
+    const arrow = async () => {
+      const b = (await page.locator('.me.nav').boundingBox())!;
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    };
+    await expect
+      .poll(async () => (await arrow()).y / height, { timeout: 8000 })
+      .toBeGreaterThan(0.68);
+    expect((await arrow()).x).toBeGreaterThan(column.x + column.width);
+
+    // Looking around: Re-centre under the middle of the map, not across the column.
+    await page.mouse.move(700, 150);
+    await page.mouse.down();
+    await page.mouse.move(640, 220, { steps: 6 });
+    await page.mouse.up();
+    const recenter = (await page.getByRole('button', { name: 'Re-centre' }).boundingBox())!;
+    const middle = (column.x + column.width + width) / 2;
+    expect(Math.abs(recenter.x + recenter.width / 2 - middle)).toBeLessThan(12);
   });
 
   test('follows the compass on the second tap of the location button', async ({
@@ -1481,10 +1592,30 @@ test.describe('map', () => {
     await trip('Car', false);
   });
 
-  test('says when the map has no connection', async ({ page, context }) => {
-    const note = page.getByRole('status').filter({ hasText: 'The map needs a connection' });
+  test('says when the map has no connection, covering nothing', async ({ page, context }) => {
+    const note = page.getByRole('status').filter({ hasText: 'No connection' });
     await context.setOffline(true);
     await expect(note).toBeVisible();
+    // Not over the credit, the map buttons or the panel: on phones just above the panel, on
+    // wide screens over the map beside it. Sideways too.
+    const clear = async () => {
+      await note.evaluate((e) =>
+        Promise.all(e.getAnimations().map((a) => a.finished.catch(() => undefined))),
+      );
+      const box = (await note.boundingBox())!;
+      for (const other of ['.credit', '.controls', '.panel']) {
+        const o = (await page.locator(other).boundingBox())!;
+        const apart =
+          box.x + box.width <= o.x ||
+          o.x + o.width <= box.x ||
+          box.y + box.height <= o.y ||
+          o.y + o.height <= box.y;
+        expect(apart, `${other} under the note`).toBe(true);
+      }
+    };
+    await clear();
+    await page.setViewportSize({ width: 915, height: 412 });
+    await clear();
     await context.setOffline(false);
     await expect(note).toHaveCount(0);
   });
@@ -1544,6 +1675,9 @@ test.describe('in the US', () => {
       .locator('.card')
       .getByRole('button', { name: /^Route$/ })
       .click();
-    await expect(page.locator('.card.route .summary span')).toContainText(' mi');
+    const summary = page.locator('.card.route .summary span');
+    await expect(summary).toContainText(' mi');
+    // A 12-hour clock without a leading zero: "arrival 6:05 PM".
+    await expect(summary).toHaveText(/arrival [1-9]\d?:\d{2}\s[AP]M$/);
   });
 });

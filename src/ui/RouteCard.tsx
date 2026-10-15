@@ -48,7 +48,6 @@ interface Props {
 const MESSAGE: Partial<Record<RouteStatus, string>> = {
   locating: t.locating,
   loading: t.routing,
-  none: t.noRoute,
   busy: t.routeBusy,
   failed: t.routeFailed,
 };
@@ -60,8 +59,12 @@ export function RouteCard(props: Props) {
     ? location === 'denied'
       ? t.locationDenied
       : t.noLocation
-    : MESSAGE[status];
+    : status === 'none'
+      ? t[`noRoute_${mode}`]
+      : MESSAGE[status];
   const route = status === 'ready' ? routes[active] : undefined;
+  // Start only for a route, or in its place while one is coming: never a dead button.
+  const startable = route || status === 'loading' || (status === 'locating' && !stuck);
   const now = useNow();
   const heading = useFocusOnMount<HTMLHeadingElement>();
   const clock = (ms: number) => formatClock(new Date(ms), lang);
@@ -172,16 +175,10 @@ export function RouteCard(props: Props) {
           {status === 'none' && (
             // No way by this mode (a car-free zone, a ferry-only island): offer the others.
             <span className="route-try" role="group" aria-label={t.tryOther}>
-              {t.tryOther}
               {TRAVEL_MODES.filter((m) => m !== mode).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-label={t[m]}
-                  title={t[m]}
-                  onClick={() => props.onMode(m)}
-                >
+                <button key={m} type="button" onClick={() => props.onMode(m)}>
                   <ModeIcon mode={m} />
+                  {t[`by_${m}`]}
                 </button>
               ))}
             </span>
@@ -226,7 +223,12 @@ export function RouteCard(props: Props) {
             {route.maneuvers.map((m, i) => (
               <li key={i}>
                 <TurnIcon turn={turnOf(m.type)} size={18} />
-                <span>{m.instruction}</span>
+                {/* The router's "You have arrived" reads as done; the list reads ahead. */}
+                <span>
+                  {turnOf(m.type) === 'arrive'
+                    ? fill(t.arriveAtName, { name: to.name })
+                    : m.instruction}
+                </span>
                 {m.distance > 0 && <small>{formatDistance(m.distance, lang, units)}</small>}
               </li>
             ))}
@@ -234,8 +236,8 @@ export function RouteCard(props: Props) {
         </details>
       )}
 
-      <div className="actions">
-        {props.onStart && (
+      {props.onStart && startable && (
+        <div className="actions">
           <button
             type="button"
             className="action primary"
@@ -245,8 +247,8 @@ export function RouteCard(props: Props) {
             <TurnIcon turn="depart" size={18} />
             {t.start}
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {mode === 'transit' && <TransitCredit />}
       <a
         className="quiet-link"

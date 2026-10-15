@@ -26,12 +26,13 @@ import { useGuidance } from './ui/useGuidance';
 import { FRESH_MS } from './ui/useNav';
 import { useRouteLayer } from './ui/useRouteLayer';
 import { motion } from './ui/motion';
-import { NO_PADDING, followNav, padding, routePadding, startBearing, touch } from './ui/layout';
-import { HINTED_KEY, MODE_KEY, store, stored, storedMode } from './ui/prefs';
+import { NO_PADDING, followNav, padding, routePadding, startBearing } from './ui/layout';
+import { MODE_KEY, store, storedMode } from './ui/prefs';
 import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
 import { useNavTheme, useStatusBar } from './ui/useNavTheme';
 import { useOffline } from './ui/useOffline';
+import { useHint } from './ui/useHint';
 import { useTheme } from './ui/useTheme';
 import { systemVoice, useMuted } from './ui/voice';
 import { keepAwake } from './ui/wakeLock';
@@ -85,7 +86,7 @@ export function App() {
   const compass = useCompass();
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
-  const { toast, showToast, dismiss } = useToast();
+  const { toast, showToast, dismiss, dismissText } = useToast();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [active, setActive] = useState(0);
   /** Which end of the route the search bar is choosing, if any. */
@@ -249,17 +250,23 @@ export function App() {
       }
       select({ name: t.droppedPin, detail: '', ...here }, lookup);
     });
-    const pointer = () => (map.getCanvas().style.cursor = 'pointer');
+    // The pointer shows what a click does: a label without a route open, an alternative with one.
+    const pointer = (alt: boolean) => () => {
+      if (!!tripRef.current === alt) map.getCanvas().style.cursor = 'pointer';
+    };
+    const [onLabel, onAlt] = [pointer(false), pointer(true)];
     const grab = () => (map.getCanvas().style.cursor = '');
     const layers = [...LABEL_LAYERS];
     map.on('click', onClick);
-    map.on('mouseenter', layers, pointer);
+    map.on('mouseenter', layers, onLabel);
     map.on('mouseleave', layers, grab);
+    map.on('mouseenter', ROUTE_ALT_LAYER, onAlt);
+    map.on('mouseleave', ROUTE_ALT_LAYER, grab);
     return () => {
       offHold();
       map.off('click', onClick);
-      map.off('mouseenter', layers, pointer);
-      map.off('mouseleave', layers, grab);
+      map.off('mouseenter', layers, onLabel).off('mouseleave', layers, grab);
+      map.off('mouseenter', ROUTE_ALT_LAYER, onAlt).off('mouseleave', ROUTE_ALT_LAYER, grab);
     };
   }, [map, select, clear, showToast]);
 
@@ -618,15 +625,7 @@ export function App() {
 
   useAutoLocate(map, start, flyOnFix);
 
-  // The one gesture nothing on screen shows: said once, on the first visit.
-  useEffect(() => {
-    if (!map || stored(HINTED_KEY)) return;
-    const id = setTimeout(() => {
-      store(HINTED_KEY, '1');
-      showToast(touch() ? t.hint : t.hintMouse);
-    }, 1500);
-    return () => clearTimeout(id);
-  }, [map, showToast]);
+  useHint(map, showToast, dismissText, !!selection || !!trip || navigating);
 
   const panelRef = usePanel(map, sel && !trip && !navigating ? sel : null, selection?.loading);
 
@@ -756,16 +755,6 @@ export function App() {
             </>
           )}
         </div>
-        {offline && !navigating && (
-          <div className="offline surface" role="status">
-            {t.mapOffline}
-          </div>
-        )}
-        {category.offerHere && !navigating && !trip && !offline && (
-          <button type="button" className="search-here surface" onClick={category.searchHere}>
-            {t.searchHere}
-          </button>
-        )}
         {!navigating && (
           <Controls
             map={map}
@@ -782,13 +771,26 @@ export function App() {
           type="button"
           className="credit"
           aria-label={`© OpenStreetMap · ${t.about}`}
+          title={t.about}
           onClick={() => setAbout(true)}
         >
           © OpenStreetMap
         </button>
+        <div className="notes">
+          <Toasts toast={toast} dismiss={dismiss} guiding={navigating} />
+          {offline && !navigating && (
+            <div className="offline surface" role="status">
+              {t.mapOffline}
+            </div>
+          )}
+          {category.offerHere && !navigating && !trip && !offline && (
+            <button type="button" className="search-here surface" onClick={category.searchHere}>
+              {t.searchHere}
+            </button>
+          )}
+        </div>
       </main>
       {about && <About onClose={() => setAbout(false)} />}
-      <Toasts toast={toast} dismiss={dismiss} guiding={navigating} />
     </>
   );
 }

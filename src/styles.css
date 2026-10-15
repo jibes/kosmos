@@ -8,11 +8,13 @@
   --muted: #6e6961;
   --line: rgb(30 28 24 / 0.08);
   --hover: rgb(30 28 24 / 0.05);
+  --hover-strong: rgb(30 28 24 / 0.09);
+  /* The chosen one of a few: lifted off its track. */
+  --raised: #ffffff;
   --accent: #2f5cff;
   --accent-text: #ffffff;
   /* End and alarms: white on it reads at 4.7:1 in either theme. */
   --danger: #d93036;
-  --danger-strong: #a8201a;
   --on-danger: #ffffff;
   /* Delayed departures: 5.2:1 on the light card, 6.9:1 on the dark one. */
   --late: #c2410c;
@@ -43,9 +45,10 @@
     --muted: #8f939b;
     --line: rgb(255 255 255 / 0.08);
     --hover: rgb(255 255 255 / 0.06);
+    --hover-strong: rgb(255 255 255 / 0.1);
+    --raised: rgb(255 255 255 / 0.14);
     --accent: #6e8bff;
     --accent-text: #0b0d12;
-    --late: #ff8a4c;
     --late: #ff8a4c;
     --shadow:
       0 0.5px 1px rgb(0 0 0 / 0.4), 0 4px 12px -2px rgb(0 0 0 / 0.35),
@@ -66,6 +69,8 @@
   --muted: #8f939b;
   --line: rgb(255 255 255 / 0.08);
   --hover: rgb(255 255 255 / 0.06);
+  --hover-strong: rgb(255 255 255 / 0.1);
+  --raised: rgb(255 255 255 / 0.14);
   --accent: #6e8bff;
   --accent-text: #0b0d12;
   --late: #ff8a4c;
@@ -296,11 +301,17 @@ h2[tabindex='-1']:focus-visible {
 }
 
 .icon-btn::after,
-.bar-cancel::after,
-.credit::after {
+.bar-cancel::after {
   content: '';
   position: absolute;
   inset: -7px;
+}
+
+/* The way into About: a small credit, a thumb-sized target. */
+.credit::after {
+  content: '';
+  position: absolute;
+  inset: -11px -4px;
 }
 
 .coords::after {
@@ -310,9 +321,9 @@ h2[tabindex='-1']:focus-visible {
 }
 
 .spinner {
-  width: 16px;
-  height: 16px;
-  margin-right: 10px;
+  width: 18px;
+  height: 18px;
+  margin: 1px;
   flex: none;
   border-radius: 50%;
   border: 1.75px solid var(--line);
@@ -375,12 +386,9 @@ h2[tabindex='-1']:focus-visible {
 
 /* After the map moved away from category results: one tap searches where it is now. */
 .search-here {
-  position: absolute;
-  top: calc(var(--gutter) + var(--safe-top));
-  left: 50%;
-  translate: -50% 0;
-  padding: 9px 16px;
-  border-radius: 20px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
   color: var(--accent);
   font-size: 14px;
   font-weight: 600;
@@ -462,6 +470,11 @@ h2[tabindex='-1']:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.hours li[data-today] {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .contacts {
   display: flex;
   flex-wrap: wrap;
@@ -532,6 +545,9 @@ h2[tabindex='-1']:focus-visible {
 }
 
 .coords {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 10px;
   padding: 2px 0;
   font-size: 12.5px;
@@ -545,10 +561,22 @@ h2[tabindex='-1']:focus-visible {
   color: var(--text);
 }
 
+/* Route, Share and Start stay in reach however far the card scrolls (the hours opened, the
+   steps of a long route); the card's text fades out under them. */
 .actions {
+  position: sticky;
+  bottom: -16px;
+  z-index: 1;
   display: flex;
   gap: 8px;
-  margin-top: 14px;
+  margin: 2px -18px 0;
+  padding: 12px 18px 16px;
+  background: linear-gradient(transparent, var(--surface) 12px);
+}
+
+/* Last in the place card: its own bottom padding stands in for the card's. */
+.card:not(.route) .actions {
+  margin-bottom: -16px;
 }
 
 .action {
@@ -882,65 +910,85 @@ h2[tabindex='-1']:focus-visible {
   text-decoration: none;
 }
 
-/* ---------- Toast ---------- */
+/* ---------- Notes ---------- */
 
-/* Notes stack in one place instead of covering each other. */
-.toasts {
-  position: fixed;
-  left: 50%;
-  top: calc(var(--gutter) + var(--safe-top));
-  translate: -50% 0;
+/* Notes, the offline note and "Search this area" stack in one place: on phones just above the
+   panel, within the thumb's reach and clear of the map buttons, so none covers another or a
+   control. */
+.notes {
+  position: absolute;
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right) + 60px);
+  bottom: min(
+    calc(var(--gutter) + var(--safe-bottom) + var(--panel-h, 64px) + 12px),
+    calc(100dvh - var(--safe-top) - 160px)
+  );
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
-  z-index: 10;
   pointer-events: none;
+  transition: bottom 0.25s var(--ease);
 }
 
+.toasts {
+  display: flex;
+  flex-direction: column;
+  align-items: inherit;
+  gap: 8px;
+  max-width: 100%;
+}
+
+/* A note to read lets taps through to the map; one with a choice takes them. */
 .toast {
-  pointer-events: auto;
   display: flex;
   align-items: center;
   gap: 14px;
+  max-width: 100%;
   padding: 10px 16px;
   border-radius: 18px;
   font-size: 14px;
   font-weight: 500;
-  width: max-content;
-  max-width: calc(100vw - 2 * var(--gutter) - var(--safe-left) - var(--safe-right));
-  text-align: center;
   text-wrap: balance;
   animation: drop-in 0.32s var(--ease);
 }
 
-/* While guiding, the top belongs to the next turn: notes appear above the bottom bar and
-   Re-center. */
-body:has(.ui[data-nav]) .toasts {
-  top: auto;
-  bottom: calc(var(--gutter) + var(--safe-bottom) + 146px);
-  flex-direction: column-reverse;
-}
-
-.offline {
-  position: absolute;
-  top: calc(var(--gutter) + var(--safe-top));
-  left: 50%;
-  translate: -50% 0;
-  padding: 9px 16px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  animation: drop-in 0.3s var(--ease);
+.toast:has(button),
+.search-here {
+  pointer-events: auto;
 }
 
 .toast button {
+  position: relative;
   flex: none;
   min-height: 36px;
   padding: 0 4px;
   color: var(--accent);
   font-weight: 600;
+}
+
+/* The button keeps the note slim; its hit area reaches 44 px. */
+.toast button::after {
+  content: '';
+  position: absolute;
+  inset: -4px -6px;
+}
+
+/* While guiding, the top belongs to the next turn: notes sit above the speed, the bar and
+   Re-center, across the width. */
+.ui[data-nav] .notes {
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 168px);
+  align-items: center;
+  text-align: center;
+}
+
+.offline {
+  padding: 9px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  animation: drop-in 0.3s var(--ease);
 }
 
 /* ---------- Route card ---------- */
@@ -949,15 +997,6 @@ body:has(.ui[data-nav]) .toasts {
   max-height: min(72dvh, 640px);
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-.card.route .actions {
-  position: sticky;
-  bottom: -16px;
-  margin-inline: -18px;
-  padding: 14px 18px 16px;
-  background: linear-gradient(transparent, var(--surface-solid) 14px);
-  z-index: 1;
 }
 
 .card.route header {
@@ -974,6 +1013,7 @@ body:has(.ui[data-nav]) .toasts {
 }
 
 .modes button {
+  position: relative;
   flex: 1;
   display: grid;
   place-items: center;
@@ -985,8 +1025,15 @@ body:has(.ui[data-nav]) .toasts {
     color 0.2s;
 }
 
+/* The track's padding is part of each button's target: 46 px. */
+.modes button::after {
+  content: '';
+  position: absolute;
+  inset: -3px -2px;
+}
+
 .modes button[aria-checked='true'] {
-  background: var(--surface-solid);
+  background: var(--raised);
   color: var(--accent);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
 }
@@ -995,7 +1042,7 @@ body:has(.ui[data-nav]) .toasts {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 2px 12px;
+  gap: 6px 12px;
   margin: 14px 0 0;
   font-size: 14px;
 }
@@ -1016,21 +1063,20 @@ body:has(.ui[data-nav]) .toasts {
   margin: 0;
 }
 
+/* From and To look like fields: a tap changes them. */
 .end-btn {
   flex: 1;
   min-width: 0;
-  padding: 11px 10px;
-  margin-left: -10px;
+  min-height: 44px;
+  padding: 0 12px;
   border-radius: 10px;
+  background: var(--hover);
   text-align: left;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.end-btn:hover {
-  background: var(--hover);
+  transition: background 0.15s;
 }
 
 .summary {
@@ -1083,24 +1129,24 @@ body:has(.ui[data-nav]) .toasts {
   flex-wrap: wrap;
 }
 
+/* The other ways, named: the switch above has the same icons, so these say what they do. */
 .route-try {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
   flex-basis: 100%;
 }
 
 .route-try button {
-  display: grid;
-  place-items: center;
-  width: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   height: 44px;
+  padding: 0 14px 0 12px;
   border-radius: 12px;
   background: var(--hover);
-}
-
-.route-try button:first-of-type {
-  margin-left: auto;
+  color: var(--text);
+  font-weight: 500;
 }
 
 .alts {
@@ -1154,7 +1200,8 @@ body:has(.ui[data-nav]) .toasts {
 }
 
 .depart input {
-  padding: 5px 8px;
+  min-height: 44px;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: transparent;
@@ -1281,7 +1328,10 @@ body:has(.ui[data-nav]) .toasts {
 }
 
 .steps summary {
-  padding: 12px 0 4px;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding-top: 4px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -1290,6 +1340,19 @@ body:has(.ui[data-nav]) .toasts {
 
 .steps summary::-webkit-details-marker {
   display: none;
+}
+
+/* One caret for everything that opens: the steps, the hours, the legs of a trip. */
+.steps summary::after,
+.hours summary::after {
+  content: ' ▾' / '';
+  margin-left: 4px;
+  color: var(--muted);
+}
+
+.steps[open] summary::after,
+.hours[open] summary::after {
+  content: ' ▴' / '';
 }
 
 .steps summary small {
@@ -1511,13 +1574,6 @@ button.via[aria-expanded='true']::after {
   font-variant-numeric: tabular-nums;
 }
 
-@media (min-width: 900px), (orientation: landscape) and (min-width: 560px) {
-  .ride-top {
-    right: auto;
-    width: 420px;
-  }
-}
-
 /* Public transport on the way: the line chip in place of the turn arrow. */
 .nav-banner .line {
   flex: none;
@@ -1675,19 +1731,22 @@ button.via[aria-expanded='true']::after {
   color: var(--muted);
 }
 
+/* Quiet until armed: red is for the second tap, not the loudest thing on screen. */
 .nav-end {
+  min-width: 92px;
   height: 48px;
   margin-left: 6px;
   padding: 0 20px;
   border-radius: 14px;
-  background: var(--danger);
-  color: var(--on-danger);
+  background: var(--hover-strong);
+  color: var(--text);
   font-weight: 600;
   transition: background 0.15s;
 }
 
 .nav-end[data-state='armed'] {
-  background: var(--danger-strong);
+  background: var(--danger);
+  color: var(--on-danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
@@ -1778,7 +1837,7 @@ button.via[aria-expanded='true']::after {
 .quiet-link {
   display: block;
   margin-top: 0;
-  padding: 12px 0 2px;
+  padding: 13px 0 12px;
   text-align: center;
   font-size: 13px;
   color: var(--muted);
@@ -1814,6 +1873,7 @@ button.via[aria-expanded='true']::after {
 
 .grab {
   position: absolute;
+  z-index: 1;
   top: 0;
   left: 50%;
   translate: -50% 0;
@@ -1837,7 +1897,9 @@ button.via[aria-expanded='true']::after {
   padding: 18px 18px 12px;
 }
 
+/* The whole strip restores the card, not only its one line of text. */
 .peek {
+  position: relative;
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -1846,6 +1908,12 @@ button.via[aria-expanded='true']::after {
   text-align: left;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.peek::after {
+  content: '';
+  position: absolute;
+  inset: -12px -18px;
 }
 
 .peek strong {
@@ -1866,6 +1934,31 @@ button.via[aria-expanded='true']::after {
   font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ---------- Pointer hover (desktop) ---------- */
+
+@media (hover: hover) {
+  .end-btn:hover,
+  .action:not(.primary, :disabled):hover,
+  .route-try button:hover {
+    background: var(--hover-strong);
+  }
+
+  .modes button:not([aria-checked='true']):hover,
+  .steps summary:hover,
+  .hours summary:hover {
+    color: var(--text);
+  }
+
+  .modes button:not([aria-checked='true']):hover,
+  .alts button:not([aria-checked='true']):hover {
+    background: var(--hover);
+  }
+
+  .search-here:hover {
+    background: color-mix(in srgb, var(--surface) 88%, var(--accent));
+  }
 }
 
 /* ---------- Motion ---------- */
@@ -1912,22 +2005,32 @@ button.via[aria-expanded='true']::after {
 @media (min-width: 900px), (orientation: landscape) and (min-width: 560px) {
   :root {
     --gutter: 16px;
+    /* The side column: panel, banner, bar. ui/layout.ts mirrors it as sideWidth(). */
+    --side-w: min(400px, max(320px, 48vw));
+    /* Where the map beside the column begins. */
+    --side-end: calc(var(--gutter) + var(--safe-left) + var(--side-w));
   }
 
   .panel {
     top: calc(var(--gutter) + var(--safe-top));
     bottom: auto;
     right: auto;
-    width: 400px;
+    width: var(--side-w);
     max-height: calc(100dvh - 2 * var(--gutter) - var(--safe-top) - var(--safe-bottom));
     flex-direction: column-reverse;
   }
 
-  /* Every card scrolls inside the screen, also a phone held sideways. */
+  /* Every card scrolls inside the screen, also a phone held sideways; under the search bar
+     when there is one. */
   .panel .card {
     max-height: calc(100dvh - 2 * var(--gutter) - var(--safe-top) - var(--safe-bottom) - 74px);
     overflow-y: auto;
     overscroll-behavior: contain;
+  }
+
+  /* The route card replaces the search bar: all the height is the trip's. */
+  .panel .card.route {
+    max-height: calc(100dvh - 2 * var(--gutter) - var(--safe-top) - var(--safe-bottom));
   }
 
   .controls {
@@ -1938,7 +2041,8 @@ button.via[aria-expanded='true']::after {
     flex-direction: column-reverse;
   }
 
-  .credit {
+  .credit,
+  .ui[data-nav] .credit {
     top: auto;
     left: auto;
     bottom: calc(var(--gutter) + var(--safe-bottom));
@@ -1946,8 +2050,33 @@ button.via[aria-expanded='true']::after {
   }
 
   .nav-banner,
-  .nav-bar {
+  .nav-bar,
+  .ride-top {
     right: auto;
-    width: 420px;
+    width: var(--side-w);
+  }
+
+  /* Notes on the map beside the column, at its top; free while guiding too. */
+  .notes,
+  .ui[data-nav] .notes {
+    top: calc(var(--gutter) + var(--safe-top));
+    bottom: auto;
+    left: calc(var(--side-end) + var(--gutter));
+    right: calc(var(--gutter) + var(--safe-right));
+    align-items: center;
+    text-align: center;
+  }
+
+  /* While guiding, the map beside the column is the road: Re-center under its middle, the
+     speed in the corner above the credit. */
+  .recenter {
+    left: calc(50% + var(--side-end) / 2);
+    bottom: calc(var(--gutter) + var(--safe-bottom) + 44px);
+  }
+
+  .speed {
+    left: auto;
+    right: calc(var(--gutter) + var(--safe-right));
+    bottom: calc(var(--gutter) + var(--safe-bottom) + 40px);
   }
 }

@@ -331,7 +331,8 @@ export function SearchBar({
           : ''}
       </p>
       <label className="bar surface">
-        <SearchIcon />
+        {/* Searching turns the magnifier, so nothing beside the text moves under the thumb. */}
+        {status === 'loading' ? <span className="spinner" aria-hidden="true" /> : <SearchIcon />}
         <input
           ref={input}
           type="search"
@@ -374,7 +375,6 @@ export function SearchBar({
             <CloseIcon />
           </button>
         )}
-        {status === 'loading' && <span className="spinner" aria-hidden="true" />}
         {onCancel && (
           <button
             type="button"

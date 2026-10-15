@@ -32,6 +32,13 @@ export const CloseIcon = ({ size = 18 }: { size?: number }) => (
   </Svg>
 );
 
+export const CopyIcon = ({ size = 14 }: { size?: number }) => (
+  <Svg size={size}>
+    <rect x="8.5" y="8.5" width="11" height="11" rx="2.5" />
+    <path d="M15.5 5.5v-.5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8.5a2 2 0 0 0 2 2h.5" />
+  </Svg>
+);
+
 export const LocateIcon = ({ filled }: { filled?: boolean }) => (
   <Svg>
     <path d="M20 4 4 11l7 2 2 7 7-16Z" fill={filled ? 'currentColor' : 'none'} />
