@@ -260,8 +260,15 @@ export async function offlineWorld(context: BrowserContext) {
             }),
           ]
         : /media/i.test(q)
-          ? // The chain's branch Photon knows best is out of view.
-            [photonPoint(CENTER.lng, CENTER.lat - 0.05, { name: 'MediaMarkt', city: 'Berlin' })]
+          ? // The chain's branches Photon knows: one far away, one in view.
+            [
+              photonPoint(CENTER.lng, CENTER.lat - 0.05, { name: 'MediaMarkt', city: 'Berlin' }),
+              // One of the branches in view: its row would repeat the chain's.
+              photonPoint(CENTER.lng - 250 / 67800, CENTER.lat - 500 / 111200, {
+                name: 'MediaMarkt',
+                city: 'Mitte',
+              }),
+            ]
           : [];
     photonSearches.push(q);
     return route.fulfill({ contentType: 'application/json', body: photon(hits) });

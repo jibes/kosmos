@@ -162,6 +162,7 @@ export const de = {
   poi_charging_station: 'Ladestation',
   poi_taxi: 'Taxistand',
   inView: '{n} im Ausschnitt',
+  beyondView: 'Keine im Ausschnitt. Die nächsten in der Nähe:',
   noneHere: 'Hier keine. Zoom hinein oder verschieb die Karte.',
   openingHours: 'Öffnungszeiten',
   openUntil: 'Geöffnet · schließt {time}',

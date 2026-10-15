@@ -160,6 +160,7 @@ export const en = {
   poi_charging_station: 'Charging station',
   poi_taxi: 'Taxi rank',
   inView: '{n} in view',
+  beyondView: 'None in view. The nearest around it:',
   noneHere: 'None in view. Zoom in or move the map.',
   openingHours: 'Opening hours',
   openUntil: 'Open · closes {time}',

@@ -14,6 +14,8 @@ export interface Place extends LngLat {
   distance?: number;
   /** A place without a name of its own (a toilet, a cash machine): called by its kind. */
   unnamed?: boolean;
+  /** Found outside the view: none of its kind was in it, so the nearest around it. */
+  beyond?: boolean;
   /** The OSM object (`N123`, `W456`), when the search knows it; details are looked up by it. */
   osm?: string;
 }

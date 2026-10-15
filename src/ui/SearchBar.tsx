@@ -7,11 +7,13 @@ import {
   nameOf,
   NAME_MIN,
   squeeze,
+  without,
   type Category,
   type Kind,
 } from '../core/categories';
 import { formatDistance } from '../core/route';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
+import type { LngLat } from '../core/geo';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
 import { getJson, nominatimSlot } from './http';
 import { fill, t, units } from '../i18n';
@@ -19,6 +21,9 @@ import { touch } from './layout';
 import { CloseIcon, SearchIcon } from './icons';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
+
+/** A name several places in view share: how many, and where they are. */
+type Shared = { name: string; n: number; at: (LngLat & { name: string })[] };
 
 /** What is being searched for: by name, or a kind of place (or a chain) on the map. */
 export interface SearchState {
@@ -72,7 +77,7 @@ interface Props {
    */
   onCategory?: (c: Kind | null) => Promise<Place[]>;
   /** The name several places in view share that the text begins: "media" → MediaMarkt, 3. */
-  onNames?: (text: string) => Promise<{ name: string; n: number } | null>;
+  onNames?: (text: string) => Promise<Shared | null>;
   /** Bumped to search the category again where the map now is. */
   categoryRun?: number;
   /** The search key on a category: all its places on the map, none picked. */
@@ -156,7 +161,7 @@ export function SearchBar({
   /** The shared name in view for a text, once looked for (`null`: none, or not in time). */
   const [shared, setShared] = useState<{
     key: string;
-    found: { name: string; n: number } | null;
+    found: Shared | null;
   } | null>(null);
 
   const q = query.trim();
@@ -175,16 +180,21 @@ export function SearchBar({
   // While a new query loads, the previous names stay put instead of flickering away. A category
   // shows only its own places: never names, nor the last category's places, to be tapped.
   const sameKind = !!response && !category && !response.key.startsWith('cat|');
-  const results = current?.places ?? (sameKind ? response.places : []);
   /** "museum", "Lebensm…": the kinds of place the text may mean, offered above the names. */
   const kinds = category || !onCategory ? [] : categoriesFor(q);
   // "media" → MediaMarkt, 3 in view: a chain is searched on the map like a kind of place. A
   // name that is a kind's own word ("Apotheke am Markt") is the kind's already.
-  const chain = namesKnown && shared?.key === key ? shared.found : null;
+  const found = namesKnown && shared?.key === key ? shared.found : null;
+  const chain = found && !isCategoryWord(found.name) ? found : null;
   const suggestions: Item[] = [
     ...kinds.map((cat) => ({ cat })),
-    ...(chain && !isCategoryWord(chain.name) ? [{ cat: byName(chain.name), n: chain.n }] : []),
+    ...(chain ? [{ cat: byName(chain.name), n: chain.n }] : []),
   ];
+  // Photon's names, without the branches the chain's row already counts.
+  const named = current?.places ?? (sameKind ? response.places : []);
+  const results = chain ? without(named, chain.at) : named;
+  /** None of the kind in view: the nearest around it, said so above them. */
+  const beyond = !!category && results.length > 0 && results.every((p) => p.beyond);
   /** "kindergaten": a guess, after the names, so Enter never takes it for a name it resembles. */
   const guesses = category || !onCategory || !current ? [] : misspeltFor(q);
   const items: Item[] = [
@@ -219,7 +229,7 @@ export function SearchBar({
     const ask = onNamesRef.current;
     if (!looksForNames || !ask) return;
     let live = true;
-    const settle = (found: { name: string; n: number } | null) => {
+    const settle = (found: Shared | null) => {
       if (live) setShared({ key, found });
       live = false;
     };
@@ -396,6 +406,11 @@ export function SearchBar({
     <div className="search" data-open={showList || undefined} hidden={hidden}>
       {showList && (
         <ul className="results surface" id={listId} role="listbox">
+          {beyond && (
+            <li className="r-empty" role="presentation">
+              {t.beyondView}
+            </li>
+          )}
           {items.map((it, i) => (
             <li
               key={it.cat ? `cat|${it.cat}` : `${it.place.name}${it.place.lat}${it.place.lng}`}
@@ -441,11 +456,13 @@ export function SearchBar({
       <p className="sr-only" role="status">
         {showList
           ? note ||
-            (results.length === 1
-              ? t.oneResult
-              : results.length
-                ? fill(t.resultsCount, { n: results.length })
-                : '')
+            `${beyond ? `${t.beyondView} ` : ''}${
+              results.length === 1
+                ? t.oneResult
+                : results.length
+                  ? fill(t.resultsCount, { n: results.length })
+                  : ''
+            }`
           : ''}
       </p>
       <label className="bar surface">

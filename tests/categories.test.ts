@@ -10,6 +10,7 @@ import {
   nearest,
   sharedName,
   squeeze,
+  without,
 } from '../src/core/categories';
 import { TABLE } from '../src/core/categoryTable';
 import { PLACE_WORDS } from '../src/core/placeWords';
@@ -174,5 +175,18 @@ describe('names in view', () => {
   it('round-trips a name as a kind', () => {
     expect(nameOf(byName('MediaMarkt'))).toBe('MediaMarkt');
     expect(nameOf('restaurant')).toBeNull();
+  });
+
+  it('drops names already counted among the places in view, keeps branches elsewhere', () => {
+    const at = (name: string, dx: number) => ({
+      name,
+      detail: '',
+      lng: 13.4 + dx / 67800,
+      lat: 52.5,
+    });
+    const shown = [at('MediaMarkt', 0), at('Media Markt', 2000)];
+    const photon = [at('MediaMarkt Alexa', 60), at('MediaMarkt', 900), at('Saturn', 2000)];
+    expect(without(photon, shown).map((p) => p.lng)).toEqual([photon[1].lng, photon[2].lng]);
+    expect(without(photon, [])).toEqual(photon);
   });
 });

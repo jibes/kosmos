@@ -176,6 +176,9 @@ test.describe('search', () => {
     await expect(options.first()).toContainText('MediaMarkt');
     await expect(options.first()).toContainText('2 in view');
     await expect(options.nth(1)).toContainText('Berlin');
+    // The branch in view is in the chain's row already, not again by name.
+    await expect(options).toHaveCount(2);
+    await expect(options.filter({ hasText: 'Mitte' })).toHaveCount(0);
     // A space typed after it changes nothing, and is not left waiting.
     await input.press('End');
     await input.pressSequentially(' ');
@@ -192,6 +195,28 @@ test.describe('search', () => {
         return data.features.length;
       });
     await expect.poll(dots).toBe(2);
+  });
+
+  test('with none in view, shows the nearest around it', async ({ page }) => {
+    // The kindergarten lies 700 m south of the middle, off screen this close in.
+    await jump(page, { ...CENTER, zoom: 17 });
+    const input = page.getByRole('combobox');
+    await input.fill('Kita');
+    const options = page.getByRole('option');
+    await options.filter({ hasText: 'Nurseries and kindergartens' }).click();
+    await expect(options).toHaveText([/Kita Sonnenschein.*\d+ m/]);
+    await expect(page.locator('.results')).toContainText('None in view. The nearest around it:');
+    // The map stays where it is until asked: Enter shows them.
+    expect(await page.evaluate(() => window.kosmos!.getZoom())).toBeCloseTo(17, 1);
+    await input.press('Enter');
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const m = window.kosmos!;
+          return m.getBounds().contains([13.405 + 200 / 67800, 52.52 - 700 / 111200]);
+        }),
+      )
+      .toBe(true);
   });
 
   test('finds a kind of place typed with a slip', async ({ page }) => {
@@ -238,7 +263,7 @@ test.describe('search', () => {
     await expect(here).toHaveCount(0);
 
     // Dragging the map away offers to search the new area, without changing the zoom; there
-    // is nothing there, and back home there is again.
+    // is nothing there but the nearest around it, and back home all are in view again.
     await jump(page, { ...CENTER, zoom: 14 });
     await idle(page);
     const drag = async (dx: number) => {
@@ -260,8 +285,11 @@ test.describe('search', () => {
     await expect(here).toBeVisible();
     const before = await zoom();
     await here.click();
-    await expect.poll(dots).toBe(0);
     await expect(here).toHaveCount(0);
+    await input.focus();
+    await expect(page.locator('.results')).toContainText('None in view. The nearest around it:');
+    expect(await dots()).toBeGreaterThan(0);
+    await input.blur();
     expect(await zoom()).toBeCloseTo(before, 3);
     await drag(1);
     await here.click();

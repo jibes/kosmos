@@ -230,3 +230,23 @@ export function sharedName(query: string, names: string[]): { name: string; n: n
   const name = words.join(' ');
   return { name: allBegin(name) ? name : query.trim(), n: hits.length };
 }
+
+/** A place counted among a chain's branches in view stands this close to one of them. */
+const SAME_PLACE_M = 150;
+
+/**
+ * Places found by name, without those that are one of the places already offered (the same
+ * name, give or take a branch's suffix, within 150 m): each place is in the list once.
+ */
+export function without<T extends LngLat & { name: string }>(
+  places: T[],
+  shown: (LngLat & { name: string })[],
+): T[] {
+  return places.filter((p) => {
+    const a = squeeze(p.name);
+    return !shown.some((s) => {
+      const b = squeeze(s.name);
+      return (a.startsWith(b) || b.startsWith(a)) && distance(p, s) <= SAME_PLACE_M;
+    });
+  });
+}

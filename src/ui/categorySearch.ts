@@ -18,7 +18,7 @@ import type { Place } from '../core/search';
 import { t } from '../i18n';
 import { wide } from './layout';
 import { MAP_SOURCE } from '../core/style';
-import { tilePoint, tilesIn, tileUrl, type TileId } from '../core/tiles';
+import { DETAIL_ZOOM, tilePoint, tilesIn, tileUrl, type TileId } from '../core/tiles';
 
 /** A first search from a view wider than this zooms in once, so the results can be told apart. */
 const SEARCH_ZOOM = 12;
@@ -89,22 +89,56 @@ function seen(map: maplibregl.Map) {
   return { view, inView, middle: { lng: c.lng, lat: c.lat } };
 }
 
+/** The map's tile URL template, once its source has loaded. */
+const templateOf = (map: maplibregl.Map) =>
+  (map.getSource(MAP_SOURCE) as maplibregl.VectorTileSource | undefined)?.tiles?.[0];
+
+/** The places in some tiles; throws when not one tile came back (offline, server down). */
+async function spotsIn(template: string, tiles: TileId[]) {
+  const got = await Promise.allSettled(tiles.map((tile) => places(tileUrl(template, tile), tile)));
+  if (tiles.length && got.every((r) => r.status === 'rejected')) throw new Error('no tiles');
+  return got.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+}
+
 /** The zoom-14 tiles under what the user sees, read; `null` when the map has no tiles yet. */
 async function spotsInView(map: maplibregl.Map) {
-  const template = (map.getSource(MAP_SOURCE) as maplibregl.VectorTileSource | undefined)
-    ?.tiles?.[0];
+  const template = templateOf(map);
   if (!template) return null;
   const { view, inView, middle } = seen(map);
   const tiles = tilesIn(
     { west: view.getWest(), south: view.getSouth(), east: view.getEast(), north: view.getNorth() },
     middle,
   );
-  const got = await Promise.allSettled(tiles.map((tile) => places(tileUrl(template, tile), tile)));
-  // Not one tile came back: offline or the tile server is down, not an empty area.
-  if (tiles.length && got.every((r) => r.status === 'rejected')) throw new Error('no tiles');
-  // Tiles reach beyond the screen; only what is in view counts.
-  const spots = got.flatMap((r) => (r.status === 'fulfilled' ? r.value.filter(inView) : []));
-  return { spots, inView, middle };
+  // Tiles reach beyond the screen; only what is in view counts, the rest is the next nearest.
+  const all = await spotsIn(template, tiles);
+  return { spots: all.filter(inView), all, inView, middle, template, tiles };
+}
+
+const WORLD = { west: -180, south: -85, east: 180, north: 85 };
+/**
+ * With none in view, the tiles around it are read nearest first, a ring at a time, until one
+ * holds some: at most this many more (about 6 km around at zoom 14), and the nearest few shown.
+ */
+const BEYOND_TILES = 64;
+const BEYOND_STEP = 16;
+const BEYOND_SHOWN = 5;
+
+async function spotsBeyond(
+  { all, template, tiles: read, middle }: NonNullable<Awaited<ReturnType<typeof spotsInView>>>,
+  wanted: (s: Spot) => boolean,
+) {
+  // The tiles under the view's edges reach past it.
+  const near = all.filter(wanted);
+  if (near.length) return near;
+  const done = new Set(read.map((t) => tileUrl(template, t)));
+  const around = tilesIn(WORLD, middle, DETAIL_ZOOM, read.length + BEYOND_TILES).filter(
+    (t) => !done.has(tileUrl(template, t)),
+  );
+  for (let i = 0; i < around.length; i += BEYOND_STEP) {
+    const found = (await spotsIn(template, around.slice(i, i + BEYOND_STEP))).filter(wanted);
+    if (found.length) return found;
+  }
+  return [];
 }
 
 /** Names are read as they are typed only from this close in: a few tiles, not a city's worth. */
@@ -125,10 +159,14 @@ export async function sharedNameInView(map: maplibregl.Map, text: string) {
     got?.middle ?? { lng: 0, lat: 0 },
     Infinity,
   );
-  return sharedName(
+  const shared = sharedName(
     text,
     once.map((p) => p.name),
   );
+  if (!shared) return null;
+  // Where they are: Photon's rows for the same branches would only repeat them.
+  const key = squeeze(shared.name);
+  return { ...shared, at: once.filter((p) => squeeze(p.name).startsWith(key)) };
 }
 
 /**
@@ -168,29 +206,34 @@ export async function findCategory(
   const { spots, inView, middle } = got;
   const from = me && inView(me) ? me : middle;
   const name = nameOf(kind);
-  const wanted = name === null ? undefined : squeeze(name);
-  const pois = spots
-    .filter((s) =>
-      wanted === undefined
-        ? isOf(kind as Category, s.props)
-        : !!wanted && keyOf(s).startsWith(wanted),
-    )
-    .map((s) => {
-      const own = s.props[`name:${lang}`] ?? s.props.name;
-      const sort = unnamedKind(s.props.subclass);
-      return {
-        name: own ? String(own) : sort ? t[`poi_${sort}`] : '',
-        unnamed: !own,
-        lng: s.lng,
-        lat: s.lat,
-      };
-    });
-  return nearest(pois, from).map(({ name, unnamed, lng, lat, m }) => ({
-    name,
-    detail: '',
-    lng,
-    lat,
-    distance: m,
-    ...(unnamed ? { unnamed } : {}),
-  }));
+  const key = name === null ? undefined : squeeze(name);
+  const wanted = (s: Spot) =>
+    key === undefined ? isOf(kind as Category, s.props) : !!key && keyOf(s).startsWith(key);
+  let found = spots.filter(wanted);
+  // None in view: the nearest around it instead. (A wide view reads only its middle, so what
+  // the next tiles hold may still be in view.)
+  const widened = !found.length;
+  if (widened) found = await spotsBeyond(got, wanted).catch(() => []);
+  const pois = found.map((s) => {
+    const own = s.props[`name:${lang}`] ?? s.props.name;
+    const sort = unnamedKind(s.props.subclass);
+    return {
+      name: own ? String(own) : sort ? t[`poi_${sort}`] : '',
+      unnamed: !own,
+      beyond: !inView(s),
+      lng: s.lng,
+      lat: s.lat,
+    };
+  });
+  return nearest(pois, from, widened ? BEYOND_SHOWN : undefined).map(
+    ({ name, unnamed, beyond, lng, lat, m }) => ({
+      name,
+      detail: '',
+      lng,
+      lat,
+      distance: m,
+      ...(unnamed ? { unnamed } : {}),
+      ...(beyond ? { beyond } : {}),
+    }),
+  );
 }
