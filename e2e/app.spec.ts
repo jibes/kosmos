@@ -388,6 +388,23 @@ test.describe('map', () => {
     await expect(trip.locator('.stops li').first()).toHaveAttribute('data-passed', 'true');
     await expect(trip.locator('.stops li').nth(1)).not.toHaveAttribute('data-passed');
     await expect(trip.locator('.walk').first()).toHaveAttribute('data-done', 'true');
+    // The banner keeps its place at the top, the trip right under it: nothing shifted over it.
+    await expect
+      .poll(async () => {
+        const [b, d, top] = await Promise.all([
+          banner.boundingBox(),
+          trip.boundingBox(),
+          page.locator('.ride-top').boundingBox(),
+        ]);
+        if (!b || !d || !top) return null;
+        return {
+          left: Math.round(b.x - top.x),
+          top: Math.round(b.y - top.y),
+          right: Math.round(top.x + top.width - (b.x + b.width)),
+          clear: b.y + b.height <= d.y + 0.5,
+        };
+      })
+      .toEqual({ left: 0, top: 0, right: 0, clear: true });
     await shot(page, info, 'riding');
     await banner.click();
     await expect(trip).toHaveCount(0);
