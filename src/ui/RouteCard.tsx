@@ -12,7 +12,7 @@ import { directionsUrl, geoUri } from '../core/geo';
 import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
 import { arrowRadios, focusSearch, useFocusOnMount } from './a11y';
-import { CloseIcon, LocateIcon, ModeIcon, TurnIcon } from './icons';
+import { CloseIcon, LocateIcon, ModeIcon, SwapIcon, TurnIcon } from './icons';
 import { isNative } from './native';
 import { Sheet } from './Sheet';
 import type { LocationStatus } from './useLocation';
@@ -36,6 +36,8 @@ interface Props {
   onChangeStart: () => void;
   onChangeEnd: () => void;
   onUseMyLocation: () => void;
+  /** Start and destination change places; absent while there is no position to swap. */
+  onSwap?: () => void;
   onRetry: () => void;
   onClose: () => void;
   /** Absent hides Start. */
@@ -150,6 +152,16 @@ export function RouteCard(props: Props) {
             {to.name}
           </button>
         </dd>
+        <button
+          type="button"
+          className="icon-btn swap"
+          aria-label={t.swapEnds}
+          title={t.swapEnds}
+          disabled={!props.onSwap}
+          onClick={props.onSwap}
+        >
+          <SwapIcon />
+        </button>
       </dl>
 
       {mode === 'transit' && <DepartTime at={props.at} now={now} onDepart={props.onDepart} />}

@@ -174,6 +174,7 @@ export const de = {
   departures: 'Abfahrten',
   noDepartures: 'Keine Abfahrten gefunden',
   departuresUnavailable: 'Abfahrten gerade nicht abrufbar',
+  swapEnds: 'Start und Ziel tauschen',
   noneHere: 'Hier keine. Zoom hinein oder verschieb die Karte.',
   openingHours: 'Öffnungszeiten',
   openUntil: 'Geöffnet · schließt {time}',

@@ -636,6 +636,25 @@ export function App() {
                     start();
                     setTrip({ ...trip, from: null });
                   }}
+                  onSwap={
+                    trip.from || fix
+                      ? () => {
+                          // "My location" as the destination is the position now; swapped
+                          // back, it is the live position again.
+                          const here = fix && {
+                            name: t.myLocation,
+                            detail: '',
+                            lng: fix.lng,
+                            lat: fix.lat,
+                            here: true,
+                          };
+                          const from = trip.from ?? here;
+                          if (!from) return;
+                          setActive(0);
+                          setTrip({ ...trip, from: trip.to.here ? null : trip.to, to: from });
+                        }
+                      : undefined
+                  }
                   onRetry={route.retry}
                   onClose={closeRoute}
                   onStart={startNav}

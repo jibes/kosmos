@@ -172,6 +172,7 @@ export const en = {
   departures: 'Departures',
   noDepartures: 'No departures found',
   departuresUnavailable: 'Departures unavailable right now',
+  swapEnds: 'Swap start and destination',
   noneHere: 'None in view. Zoom in or move the map.',
   openingHours: 'Opening hours',
   openUntil: 'Open · closes {time}',

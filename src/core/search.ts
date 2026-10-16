@@ -19,6 +19,8 @@ export interface Place extends LngLat {
   beyond?: boolean;
   /** A stop or station: its card shows the next departures. */
   stop?: boolean;
+  /** The user's own position, taken as a route's destination by swapping its ends. */
+  here?: boolean;
   /** The OSM object (`N123`, `W456`), when the search knows it; details are looked up by it. */
   osm?: string;
 }

@@ -80,6 +80,23 @@ test.describe('routes', () => {
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Brandenburg an der Havel');
   });
 
+  test('swaps the start and the destination, and back', async ({ page, context }) => {
+    const card = await openRoute(page, context);
+    const ends = card.locator('.end-btn');
+    await expect(ends).toHaveText(['My location', SEARCH_HIT.name]);
+    const swap = card.getByRole('button', { name: 'Swap start and destination' });
+    await swap.click();
+    await expect(ends).toHaveText([SEARCH_HIT.name, 'My location']);
+    // From the place to where the user is now.
+    await expect.poll(() => routeRequests.at(-1)?.from[0]).toBeCloseTo(SEARCH_HIT.lng, 4);
+    await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(CENTER.lng + 0.01, 4);
+    // Back again: "My location" is the live position again, not the point it was.
+    await swap.click();
+    await expect(ends).toHaveText(['My location', SEARCH_HIT.name]);
+    await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(SEARCH_HIT.lng, 4);
+    await expect(card.getByRole('button', { name: 'Use my location' })).toHaveCount(0);
+  });
+
   test('does not plan public transport again while the user moves', async ({ page, context }) => {
     await context.grantPermissions(['geolocation']);
     const go = (lng: number, lat: number) =>

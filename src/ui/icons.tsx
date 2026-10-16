@@ -26,6 +26,13 @@ export const SearchIcon = () => (
   </Svg>
 );
 
+/** Start and destination change places. */
+export const SwapIcon = () => (
+  <Svg>
+    <path d="M8 4v16m0-16-3.5 3.5M8 4l3.5 3.5M16 20V4m0 16-3.5-3.5M16 20l3.5-3.5" />
+  </Svg>
+);
+
 /** Places around this one. */
 export const NearbyIcon = () => (
   <Svg>
