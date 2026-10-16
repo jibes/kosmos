@@ -26,6 +26,22 @@ export const SearchIcon = () => (
   </Svg>
 );
 
+/** Places around this one. */
+export const NearbyIcon = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="2.5" />
+    <circle cx="12" cy="12" r="7.5" strokeDasharray="3 3" />
+  </Svg>
+);
+
+/** A search taken before. */
+export const ClockIcon = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 7.5V12l3 2" />
+  </Svg>
+);
+
 export const CloseIcon = ({ size = 18 }: { size?: number }) => (
   <Svg size={size}>
     <path d="M6 6l12 12M18 6 6 18" />

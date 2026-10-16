@@ -345,6 +345,75 @@ test.describe('search', () => {
     await expect(page.getByRole('button', { name: 'Search this area' })).toHaveCount(0);
   });
 
+  test('offers recent searches and common kinds in an empty field, kept on the device', async ({
+    page,
+  }) => {
+    await jump(page, { ...CENTER, zoom: 14 });
+    const input = page.getByRole('combobox');
+    const options = page.getByRole('option');
+    // Nothing yet: what people look for most, none preselected.
+    await input.focus();
+    await expect(options.first()).toContainText('Restaurants');
+    await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
+
+    await input.fill('brandenburger');
+    await options.filter({ hasText: SEARCH_HIT.name }).click();
+    await page.locator('.card').getByRole('button', { name: 'Close' }).click();
+    await jump(page, { ...CENTER, zoom: 14 });
+    await input.fill('Restaurants');
+    await input.press('Enter');
+    await expect(await resultRows(page)).toHaveCount(3);
+    await input.fill('');
+    await page.mouse.move(1, 1);
+
+    // Newest first, a tap from either.
+    await expect(options.nth(0)).toContainText('Restaurants');
+    await expect(options.nth(1)).toContainText(SEARCH_HIT.name);
+    await expect(options.nth(1)).toContainText('Pariser Platz');
+    // Kept across a reload, on the device only.
+    await page.reload();
+    await idle(page);
+    await input.focus();
+    await expect(options.nth(1)).toContainText(SEARCH_HIT.name);
+    await options.nth(1).click();
+    await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    await page.locator('.card').getByRole('button', { name: 'Close' }).click();
+
+    // Taken again, it is the newest; forgotten on request (the cross, or Delete).
+    await input.focus();
+    await expect(options.nth(0)).toContainText(SEARCH_HIT.name);
+    await options
+      .nth(0)
+      .getByRole('button', { name: /Remove .* from recent searches/ })
+      .click();
+    await expect(page.locator('.r-recent')).toHaveText([/Restaurants/]);
+    // The arrows go on from the row the pointer last chose: on to the recent one.
+    for (let i = 0; i < 8 && !(await page.locator('.r-recent[aria-selected=true]').count()); i++) {
+      await input.press('ArrowDown');
+    }
+    await input.press('Delete');
+    await expect(page.locator('.r-recent')).toHaveCount(0);
+  });
+
+  test('searches around a place from its card', async ({ page }) => {
+    await jump(page, { ...CENTER, zoom: 13 });
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    await page.getByRole('option').filter({ hasText: SEARCH_HIT.name }).click();
+    const card = page.locator('.card');
+    await card.getByRole('button', { name: 'Nearby' }).click();
+    // The card makes way for the search field, open on the kinds of place.
+    await expect(card).toHaveCount(0);
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue('');
+    await idle(page);
+    const c = await page.evaluate(() => window.kosmos!.getCenter());
+    expect(Math.abs(c.lng - SEARCH_HIT.lng)).toBeLessThan(0.01);
+    expect(await page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThanOrEqual(15);
+    await page.getByRole('option').filter({ hasText: 'Restaurants' }).first().click();
+    await expect(page.locator('.results-sheet')).toBeVisible();
+  });
+
   test('asks Nominatim only for a settled query when Photon fails at once', async ({ page }) => {
     test.slow();
     await page.route(/photon\.komoot\.io\/api\//, (route) =>

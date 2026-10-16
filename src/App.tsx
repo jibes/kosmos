@@ -10,6 +10,7 @@ import { isNative, openAppSettings } from './ui/native';
 import { NavView, NavWaiting } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
 import { connectionStart, RideView, rideWords } from './ui/RideView';
+import { focusSearch } from './ui/a11y';
 import { ResultsSheet } from './ui/ResultsSheet';
 import { RouteCard } from './ui/RouteCard';
 import { SearchBar, useSearch } from './ui/SearchBar';
@@ -234,7 +235,9 @@ export function App() {
   if (tripList && !riding) setTripList(false);
   /** What is searched for, kept while a route covers the search bar, dots and all. */
   const search = useSearch();
-  const category = useCategory(map, LABEL_LANG, routePadding, !!trip, fix);
+  /** "Nearby" on a place card: distances count from that place while it is in view. */
+  const [near, setNear] = useState<Place | null>(null);
+  const category = useCategory(map, LABEL_LANG, routePadding, !!trip, near ?? fix);
 
   const bias = useCallback(() => {
     if (!map) return undefined;
@@ -518,6 +521,8 @@ export function App() {
     }
     start();
     void compass.start();
+    // The user's own place again: distances count from there, not from a "nearby" place.
+    setNear(null);
     if (follow === 'position') {
       // Second tap: let the map turn with the phone, like a held paper map.
       if (compass.available) setFollow('compass');
@@ -681,6 +686,19 @@ export function App() {
                   onClose={clear}
                   onToast={showToast}
                   onRoute={openRoute}
+                  onNearby={() => {
+                    const p = selection.place;
+                    setNear(p);
+                    search.clear();
+                    map?.easeTo({
+                      center: [p.lng, p.lat],
+                      zoom: Math.max(map.getZoom(), 15),
+                      padding: routePadding(),
+                      duration: motion(600),
+                    });
+                    // In the tap itself, so a phone opens its keyboard; focus closes the card.
+                    focusSearch();
+                  }}
                 />
               )}
               {/* What a search put on the map, by distance; under a place card it waits. */}

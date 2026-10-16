@@ -16,11 +16,13 @@ import {
 import { formatDistance } from '../core/route';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
 import type { LngLat } from '../core/geo';
+import type { Recent } from '../core/recent';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
 import { getJson, nominatimSlot } from './http';
 import { fill, t, units } from '../i18n';
 import { touch } from './layout';
-import { CloseIcon, SearchIcon } from './icons';
+import { ClockIcon, CloseIcon, SearchIcon } from './icons';
+import { forgetRecent, rememberRecent, useRecent } from './useRecent';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
 
@@ -111,7 +113,13 @@ const area = (b: SearchBias | undefined) =>
  * A row of the list: a kind of place (or a chain, with how many are in view) to search the map
  * for, or a place found by name.
  */
-type Item = { cat: Kind; n?: number; place?: undefined } | { place: Place; cat?: undefined };
+type Item =
+  | { cat: Kind; n?: number; place?: undefined; recent?: undefined }
+  | { place: Place; cat?: undefined; recent?: undefined }
+  | { recent: Recent; cat?: undefined; place?: undefined };
+
+/** Offered in an empty field (after the recent ones): what people look for most. */
+const COMMON: Kind[] = ['restaurant', 'cafe', 'groceries', 'pharmacy', 'toilets', 'parking'];
 
 interface Response {
   key: string;
@@ -201,13 +209,20 @@ export function SearchBar({
   const beyond = !!category && results.length > 0 && results.every((p) => p.beyond);
   /** "kindergaten": a guess, after the names, so Enter never takes it for a name it resembles. */
   const guesses = category || !onCategory || !current ? [] : misspeltFor(q);
-  const items: Item[] = [
-    ...suggestions,
-    ...results.map((place) => ({ place })),
-    ...guesses.map((cat) => ({ cat })),
-  ];
-  // A name search offers its top row for Enter; a category picks nothing until asked.
-  const active = cursor.key === key ? Math.min(cursor.index, items.length - 1) : category ? -1 : 0;
+  /** An empty field: the recent searches (places only when choosing a route's end), then the
+   * kinds of place people look for most. Nothing is taken until chosen. */
+  const blank = q.length < 2 && !category;
+  const recent = useRecent();
+  const items: Item[] = blank
+    ? [
+        ...recent.filter((r) => onCategory || 'place' in r).map((r) => ({ recent: r })),
+        ...(onCategory ? COMMON.map((cat) => ({ cat })) : []),
+      ]
+    : [...suggestions, ...results.map((place) => ({ place })), ...guesses.map((cat) => ({ cat }))];
+  // A name search offers its top row for Enter; a category, or an empty field, picks nothing
+  // until asked.
+  const active =
+    cursor.key === key ? Math.min(cursor.index, items.length - 1) : category || blank ? -1 : 0;
   const setActive = (index: number) => setCursor({ key, index });
 
   // A category asks the map, never the search server; leaving it clears its dots.
@@ -340,12 +355,20 @@ export function SearchBar({
   }, []);
 
   const pick = (place: Place) => {
+    // Found by name (not a dot from the map): worth finding again without typing.
+    if (place.distance === undefined) {
+      const { name, detail, lng, lat, osm, bbox } = place;
+      rememberRecent({
+        place: { name, detail, lng, lat, ...(osm ? { osm } : {}), ...(bbox ? { bbox } : {}) },
+      });
+    }
     onPick(place);
     input.current?.blur();
   };
 
   /** Search the map for a kind of place; the field shows its name, the map its places. */
   const choose = (c: Kind) => {
+    rememberRecent({ kind: c, label: label(c) });
     setCategory(c);
     setQuery(label(c));
     input.current?.blur();
@@ -358,7 +381,14 @@ export function SearchBar({
     input.current?.blur();
   };
 
-  const choice = (it: Item) => (it.cat ? choose(it.cat) : pick(it.place));
+  const choice = (it: Item) =>
+    it.recent
+      ? 'place' in it.recent
+        ? pick(it.recent.place)
+        : choose(it.recent.kind as Kind)
+      : it.cat
+        ? choose(it.cat)
+        : pick(it.place);
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // Keys while an input method composes a word belong to it: Enter commits the word.
@@ -390,13 +420,15 @@ export function SearchBar({
       setRetry((n) => n + 1);
     } else if (e.key === 'Enter') {
       // Only rows for exactly this query; stale names from the last query would jump wrong.
-      const fresh = current || active < suggestions.length;
+      const fresh = blank || current || active < suggestions.length;
       const it = fresh ? items[active] : undefined;
       // The top row was not chosen, only offered: with several names, Enter shows them all.
       const all = !!onCategory && !!it?.place && cursor.key !== key && results.length > 1;
       if (all) showFound(results);
       else if (it) choice(it);
       else if (q.length >= 2 && status === 'loading') jumpFor.current = key;
+    } else if (e.key === 'Delete' && items[active]?.recent) {
+      forgetRecent(items[active].recent);
     } else if (e.key === 'Escape') {
       if (query) {
         setQuery('');
@@ -420,7 +452,8 @@ export function SearchBar({
           ? t.searchSlow
           : '';
   const open = !collapsed && focused;
-  const showList = open && (status !== 'idle' || suggestions.length > 0);
+  const showList =
+    open && (status !== 'idle' || suggestions.length > 0 || (blank && items.length > 0));
 
   return (
     <div className="search" data-open={showList || undefined} hidden={hidden}>
@@ -433,16 +466,47 @@ export function SearchBar({
           )}
           {items.map((it, i) => (
             <li
-              key={it.cat ? `cat|${it.cat}` : `${it.place.name}${it.place.lat}${it.place.lng}`}
+              key={
+                it.recent
+                  ? `recent|${'place' in it.recent ? `${it.recent.place.name}${it.recent.place.lat}` : it.recent.kind}`
+                  : it.cat
+                    ? `cat|${it.cat}`
+                    : `${it.place.name}${it.place.lat}${it.place.lng}`
+              }
               role="option"
               id={`${listId}-${i}`}
-              className={it.cat ? 'r-cat' : undefined}
+              className={it.recent ? 'r-recent' : it.cat ? 'r-cat' : undefined}
               aria-selected={i === active}
               onPointerDown={(e) => e.preventDefault()}
               onClick={() => choice(it)}
               onPointerEnter={() => setActive(i)}
             >
-              {it.cat ? (
+              {it.recent ? (
+                <>
+                  <ClockIcon />
+                  <span className="r-name">
+                    {'place' in it.recent ? it.recent.place.name : it.recent.label}
+                  </span>
+                  <span className="r-detail">
+                    {'place' in it.recent ? it.recent.place.detail : t.catHint}
+                  </span>
+                  <button
+                    type="button"
+                    className="r-forget icon-btn"
+                    aria-label={fill(t.forgetRecent, {
+                      name: 'place' in it.recent ? it.recent.place.name : it.recent.label,
+                    })}
+                    tabIndex={-1}
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (it.recent) forgetRecent(it.recent);
+                    }}
+                  >
+                    <CloseIcon />
+                  </button>
+                </>
+              ) : it.cat ? (
                 <>
                   <SearchIcon />
                   <span className="r-name">{label(it.cat)}</span>
@@ -472,7 +536,9 @@ export function SearchBar({
           )}
         </ul>
       )}
-      {open && q.length < 2 && <p className="hint">{touch() ? t.hint : t.hintMouse}</p>}
+      {open && q.length < 2 && !showList && (
+        <p className="hint">{touch() ? t.hint : t.hintMouse}</p>
+      )}
       <p className="sr-only" role="status">
         {showList
           ? note ||

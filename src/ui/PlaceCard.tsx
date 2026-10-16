@@ -3,7 +3,7 @@ import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { lang, locale, t } from '../i18n';
 import { focusSearch, useFocusOnMount } from './a11y';
-import { CloseIcon, CopyIcon, RouteIcon, ShareIcon } from './icons';
+import { CloseIcon, CopyIcon, NearbyIcon, RouteIcon, ShareIcon } from './icons';
 import { copy, share } from './native';
 import { PlaceDetails } from './PlaceDetails';
 import { Sheet } from './Sheet';
@@ -15,9 +15,11 @@ interface Props {
   onClose: () => void;
   onToast: (msg: string) => void;
   onRoute: () => void;
+  /** Search around this place: the map goes there and the search field opens. */
+  onNearby: () => void;
 }
 
-export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) {
+export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby }: Props) {
   const [copied, setCopied] = useState(false);
   const details = usePlaceDetails(place.osm, lang);
   const heading = useFocusOnMount<HTMLHeadingElement>();
@@ -73,6 +75,10 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute }: Props) 
         <button type="button" className="action primary" onClick={onRoute}>
           <RouteIcon />
           {t.route}
+        </button>
+        <button type="button" className="action" onClick={onNearby}>
+          <NearbyIcon />
+          {t.nearby}
         </button>
         <button type="button" className="action" onClick={onShare}>
           <ShareIcon />

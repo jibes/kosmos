@@ -166,6 +166,8 @@ export const de = {
   resultsPeek: '{n} · ab {d} entfernt',
   resultsList: 'Suchergebnisse',
   searching: 'Suche läuft …',
+  forgetRecent: '{name} aus den letzten Suchen entfernen',
+  nearby: 'In der Nähe',
   noneHere: 'Hier keine. Zoom hinein oder verschieb die Karte.',
   openingHours: 'Öffnungszeiten',
   openUntil: 'Geöffnet · schließt {time}',

@@ -5,6 +5,8 @@ import type { TravelMode } from '../core/route';
 export const MUTED_KEY = 'kosmos.muted.v1';
 export const MODE_KEY = 'kosmos.mode.v1';
 export const HINTED_KEY = 'kosmos.hinted.v1';
+/** The last searches taken (`core/recent.ts`); never leaves the device. */
+export const RECENT_KEY = 'kosmos.recent.v1';
 
 export const stored = (key: string) => {
   try {

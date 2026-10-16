@@ -404,6 +404,26 @@ h2[tabindex='-1']:focus-visible {
   align-items: center;
 }
 
+/* A search taken before: the clock, its name and line, and a way to forget it. */
+.results li.r-recent {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  column-gap: 10px;
+  align-items: center;
+  padding-right: 4px;
+}
+
+.r-recent > svg {
+  grid-row: span 2;
+  color: var(--muted);
+}
+
+.r-recent .r-forget {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  color: var(--muted);
+}
+
 .r-cat svg {
   grid-row: span 2;
   color: var(--accent);

@@ -164,6 +164,8 @@ export const en = {
   resultsPeek: '{n} · nearest {d}',
   resultsList: 'Search results',
   searching: 'Searching…',
+  forgetRecent: 'Remove {name} from recent searches',
+  nearby: 'Nearby',
   noneHere: 'None in view. Zoom in or move the map.',
   openingHours: 'Opening hours',
   openUntil: 'Open · closes {time}',

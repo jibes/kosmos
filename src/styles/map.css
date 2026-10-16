@@ -156,6 +156,8 @@
 
 .action {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -632,4 +634,11 @@
 .results-list button:focus-visible,
 .results-list button:active {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* Three actions on a small phone ("In der Nähe"): the words stay, the side icons go. */
+@media (max-width: 400px) {
+  .card:not(.route) .action:not(.primary) svg {
+    display: none;
+  }
 }
