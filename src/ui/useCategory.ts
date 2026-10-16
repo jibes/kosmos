@@ -47,9 +47,6 @@ export function useCategory(
     places: Place[];
     failed?: boolean;
   } | null>(null);
-  /** Only the user's own panning and zooming moves away from results; the app's camera moves
-   * (locate, follow, show all) re-anchor them instead. */
-  const userMove = useRef(false);
   const last = useRef<Kind | null>(null);
 
   const dots = useCallback(
@@ -165,16 +162,16 @@ export function useCategory(
 
   useEffect(() => {
     if (!map) return;
-    const onMoveStart = (e: { originalEvent?: Event }) => {
-      if (e.originalEvent) userMove.current = true;
-    };
-    const onMoveEnd = () => {
+    // Only the user's own panning and zooming moves away from results, told by how a move
+    // ends: a drag or a fling with the gesture's own event, the app's camera (locate, follow,
+    // show all) without one, also when it cuts a fling short (locate tapped while the map still
+    // glides). The app's moves re-anchor the results and take back an offer already made.
+    const onMoveEnd = (e: { originalEvent?: Event }) => {
       const s = searched.current;
-      const byUser = userMove.current;
-      userMove.current = false;
       if (!s) return;
-      if (!byUser) {
+      if (!e.originalEvent) {
         searched.current = { ...s, center: map.getCenter(), zoom: map.getZoom() };
+        setMoved(false);
         return;
       }
       const b = map.getBounds();
@@ -185,10 +182,8 @@ export function useCategory(
       const away = distance(s.center, map.getCenter()) > width * MOVED_SHARE;
       setMoved(away || Math.abs(map.getZoom() - s.zoom) >= ZOOMED);
     };
-    map.on('movestart', onMoveStart);
     map.on('moveend', onMoveEnd);
     return () => {
-      map.off('movestart', onMoveStart);
       map.off('moveend', onMoveEnd);
     };
   }, [map]);

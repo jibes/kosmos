@@ -318,6 +318,33 @@ test.describe('search', () => {
     await expect.poll(dots).toBe(3);
   });
 
+  test('locating the user while the map still glides offers no new search', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.03, longitude: CENTER.lng });
+    await jump(page, { ...CENTER, zoom: 14 });
+    const input = page.getByRole('combobox');
+    await input.fill('Restaurants');
+    await input.press('Enter');
+    await expect(await resultRows(page)).toHaveCount(3);
+    // A quick fling on the map beside the panel, and locate tapped while it still glides.
+    const box = (await page.locator('canvas.maplibregl-canvas').boundingBox())!;
+    const panel = (await page.locator('.panel').boundingBox())!;
+    const left = panel.y < box.height / 2 && panel.x < box.width / 2 ? panel.x + panel.width : 0;
+    const y = box.y + box.height * 0.3;
+    await page.mouse.move(left + (box.width - left) * 0.9, y);
+    await page.mouse.down();
+    await page.mouse.move(left + (box.width - left) * 0.6, y, { steps: 2 });
+    await page.mouse.move(left + (box.width - left) * 0.3, y, { steps: 2 });
+    await page.mouse.up();
+    await page.locator('.controls > button').first().click();
+    await idle(page);
+    await page.waitForTimeout(500);
+    await expect(page.getByRole('button', { name: 'Search this area' })).toHaveCount(0);
+  });
+
   test('asks Nominatim only for a settled query when Photon fails at once', async ({ page }) => {
     test.slow();
     await page.route(/photon\.komoot\.io\/api\//, (route) =>
