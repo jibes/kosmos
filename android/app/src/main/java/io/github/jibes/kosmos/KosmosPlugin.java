@@ -10,9 +10,15 @@ import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.SystemClock;
+import android.os.VibrationAttributes;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.provider.Settings;
 import android.util.Log;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -22,7 +28,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 /**
  * The app's own small native helpers: its page in the system settings (where a refused location
  * permission is allowed again), other audio ducking under spoken prompts, the ambient light
- * while guiding (for the map's theme), and a log line under its own tag. Release builds forward nothing
+ * while guiding (for the map's theme), a buzz for a turn when the voice is off, and a log line
+ * under its own tag. Release builds forward nothing
  * else from the WebView to the system log, so no position ever ends up there; the CI smoke test
  * reads the "loaded" line and web errors from this tag.
  */
@@ -146,5 +153,36 @@ public class KosmosPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         listenLight(false);
+    }
+
+    /**
+     * A buzz for a turn, as milliseconds on and off in turn. Marked as accessibility feedback
+     * (Android 13+): guidance for someone who cannot listen, which the system's own vibration
+     * settings still govern.
+     */
+    @PluginMethod
+    public void vibrate(PluginCall call) {
+        JSArray pattern = call.getArray("pattern", new JSArray());
+        long[] timings = new long[pattern.length() + 1];
+        try {
+            for (int i = 0; i < pattern.length(); i++) timings[i + 1] = Math.max(0, pattern.getLong(i));
+        } catch (org.json.JSONException e) {
+            call.reject("Bad pattern", "BAD_PATTERN");
+            return;
+        }
+        Vibrator vibrator = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            ? getContext().getSystemService(VibratorManager.class).getDefaultVibrator()
+            : getContext().getSystemService(Vibrator.class);
+        if (vibrator == null || !vibrator.hasVibrator() || timings.length < 2) {
+            call.resolve();
+            return;
+        }
+        VibrationEffect effect = VibrationEffect.createWaveform(timings, -1);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ACCESSIBILITY));
+        } else {
+            vibrator.vibrate(effect);
+        }
+        call.resolve();
     }
 }

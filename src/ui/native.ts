@@ -47,6 +47,7 @@ const Kosmos = isNative
       duck(o: { on: boolean }): Promise<void>;
       log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
       light(o: { on: boolean }): Promise<{ available: boolean }>;
+      vibrate(o: { pattern: number[] }): Promise<void>;
       addListener(
         event: 'light',
         listener: (e: { lux: number }) => void,
@@ -61,6 +62,21 @@ export const openAppSettings = Kosmos
 
 /** Android: other audio ducks while `on` (a prompt speaks), and comes back after. */
 export const duckAudio = (on: boolean) => void Kosmos?.duck({ on }).catch(() => undefined);
+
+/**
+ * A buzz (milliseconds on and off in turn): the app's own vibrator on Android, where the
+ * WebView has none; the browser's elsewhere, where it has one at all.
+ */
+export function vibrate(pattern: readonly number[]) {
+  if (Kosmos) void Kosmos.vibrate({ pattern: [...pattern] }).catch(() => undefined);
+  else if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      navigator.vibrate([...pattern]);
+    } catch {
+      // Not allowed here (no user gesture yet, or a desktop browser): nothing to feel.
+    }
+  }
+}
 
 /**
  * Android: the ambient light around the phone, about once a second, until the returned stop is

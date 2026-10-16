@@ -386,6 +386,58 @@ test.describe('guidance', () => {
     expect(Math.abs(recenter.x + recenter.width / 2 - middle)).toBeLessThan(12);
   });
 
+  test('buzzes the turns on a silent walk', async ({ page, context }) => {
+    // A phone's vibrator, as the browser offers it.
+    await page.evaluate(() => {
+      const w = window as unknown as { buzzes: number[][] };
+      w.buzzes = [];
+      Object.defineProperty(navigator, 'vibrate', {
+        value: (p: number[]) => w.buzzes.push([...p]) > 0,
+      });
+    });
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const to = SEARCH_HIT;
+    const corner = { lng: from.lng, lat: to.lat };
+    const go = (p: { lng: number; lat: number }) =>
+      context.setGeolocation({ latitude: p.lat, longitude: p.lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Walk' }).click();
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    // On foot the voice starts silent: the turns are felt instead.
+    await expect(page.getByRole('button', { name: 'Mute voice' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    const buzzes = () => page.evaluate(() => (window as unknown as { buzzes: number[][] }).buzzes);
+    for (const f of [0.2, 0.5, 0.8, 0.97, 0.995]) {
+      await go({ lng: from.lng, lat: from.lat + (corner.lat - from.lat) * f });
+      await page.waitForTimeout(250);
+    }
+    await expect.poll(buzzes).toContainEqual([60, 90, 60]);
+    for (const f of [0.3, 0.7, 1]) {
+      await go({ lng: corner.lng + (to.lng - corner.lng) * f, lat: to.lat });
+      await page.waitForTimeout(250);
+    }
+    await expect
+      .poll(
+        async () => {
+          await go({ lng: to.lng, lat: to.lat + 1e-7 * Math.random() });
+          return buzzes();
+        },
+        { intervals: [500], timeout: 8000 },
+      )
+      .toContainEqual([250]);
+  });
+
   test('remembers the voice for the next drive; on foot and by bike it starts silent', async ({
     page,
     context,

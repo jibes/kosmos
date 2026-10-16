@@ -16,6 +16,8 @@ import { spokenDistance, type Mode, type Route } from '../core/route';
 import { fill, locale, t, units } from '../i18n';
 import type { Fix } from './useLocation';
 import type { Voice } from './voice';
+import { buzzFor } from '../core/haptics';
+import { vibrate } from './native';
 
 /** A fix this recent counts at once when guidance starts: the arrow need not wait for the next. */
 export const FRESH_MS = 10_000;
@@ -88,7 +90,11 @@ export function useNav(o: Options) {
       const p = prompt(tr, nav, mode);
       if (p) {
         nav = markSpoken(nav, p.key);
-        if (!opts.current.muted) opts.current.voice.speak(promptWords(p));
+        const { muted, voice } = opts.current;
+        if (!muted) voice.speak(promptWords(p));
+        // Muted on foot or by bike: felt instead, in the pocket or on the handlebar.
+        const buzz = buzzFor(p, mode, muted, tr.route.maneuvers.length - 1);
+        if (buzz) vibrate(buzz);
       }
       setView({ tr, nav });
       opts.current.onStep(nav, fix);
