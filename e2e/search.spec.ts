@@ -90,6 +90,8 @@ test.describe('search', () => {
     await shot(page, info, 'category');
     // Back in the field, the list has them; a category preselects nothing: Enter means "show
     // me all of them".
+    // (The mouse off the list first: it rests where a row opens, and hover chooses a row.)
+    await page.mouse.move(1, 1);
     await input.focus();
     await expect(options).toHaveCount(3);
     await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
@@ -222,6 +224,7 @@ test.describe('search', () => {
     );
     // The map stays where it is until asked: Enter in the field shows them.
     expect(await page.evaluate(() => window.kosmos!.getZoom())).toBeCloseTo(17, 1);
+    await page.mouse.move(1, 1);
     await input.focus();
     await input.press('Enter');
     await expect
