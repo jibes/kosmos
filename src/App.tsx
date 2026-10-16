@@ -682,6 +682,8 @@ export function App() {
                   lang={lang}
                   onPick={pick}
                   hidden={!!selection}
+                  opened={selection?.place ?? null}
+                  onHighlight={category.highlight}
                 />
               )}
               <SearchBar

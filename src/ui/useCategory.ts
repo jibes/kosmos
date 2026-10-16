@@ -49,16 +49,25 @@ export function useCategory(
   } | null>(null);
   const last = useRef<Kind | null>(null);
 
+  /** The result whose dot stands out, by its place in the list. */
+  const hot = useRef<number | null>(null);
   const dots = useCallback(
-    (places: Place[]) =>
-      (map?.getSource(SEARCH_SOURCE) as maplibregl.GeoJSONSource | undefined)?.setData({
+    (places: Place[]) => {
+      const source = map?.getSource(SEARCH_SOURCE) as maplibregl.GeoJSONSource | undefined;
+      // New results: none stands out yet (states outlive the data, by id).
+      if (source) map?.removeFeatureState({ source: SEARCH_SOURCE });
+      hot.current = null;
+      return source?.setData({
         type: 'FeatureCollection',
-        features: places.map((p) => ({
+        // Ids in the list's order, so a row can light up its dot (`highlight`).
+        features: places.map((p, id) => ({
           type: 'Feature',
+          id,
           properties: { name: p.name, ...(p.stop ? { stop: true } : {}) },
           geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
         })),
-      }),
+      });
+    },
     [map],
   );
 
@@ -191,6 +200,18 @@ export function useCategory(
   /** Every result on screen at once, none chosen. */
   const showAll = useCallback(() => fit(searched.current?.fit ?? []), [fit]);
 
+  /** The dot of the `index`th result stands out; `null` puts it back. */
+  const highlight = useCallback(
+    (index: number | null) => {
+      const source = map?.getSource(SEARCH_SOURCE) ? SEARCH_SOURCE : null;
+      if (!map || !source || hot.current === index) return;
+      if (hot.current !== null) map.setFeatureState({ source, id: hot.current }, { hot: false });
+      if (index !== null) map.setFeatureState({ source, id: index }, { hot: true });
+      hot.current = index;
+    },
+    [map],
+  );
+
   /** The name several places in view share that a text begins: a chain to search for. */
   const names = useCallback(
     (text: string) => (map ? sharedNameInView(map, text) : Promise.resolve(null)),
@@ -205,5 +226,5 @@ export function useCategory(
 
   // Names found are Photon's answer, not the map's: there is no area to search again.
   const offerHere = !!active && foundOf(active) === null && moved;
-  return { onCategory, names, showAll, searchHere, run, offerHere, results };
+  return { onCategory, names, showAll, searchHere, run, offerHere, results, highlight };
 }

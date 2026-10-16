@@ -441,7 +441,16 @@ function searchDots(p: Palette): LayerSpecification[] {
       type: 'circle',
       source: SEARCH_SOURCE,
       paint: {
-        'circle-radius': expLerp(12, 4, 18, 6),
+        // A row held or hovered in the results list, or the one last opened, stands out.
+        'circle-radius': [
+          'interpolate',
+          ['exponential', 1.5],
+          ['zoom'],
+          12,
+          ['case', ['boolean', ['feature-state', 'hot'], false], 7, 4],
+          18,
+          ['case', ['boolean', ['feature-state', 'hot'], false], 10, 6],
+        ] as unknown as Expr,
         'circle-color': p.accent,
         'circle-stroke-color': p.routeCasing,
         'circle-stroke-width': 2,

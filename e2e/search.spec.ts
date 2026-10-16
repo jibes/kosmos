@@ -427,6 +427,31 @@ test.describe('search', () => {
     await expect(card.locator('.departures li')).toHaveCount(2);
   });
 
+  test('a row lights up its dot; the place opened last stays marked', async ({ page }) => {
+    await jump(page, { ...CENTER, zoom: 14 });
+    const input = page.getByRole('combobox');
+    await input.fill('Restaurants');
+    await input.press('Enter');
+    const rows = await resultRows(page);
+    await expect(rows).toHaveCount(3);
+    const lit = (id: number) =>
+      page.evaluate((i) => !!window.kosmos!.getFeatureState({ source: 'search', id: i }).hot, id);
+    // Held or hovered: its dot stands out, the others not; let go, it is back.
+    await rows.nth(1).hover();
+    await expect.poll(() => lit(1)).toBe(true);
+    expect(await lit(0)).toBe(false);
+    await page.mouse.move(1, 1);
+    await expect.poll(() => lit(1)).toBe(false);
+    // Opened and closed: the list comes back with that row marked, its dot lit.
+    const name = (await rows.nth(2).locator('.r-name').textContent()) ?? '';
+    await rows.nth(2).click();
+    const card = page.locator('.card');
+    await card.getByRole('button', { name: 'Close' }).click();
+    await expect(page.locator('.results-list [data-marked]')).toContainText(name);
+    await page.mouse.move(1, 1);
+    await expect.poll(() => lit(2)).toBe(true);
+  });
+
   test('asks Nominatim only for a settled query when Photon fails at once', async ({ page }) => {
     test.slow();
     await page.route(/photon\.komoot\.io\/api\//, (route) =>
