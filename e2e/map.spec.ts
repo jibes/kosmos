@@ -295,6 +295,21 @@ test.describe('map', () => {
     const cafe = { lng: CENTER.lng + 140 / 67800, lat: CENTER.lat - 170 / 111200 };
     await jump(page, { ...cafe, zoom: 17 });
     const at = await screenAt(page, cafe.lng, cafe.lat);
+    // Placed under the pointer first: a busy test machine may still be fading labels in.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ x, y }) =>
+            window
+              .kosmos!.queryRenderedFeatures([
+                [x - 10, y - 10],
+                [x + 10, y + 10],
+              ])
+              .some((f) => f.properties.name === 'Café Einstein'),
+          at,
+        ),
+      )
+      .toBe(true);
     const asked = lookupRequests.length;
     await page.mouse.click(at.x, at.y);
     const card = page.locator('.card');

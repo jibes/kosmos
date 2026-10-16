@@ -46,6 +46,11 @@ const Kosmos = isNative
       openSettings(): Promise<void>;
       duck(o: { on: boolean }): Promise<void>;
       log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
+      light(o: { on: boolean }): Promise<{ available: boolean }>;
+      addListener(
+        event: 'light',
+        listener: (e: { lux: number }) => void,
+      ): Promise<PluginListenerHandle>;
     }>('Kosmos')
   : null;
 
@@ -56,6 +61,25 @@ export const openAppSettings = Kosmos
 
 /** Android: other audio ducks while `on` (a prompt speaks), and comes back after. */
 export const duckAudio = (on: boolean) => void Kosmos?.duck({ on }).catch(() => undefined);
+
+/**
+ * Android: the ambient light around the phone, about once a second, until the returned stop is
+ * called; `null` on the web (browsers do not offer the sensor) and on phones without one.
+ */
+export function watchLight(onLux: (lux: number) => void): (() => void) | null {
+  const kosmos = Kosmos;
+  if (!kosmos) return null;
+  let stopped = false;
+  const handle = kosmos.addListener('light', (e) => {
+    if (!stopped) onLux(e.lux);
+  });
+  void kosmos.light({ on: true }).catch(() => undefined);
+  return () => {
+    stopped = true;
+    void handle.then((h) => h.remove());
+    void kosmos.light({ on: false }).catch(() => undefined);
+  };
+}
 
 /**
  * Android: a line in the system log under the app's own tag. Release builds forward nothing else

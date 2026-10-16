@@ -53,11 +53,12 @@ const BACK_TWICE_MS = 3000;
 export function App() {
   const systemTheme = useTheme();
   const [navigating, setNavigating] = useState(false);
+  const [trip, setTrip] = useState<Trip | null>(null);
   const {
     theme: navTheme,
     update: updateNavTheme,
     updateNight: updateRideTheme,
-  } = useNavTheme(navigating);
+  } = useNavTheme(navigating, trip?.mode === 'car' || trip?.mode === 'bike');
   const theme = navTheme ?? systemTheme;
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -72,7 +73,6 @@ export function App() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
   const { toast, showToast, dismiss, dismissText } = useToast();
-  const [trip, setTrip] = useState<Trip | null>(null);
   const [active, setActive] = useState(0);
   /** Which end of the route the search bar is choosing, if any. */
   const [picking, setPicking] = useState<'start' | 'end' | null>(null);
