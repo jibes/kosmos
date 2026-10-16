@@ -13,6 +13,13 @@ export type TravelMode = Mode | 'transit';
 export const TRAVEL_MODES: readonly TravelMode[] = [...MODES, 'transit'];
 const COSTING: Record<Mode, string> = { car: 'auto', bike: 'bicycle', foot: 'pedestrian' };
 
+/**
+ * On foot, Valhalla's defaults cost a four-lane road like a footpath. Footways and paths (also
+ * the sidewalks mapped beside a big road) count 40 % cheaper, roads with a sidewalk 20 %, so a
+ * walk keeps to them unless the detour is long.
+ */
+const FOOT_OPTIONS = { pedestrian: { walkway_factor: 0.6, sidewalk_factor: 0.8 } };
+
 /** Languages Valhalla writes instructions in; anything else falls back to English. */
 const LANGS = new Set(
   'bg ca cs da de el en es et fi fr hi hu it ja nb nl pl pt ro ru sk sl sv tr uk'.split(' '),
@@ -76,6 +83,7 @@ export function routeUrl(
       { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
     ],
     costing: COSTING[mode],
+    ...(mode === 'foot' ? { costing_options: FOOT_OPTIONS } : {}),
     directions_options: {
       // The router's own words ("Continue for 2 miles") in the units the app shows.
       units: units === 'metric' ? 'kilometers' : 'miles',

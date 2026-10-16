@@ -52,6 +52,20 @@ describe('routeUrl', () => {
     });
   });
 
+  it('keeps a walk to footways and sidewalks, off roads without them', () => {
+    const body = (mode: 'foot' | 'car') =>
+      JSON.parse(
+        new URL(routeUrl({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, mode, 'de')).searchParams.get(
+          'json',
+        )!,
+      );
+    const foot = body('foot').costing_options.pedestrian;
+    expect(foot.walkway_factor).toBeLessThan(1);
+    expect(foot.sidewalk_factor).toBeLessThan(1);
+    expect(foot.walkway_factor).toBeLessThan(foot.sidewalk_factor);
+    expect(body('car').costing_options).toBeUndefined();
+  });
+
   it('falls back to English instructions', () => {
     const url = new URL(routeUrl({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, 'foot', 'xx', 0));
     const body = JSON.parse(url.searchParams.get('json')!);
