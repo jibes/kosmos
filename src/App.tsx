@@ -5,7 +5,7 @@ import type { Mode, TravelMode } from './core/route';
 import { lang, locale, t } from './i18n';
 import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
-import { pinMarker, userMarker } from './ui/markers';
+import { pinMarker, type userMarker } from './ui/markers';
 import { isNative, openAppSettings } from './ui/native';
 import { NavView, NavWaiting } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
@@ -22,6 +22,9 @@ import { useShared } from './ui/useShared';
 import { useMap } from './ui/useMap';
 import { ASKED, useCategory } from './ui/useCategory';
 import { useRide } from './ui/useRide';
+import { useRideCamera } from './ui/useRideCamera';
+import { useNavView } from './ui/useNavView';
+import { useMapGestures } from './ui/useMapGestures';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useGuidance } from './ui/useGuidance';
 import { FRESH_MS } from './ui/useNav';
@@ -54,6 +57,10 @@ const ARRIVED_END_MS = 60_000;
 /** A second back press within this ends navigation. */
 const BACK_TWICE_MS = 3000;
 
+/** The way of travel road guidance uses; public transport walks are guided by the ride. */
+const roadModeOf = (trip: { mode: TravelMode } | null | undefined): Mode =>
+  trip && trip.mode !== 'transit' ? trip.mode : 'car';
+
 export function App() {
   const systemTheme = useTheme();
   const [navigating, setNavigating] = useState(false);
@@ -84,7 +91,8 @@ export function App() {
   useEffect(() => {
     pickingRef.current = picking;
   }, [picking]);
-  const [navFollow, setNavFollow] = useState(true);
+  const view = useNavView();
+  const { followingRef: navFollowRef } = view;
   /** The router answer count when a new connection was asked for. */
   const [connAt, setConnAt] = useState<number | null>(null);
   const route = useRoute(trip, fix, lang, navigating);
@@ -97,12 +105,10 @@ export function App() {
   const roadNavRef = useRef(false);
   /** Road guidance has its route and drives the arrow and the camera itself. */
   const trackingRef = useRef(false);
-  const navFollowRef = useRef(true);
   useEffect(() => {
     navRef.current = navigating;
     roadNavRef.current = navigating && !riding;
-    navFollowRef.current = navFollow;
-  }, [navigating, navFollow, riding]);
+  }, [navigating, riding]);
   const tripRef = useRef(trip);
   useEffect(() => {
     tripRef.current = trip;
@@ -253,46 +259,20 @@ export function App() {
 
   // Location: the dot, and the camera while following.
   const me = useRef<ReturnType<typeof userMarker> | null>(null);
-  /**
-   * Fingers (or a mouse button) down on the map. The app's own camera moves wait meanwhile:
-   * any move resets MapLibre's gesture handlers, which would cut a pan, pinch or long-press off
-   * the moment it starts.
-   */
   const touching = useRef(new Set<number>());
-  useEffect(() => {
-    if (!map) return;
-    const m = userMarker(map);
-    me.current = m;
-    const down = (e: PointerEvent) => touching.current.add(e.pointerId);
-    const up = (e: PointerEvent) => touching.current.delete(e.pointerId);
-    const surface = map.getCanvasContainer();
-    surface.addEventListener('pointerdown', down);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
+  useMapGestures(map, me, touching, {
     // The user's own move: a fix arriving late no longer flies the map away from it.
-    const stopFollowing = () => {
+    drag: () => {
       flyOnFix.current = false;
       setFollow('off');
-      if (navRef.current) setNavFollow(false);
-    };
+      if (navRef.current) view.lookAround();
+    },
     // While navigating, a pinch or twist to look around holds the camera too (Re-centre returns).
-    const lookAround = (e: { originalEvent?: Event }) => {
-      if (!e.originalEvent) return;
+    look: () => {
       flyOnFix.current = false;
-      if (navRef.current) setNavFollow(false);
-    };
-    const looks = ['zoomstart', 'rotatestart', 'pitchstart'] as const;
-    map.on('dragstart', stopFollowing);
-    for (const ev of looks) map.on(ev, lookAround);
-    return () => {
-      m.remove();
-      surface.removeEventListener('pointerdown', down);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-      map.off('dragstart', stopFollowing);
-      for (const ev of looks) map.off(ev, lookAround);
-    };
-  }, [map]);
+      if (navRef.current) view.lookAround();
+    },
+  });
 
   /** The newest fix, and whether a catch-up waits for the camera to stop. */
   const latestFix = useRef(fix);
@@ -307,12 +287,19 @@ export function App() {
       if (navFollowRef.current && !touching.current.size) {
         followNav(
           map,
-          { center: [fix.lng, fix.lat], bearing, speed: fix.speed ?? 0 },
+          {
+            center: [fix.lng, fix.lat],
+            bearing,
+            speed: fix.speed ?? 0,
+            mode: roadModeOf(tripRef.current),
+          },
           motion(1000),
         );
       }
       return;
     }
+    // On public transport the ride's own camera follows (`useRideCamera`).
+    if (navRef.current) return;
     // A finger on the map: this fix moves the dot only; the next one catches the camera up.
     if (touching.current.size) return;
     if (flyOnFix.current) {
@@ -342,7 +329,7 @@ export function App() {
       // The compass turns the map every frame; an ease here would fight it, so the centre jumps.
       if (!map.isMoving()) map.jumpTo({ center: [fix.lng, fix.lat] });
     }
-  }, [map, fix, compass]);
+  }, [map, fix, compass, navFollowRef]);
 
   // Compass: the beam on the dot always; in compass mode the map turns with the phone.
   const lastNavMoving = useRef(false);
@@ -371,13 +358,14 @@ export function App() {
 
   // Navigation: guidance on the device, camera behind the user, the router asked only to reroute.
   /** Public transport has no turn-by-turn yet, so guidance only ever sees a road mode. */
-  const roadMode: Mode = trip && trip.mode !== 'transit' ? trip.mode : 'car';
+  const roadMode = roadModeOf(trip);
   const guidance = useGuidance({
     map,
     meRef: me,
     compass,
     touchingRef: touching,
-    followingRef: navFollowRef,
+    followingRef: view.followingRef,
+    overviewRef: view.overviewRef,
     movingRef: lastNavMoving,
     updateTheme: updateNavTheme,
     route: navigating && !riding ? shown[chosen] : undefined,
@@ -412,6 +400,9 @@ export function App() {
     lang,
     say: (tr, p) => rideWords(tr, p, trip?.to.name ?? '', locale),
   });
+  const rideFollowing = follow !== 'off' && view.following;
+  const { overview } = view;
+  useRideCamera({ map, ride, following: rideFollowing, overview, touchingRef: touching });
   // Public transport turns the map dark after sunset too; tunnels are the driver's concern.
   const rideFix = ride?.st.fix;
   const rideTime = ride?.st.time;
@@ -428,6 +419,7 @@ export function App() {
       if (!isNative) start();
       void compass.start();
       setNavigating(true);
+      view.close();
       setFollow('position');
       if (!isNative) showToast(t.keepOpen);
       map?.easeTo({
@@ -444,14 +436,14 @@ export function App() {
     void compass.start();
     if (trip.from) setTrip({ ...trip, from: null });
     setNavigating(true);
-    setNavFollow(true);
+    view.close();
     if (!isNative) showToast(t.keepOpen);
     // With a fix, guidance places the camera on the user at once; without one, the route's start.
     const first = shown[chosen];
     if (map && first && !(fix && Date.now() - fix.time < FRESH_MS)) {
       followNav(
         map,
-        { center: first.coords[0], bearing: startBearing(first), speed: 0 },
+        { center: first.coords[0], bearing: startBearing(first), speed: 0, mode: roadMode },
         motion(800),
       );
     }
@@ -576,12 +568,14 @@ export function App() {
             destination={trip.to.name}
             lang={locale}
             muted={muted}
-            following={follow !== 'off'}
+            following={rideFollowing}
+            overview={overview}
             onMute={toggleMute}
             onRecenter={() => {
               setFollow('position');
-              if (fix) map?.easeTo({ center: [fix.lng, fix.lat], duration: motion(600) });
+              view.close();
             }}
+            onOverview={view.showAll}
             connecting={connecting}
             onNewConnection={() => {
               setConnAt(route.settled);
@@ -604,13 +598,18 @@ export function App() {
             nav={nav}
             lang={locale}
             muted={muted}
-            following={navFollow}
+            following={view.following}
+            overview={overview}
             reroute={rerouteState}
             onMute={toggleMute}
             destination={trip?.to.name ?? ''}
             onRecenter={() => {
-              setNavFollow(true);
-              guidance.recenter();
+              view.close();
+              guidance.recenter(false);
+            }}
+            onOverview={() => {
+              view.showAll();
+              guidance.recenter(true);
             }}
             onEnd={arrived ? finish : endNav}
           />

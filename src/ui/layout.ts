@@ -1,5 +1,6 @@
 import type * as maplibregl from 'maplibre-gl';
-import { navZoom } from '../core/nav';
+import { boundsOf, navPitch, navZoomFor } from '../core/navView';
+import type { Mode } from '../core/route';
 
 /** The side layout: wide screens, and phones held sideways (the same query as styles.css). */
 export const wide = () =>
@@ -42,11 +43,15 @@ export const routePadding = () => {
 /** A finger long-presses; a mouse right-clicks. */
 export const touch = () => matchMedia('(pointer: coarse)').matches;
 
-/** Where the navigation camera looks: the arrow's place and heading, and the speed for zoom. */
+/**
+ * Where the navigation camera looks: the arrow's place and heading, the speed for zoom, and the
+ * way of travel for the angle and distance it looks from.
+ */
 export interface NavCamera {
   center: [number, number];
   bearing: number | null;
   speed: number;
+  mode: Mode;
 }
 
 const RAD = Math.PI / 180;
@@ -92,13 +97,32 @@ export function overviewNav(
   );
 }
 
+/**
+ * What is left of the way, all of it on screen, north up and from above: the overview while
+ * guiding, and on board a vehicle the rest of its line. Linear, as the follow camera.
+ */
+export function fitNav(map: maplibregl.Map, points: [number, number][], duration: number) {
+  const b = boundsOf(points);
+  if (!b) return;
+  map.fitBounds(b, {
+    padding: overviewPadding(),
+    absolutePadding: true,
+    bearing: 0,
+    pitch: 0,
+    maxZoom: 17,
+    linear: true,
+    duration,
+    easing: (x) => x,
+  });
+}
+
 /** Behind the user, looking ahead; linear, so one fix's move runs into the next. */
 export function followNav(map: maplibregl.Map, v: NavCamera, duration: number) {
   map.easeTo({
     center: v.center,
     bearing: v.bearing ?? map.getBearing(),
-    pitch: 55,
-    zoom: navZoom(v.speed),
+    pitch: navPitch(v.mode),
+    zoom: navZoomFor(v.mode, v.speed),
     padding: navPadding(),
     duration,
     easing: (x) => x,

@@ -386,6 +386,53 @@ test.describe('guidance', () => {
     expect(Math.abs(recenter.x + recenter.width / 2 - middle)).toBeLessThan(12);
   });
 
+  test('drives seen from behind; the overview shows the rest of the way', async ({
+    page,
+    context,
+  }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const to = SEARCH_HIT;
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: from.lat, longitude: from.lng, accuracy: 5 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Car' }).click();
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    const pitch = () => page.evaluate(() => Math.round(window.kosmos!.getPitch()));
+    await expect.poll(pitch).toBe(55);
+    const inView = (p: { lng: number; lat: number }) =>
+      page.evaluate(
+        ([lng, lat]) => {
+          const q = window.kosmos!.project([lng, lat]);
+          return q.x > 0 && q.y > 0 && q.x < innerWidth && q.y < innerHeight;
+        },
+        [p.lng, p.lat],
+      );
+    expect(await inView(to)).toBe(false);
+
+    // One button: the rest of the way, north up from above, the destination in it.
+    await page.getByRole('button', { name: 'Overview' }).click();
+    await idle(page);
+    expect(await pitch()).toBe(0);
+    expect(await page.evaluate(() => Math.round(window.kosmos!.getBearing()))).toBe(0);
+    expect(await inView(to)).toBe(true);
+    expect(await inView(from)).toBe(true);
+    // A new fix keeps the overview.
+    await context.setGeolocation({ latitude: from.lat - 0.001, longitude: from.lng, accuracy: 5 });
+    await page.waitForTimeout(1500);
+    expect(await inView(to)).toBe(true);
+    // And back to following close behind.
+    await page.getByRole('button', { name: 'Re-centre' }).click();
+    await expect.poll(pitch).toBe(55);
+    await expect(page.getByRole('button', { name: 'Overview' })).toBeVisible();
+  });
+
   test('buzzes the turns on a silent walk', async ({ page, context }) => {
     // A phone's vibrator, as the browser offers it.
     await page.evaluate(() => {
@@ -412,6 +459,8 @@ test.describe('guidance', () => {
     await card.getByRole('radio', { name: 'Walk' }).click();
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     await card.getByRole('button', { name: 'Start', exact: true }).click();
+    // On foot the map is seen from straight above, closest in.
+    await expect.poll(() => page.evaluate(() => window.kosmos!.getPitch())).toBe(0);
     // On foot the voice starts silent: the turns are felt instead.
     await expect(page.getByRole('button', { name: 'Mute voice' })).toHaveAttribute(
       'aria-pressed',

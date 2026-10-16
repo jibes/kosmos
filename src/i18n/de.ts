@@ -205,6 +205,7 @@ export const de = {
   end: 'Beenden',
   mute: 'Ansagen aus',
   map: 'Karte',
+  overview: 'Übersicht',
   recenter: 'Zentrieren',
   arrived: 'Du bist angekommen',
   rerouting: 'Neue Route wird gesucht…',

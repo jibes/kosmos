@@ -160,11 +160,63 @@ button.via[aria-expanded='true']::after {
 }
 
 /* An opened leg's stops and turns use the leg's whole width, from under its line chip, along
-   a thin line in the line's colour, so they need not squeeze into the column beside it. */
+   a line in the line's colour, so they need not squeeze into the column beside it. On the
+   ride itself it is a progress line: solid and dotted where the stops are behind, the next
+   stop ringed, faint ahead. */
 .legs .stops {
+  --stop-line: var(--leg, color-mix(in srgb, var(--text) 45%, transparent));
   margin-left: calc(-1 * var(--leg-col) - 10px);
-  padding-left: 10px;
-  border-left: 2px solid var(--leg, color-mix(in srgb, var(--text) 30%, transparent));
+  padding-left: 16px;
+}
+
+.legs .stops li {
+  position: relative;
+}
+
+.legs .stops li::before {
+  content: '';
+  position: absolute;
+  left: -13px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: color-mix(in srgb, var(--stop-line) 45%, transparent);
+}
+
+.legs .stops li[data-passed]::before,
+.legs .stops.turns li::before {
+  background: var(--stop-line);
+}
+
+.legs .stops:not(.turns) li::after {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: calc(50% - 4.5px);
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--stop-line);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.legs .stops li[data-passed]::after {
+  background: var(--stop-line);
+}
+
+/* Where the rider is: the next stop. */
+.legs .stops li[data-next]::after {
+  left: -18.5px;
+  top: calc(50% - 7px);
+  width: 14px;
+  height: 14px;
+  border-width: 3px;
+}
+
+.legs .stops li[data-next] {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .stops.turns li {
@@ -392,6 +444,20 @@ button.via[aria-expanded='true']::after {
   margin-top: 2px;
   font-size: 10px;
   color: var(--muted);
+}
+
+/* The rest of the way: a round button on the right, above the credit. */
+.overview {
+  position: absolute;
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--gutter) + var(--safe-bottom) + 128px);
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: var(--accent);
+  animation: rise 0.28s var(--ease);
 }
 
 /* Above the credit and the speed, not beside them: a 360 px phone has no room for both. */

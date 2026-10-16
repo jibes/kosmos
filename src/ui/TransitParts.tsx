@@ -187,7 +187,11 @@ export function TransitLegs({ transit, lang, current, passed = 0, destination }:
                     style={l.color ? ({ '--leg': l.color } as CSSProperties) : undefined}
                   >
                     {l.via.map((v, k) => (
-                      <li key={k} data-passed={(here && k < passed) || undefined}>
+                      <li
+                        key={k}
+                        data-passed={(here && k < passed) || undefined}
+                        data-next={(here && k === passed) || undefined}
+                      >
                         <time>{v.arrival ? clock(v.arrival) : ''}</time>
                         <span>{v.name}</span>
                       </li>

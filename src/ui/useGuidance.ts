@@ -1,10 +1,11 @@
 import type * as maplibregl from 'maplibre-gl';
-import { useCallback, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { travelHeading } from '../core/compass';
 import { distance } from '../core/geo';
 import { offRouteLimit, type NavState, type Snap } from '../core/nav';
 import type { Mode, Route } from '../core/route';
-import { followNav, overviewNav, type NavCamera } from './layout';
+import { routeRest } from '../core/navView';
+import { fitNav, followNav, overviewNav, type NavCamera } from './layout';
 import type { userMarker } from './markers';
 import { motion } from './motion';
 import type { Fix } from './useLocation';
@@ -22,6 +23,8 @@ interface Options {
   touchingRef: RefObject<Set<number>>;
   /** The camera follows (the user has not looked around since). */
   followingRef: RefObject<boolean>;
+  /** The camera shows the rest of the route instead of following close behind. */
+  overviewRef: RefObject<boolean>;
   /** Set on every fix: moving fast enough for the route's direction to be the heading. */
   movingRef: RefObject<boolean>;
   updateTheme: (map: maplibregl.Map, s: Snap, time: number) => void;
@@ -41,9 +44,15 @@ interface Options {
 
 /** Road guidance on the map: the arrow, the camera behind the user, and rerouting. */
 export function useGuidance(o: Options) {
-  const { map, meRef, compass, touchingRef, followingRef, movingRef, updateTheme } = o;
+  const { map, meRef, compass, touchingRef, followingRef, overviewRef, movingRef, updateTheme } = o;
   const { settled, retry } = o;
   const lastView = useRef<NavCamera | null>(null);
+  /** What is left of the route from the user on, for the overview. */
+  const rest = useRef<[number, number][]>([]);
+  const ways = useRef({ route: o.route, mode: o.mode });
+  useEffect(() => {
+    ways.current = { route: o.route, mode: o.mode };
+  });
   /** The router answer count when a reroute was asked for; `null` when none is pending. */
   const [rerouteAt, setRerouteAt] = useState<number | null>(null);
   // A new drive starts with no reroute pending (state adjusted while rendering, not after).
@@ -68,8 +77,14 @@ export function useGuidance(o: Options) {
       movingRef.current = nav.moving;
       meRef.current?.heading(bearing);
       if (s && map) updateTheme(map, s, nav.time);
-      lastView.current = { center, bearing, speed: nav.speed };
+      lastView.current = { center, bearing, speed: nav.speed, mode: ways.current.mode };
+      const coords = ways.current.route?.coords;
+      rest.current = s && coords ? routeRest(coords, s.segment, center) : [center];
       if (!map || !followingRef.current || touchingRef.current.size) return;
+      if (overviewRef.current) {
+        fitNav(map, rest.current, motion(1000));
+        return;
+      }
       const away = s && !onLine && !nav.arrived ? s.point : null;
       if (away && distance(f, { lng: away[0], lat: away[1] }) > OVERVIEW_M) {
         overviewNav(map, center, away, bearing, motion(1000));
@@ -77,7 +92,7 @@ export function useGuidance(o: Options) {
         followNav(map, lastView.current, motion(1000));
       }
     },
-    [map, compass, meRef, movingRef, touchingRef, followingRef, updateTheme],
+    [map, compass, meRef, movingRef, touchingRef, followingRef, overviewRef, updateTheme],
   );
 
   // The route being followed stays until a new one comes, and a failed request keeps it.
@@ -105,9 +120,15 @@ export function useGuidance(o: Options) {
         ? 'asking'
         : 'failed';
 
-  const recenter = useCallback(() => {
-    if (map && lastView.current) followNav(map, lastView.current, motion(600));
-  }, [map]);
+  /** Back to following, or to the overview, at once rather than on the next fix. */
+  const recenter = useCallback(
+    (overview: boolean) => {
+      if (!map) return;
+      if (overview) fitNav(map, rest.current, motion(600));
+      else if (lastView.current) followNav(map, lastView.current, motion(600));
+    },
+    [map],
+  );
 
   return { nav, tracking: !!tr, rerouteState, recenter } as const;
 }

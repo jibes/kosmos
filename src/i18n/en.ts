@@ -203,6 +203,7 @@ export const en = {
   end: 'End',
   mute: 'Mute voice',
   map: 'Map',
+  overview: 'Overview',
   recenter: 'Re-centre',
   arrived: 'You have arrived',
   rerouting: 'Finding a new route…',

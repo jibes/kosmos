@@ -12,8 +12,8 @@ import {
   type Route,
 } from '../core/route';
 import { fill, t, units } from '../i18n';
-import { LaneIcon, LocateIcon, TurnIcon } from './icons';
-import { NavBar } from './NavBar';
+import { LaneIcon, TurnIcon } from './icons';
+import { NavBar, ViewToggle } from './NavBar';
 import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
 import { useNow } from './useNow';
@@ -25,6 +25,9 @@ interface Props {
   lang: string;
   muted: boolean;
   following: boolean;
+  /** The rest of the way on screen instead of the view close by. */
+  overview: boolean;
+  onOverview: () => void;
   /** Asking the router for a new route, or it failed and the old one is followed. */
   reroute: 'idle' | 'asking' | 'failed';
   destination: string;
@@ -41,7 +44,7 @@ const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
 export function NavView(props: Props) {
-  const { route, mode, nav, lang, muted, following, reroute, destination, ...on } = props;
+  const { route, mode, nav, lang, muted, following, overview, reroute, destination, ...on } = props;
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
@@ -120,12 +123,12 @@ export function NavView(props: Props) {
         )}
       </section>
 
-      {!following && (
-        <button type="button" className="recenter surface" onClick={on.onRecenter}>
-          <LocateIcon filled />
-          {t.recenter}
-        </button>
-      )}
+      <ViewToggle
+        following={following}
+        overview={overview}
+        onFollow={on.onRecenter}
+        onOverview={on.onOverview}
+      />
 
       {started && !nav.arrived && mode === 'car' && nav.speed <= MAX_MS && (
         <div className="speed surface" role="img" aria-label={`${speed} ${speedLabel(units)}`}>

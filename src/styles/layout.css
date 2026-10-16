@@ -227,4 +227,8 @@
     right: calc(var(--gutter) + var(--safe-right));
     bottom: calc(var(--gutter) + var(--safe-bottom) + 40px);
   }
+
+  .overview {
+    bottom: calc(var(--gutter) + var(--safe-bottom) + 116px);
+  }
 }

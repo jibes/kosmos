@@ -264,12 +264,32 @@ test.describe('routes', () => {
     await minutes(16);
     await expect(banner).toContainText('2 stops', { timeout: 10_000 });
     await expect(banner).toContainText('Get off at Unter den Linden');
+    // On board the map shows the rest of the line, north up from above, to the stop to get off.
+    const inView = (lng: number, lat: number) =>
+      page.evaluate(
+        ([lng, lat]) => {
+          const p = window.kosmos!.project([lng, lat]);
+          return p.x > 0 && p.y > 0 && p.x < innerWidth && p.y < innerHeight;
+        },
+        [lng, lat],
+      );
+    await expect.poll(() => inView(to.lng, stopLat)).toBe(true);
+    expect(await page.evaluate(() => window.kosmos!.getPitch())).toBe(0);
+    // The overview takes in the rest of the trip, the destination too; Re-centre comes back.
+    await page.getByRole('button', { name: 'Overview' }).click();
+    await expect(page.getByRole('button', { name: 'Re-centre' })).toBeVisible();
+    await expect.poll(() => inView(to.lng, to.lat)).toBe(true);
+    await page.getByRole('button', { name: 'Re-centre' }).click();
+    await expect(page.getByRole('button', { name: 'Overview' })).toBeVisible();
     // Tapping the banner shows the whole trip: this ride open, the stop behind dimmed.
     await banner.click();
     const trip = page.locator('.ride-details');
     await expect(trip.locator('[data-current]')).toContainText('U6');
     await expect(trip.locator('.stops li').first()).toHaveAttribute('data-passed', 'true');
     await expect(trip.locator('.stops li').nth(1)).not.toHaveAttribute('data-passed');
+    // A progress line: the next stop marked on it.
+    await expect(trip.locator('.stops li[data-next]')).toHaveCount(1);
+    await expect(trip.locator('.stops li').nth(1)).toHaveAttribute('data-next', 'true');
     await expect(trip.locator('.walk').first()).toHaveAttribute('data-done', 'true');
     // The banner keeps its place at the top, the trip right under it: nothing shifted over it.
     await expect
