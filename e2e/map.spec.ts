@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { CENTER } from './fixtures/scene';
-import { SEARCH_HIT, lookupRequests, offlineWorld, tileset } from './fixtures/offline-world';
+import {
+  SEARCH_HIT,
+  lookupRequests,
+  offlineWorld,
+  stopTimesRequests,
+  tileset,
+} from './fixtures/offline-world';
 import { shot, idle, jump, screenAt, inWorld, swipe, watchPages } from './helpers';
 
 watchPages();
@@ -348,6 +354,44 @@ test.describe('map', () => {
     await expect(card).toContainText('Unter den Linden 5, Berlin, Deutschland');
     await expect(card).not.toContainText('Kurfürstenstraße');
     expect(lookupRequests.length).toBe(asked);
+  });
+
+  test("shows the next departures on a station's card, asking once", async ({ page }) => {
+    const station = { lng: CENTER.lng + 60 / 67800, lat: CENTER.lat + 230 / 111200 };
+    await jump(page, { ...station, zoom: 17 });
+    const at = await screenAt(page, station.lng, station.lat);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ x, y }) =>
+            window
+              .kosmos!.queryRenderedFeatures([
+                [x - 10, y - 10],
+                [x + 10, y + 20],
+              ])
+              .some((f) => f.properties.name === 'Bahnhof Friedrichstraße'),
+          at,
+        ),
+      )
+      .toBe(true);
+    const asked = stopTimesRequests.length;
+    await page.mouse.click(at.x, at.y + 8);
+    const card = page.locator('.card');
+    await expect(card.getByRole('heading', { level: 2 })).toHaveText('Bahnhof Friedrichstraße');
+    const rows = card.locator('.departures li');
+    // Soonest first, live time, the line in its colour, a changed platform marked.
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('U6');
+    await expect(rows.nth(0)).toContainText('Alt-Tegel');
+    await expect(rows.nth(1)).toContainText('S1');
+    await expect(rows.nth(1).locator('time')).toHaveAttribute('data-late');
+    await expect(rows.nth(1).locator('small')).toHaveAttribute('data-moved');
+    expect(stopTimesRequests.length).toBe(asked + 1);
+    // Closed and opened again soon: the same answer, no new request.
+    await card.getByRole('button', { name: 'Close' }).click();
+    await page.mouse.click(at.x, at.y + 8);
+    await expect(rows).toHaveCount(2);
+    expect(stopTimesRequests.length).toBe(asked + 1);
   });
 
   test('says when the map has no connection, covering nothing', async ({ page, context }) => {

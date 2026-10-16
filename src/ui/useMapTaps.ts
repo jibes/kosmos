@@ -9,6 +9,7 @@ import {
   searchUrl,
   type Place,
 } from '../core/search';
+import { isStopPoi } from '../core/departures';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER } from '../core/style';
 import { lang, t } from '../i18n';
 import { onLongPress } from './gestures';
@@ -124,7 +125,10 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
           ? { lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }
           : e.lngLat;
       const radius = RADIUS_M[f.layer.id] ?? PLACE_RADIUS_M;
-      select({ name, detail: '', ...at }, () => addressOf(name, at, radius));
+      const stop = f.layer.id === 'label-poi' && isStopPoi(props);
+      select({ name, detail: '', ...at, ...(stop ? { stop } : {}) }, () =>
+        addressOf(name, at, radius),
+      );
     };
     const offHold = onLongPress(map, (at) => {
       const { select, showToast, setActive, setTrip } = opts.current;

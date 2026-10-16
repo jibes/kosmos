@@ -8,15 +8,18 @@ const count = (n: number, one: string, many: string) =>
   n === 1 ? one : many.replace('{n}', `${n}`);
 
 /** What to call a ride: its line ("U6"), or else its kind of vehicle ("bus"). */
-export const lineName = (leg: TransitLeg) => leg.line ?? t[`veh_${vehicleOf(leg.mode) ?? 'other'}`];
+/** What a line badge needs: a leg of a trip, or a departure. */
+export type LineOf = Pick<TransitLeg, 'mode' | 'line' | 'color' | 'textColor'>;
+
+export const lineName = (leg: LineOf) => leg.line ?? t[`veh_${vehicleOf(leg.mode) ?? 'other'}`];
 
 /** Buses and trams leave from a stand ("Steig"), trains from a platform ("Gleis"). */
-const onRoad = (leg: TransitLeg) => ['bus', 'tram'].includes(vehicleOf(leg.mode) ?? '');
-export const platformWord = (leg: TransitLeg) => (onRoad(leg) ? t.stand : t.platform);
-export const sayPlatformOf = (leg: TransitLeg) => (onRoad(leg) ? t.sayStand : t.sayPlatform);
+const onRoad = (leg: LineOf) => ['bus', 'tram'].includes(vehicleOf(leg.mode) ?? '');
+export const platformWord = (leg: LineOf) => (onRoad(leg) ? t.stand : t.platform);
+export const sayPlatformOf = (leg: LineOf) => (onRoad(leg) ? t.sayStand : t.sayPlatform);
 
 /** A line as people know it: its number in its own colour, with the kind of vehicle. */
-export function LineChip({ leg, big }: { leg: TransitLeg; big?: boolean }) {
+export function LineChip({ leg, big }: { leg: LineOf; big?: boolean }) {
   const vehicle = vehicleOf(leg.mode);
   return (
     <span

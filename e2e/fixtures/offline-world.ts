@@ -198,6 +198,9 @@ export const photonSearches: string[] = [];
 /** The planet build the TileJSON names, as OpenFreeMap renews it every week or so. */
 export const tileset = { build: '20261001_001001_pt' };
 
+/** Every departures request, by its query. */
+export const stopTimesRequests: URLSearchParams[] = [];
+
 export const routeRequests: { costing: string; from: Pt; to: Pt }[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
@@ -283,6 +286,32 @@ export async function offlineWorld(context: BrowserContext) {
       body: JSON.stringify({
         trip: fakeTrip(s, [s[0], e[1]], e, speed),
         alternates: [{ trip: fakeTrip(s, [e[0], s[1]], e, speed * 0.8) }],
+      }),
+    });
+  });
+  await context.route(/api\.transitous\.org\/api\/v5\/stoptimes/, (route) => {
+    stopTimesRequests.push(new URL(route.request().url()).searchParams);
+    const iso = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
+    const at = (planned: number, live: number, track: string, planTrack = track) => ({
+      departure: iso(live),
+      scheduledDeparture: iso(planned),
+      track,
+      scheduledTrack: planTrack,
+    });
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        stopTimes: [
+          {
+            place: at(4, 6, '2', '1'),
+            mode: 'SUBURBAN',
+            displayName: 'S1',
+            headsign: 'Oranienburg',
+            routeColor: 'DE4DA4',
+          },
+          { place: at(2, 2, '3'), mode: 'SUBWAY', displayName: 'U6', headsign: 'Alt-Tegel' },
+        ],
       }),
     });
   });

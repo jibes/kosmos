@@ -1,4 +1,5 @@
 import { distance, type LngLat } from './geo';
+import { isStopOsm } from './departures';
 
 /** Photon: OSM search built for search-as-you-type, unlike Nominatim's usage policy. */
 export const PHOTON_URL = 'https://photon.komoot.io';
@@ -16,6 +17,8 @@ export interface Place extends LngLat {
   unnamed?: boolean;
   /** Found outside the view: none of its kind was in it, so the nearest around it. */
   beyond?: boolean;
+  /** A stop or station: its card shows the next departures. */
+  stop?: boolean;
   /** The OSM object (`N123`, `W456`), when the search knows it; details are looked up by it. */
   osm?: string;
 }
@@ -49,6 +52,8 @@ interface PhotonProps {
   type?: string;
   osm_type?: string;
   osm_id?: number;
+  osm_key?: string;
+  osm_value?: string;
   housenumber?: string;
   street?: string;
   postcode?: string;
@@ -87,6 +92,7 @@ function toPlace(f: PhotonFeature): Place | null {
   if (p.osm_type && /^[NWR]$/.test(p.osm_type) && Number.isInteger(p.osm_id)) {
     place.osm = `${p.osm_type}${p.osm_id}`;
   }
+  if (isStopOsm(p.osm_key, p.osm_value)) place.stop = true;
   if (p.extent?.length === 4 && p.extent.every(Number.isFinite)) {
     // Photon's extent is [minLon, maxLat, maxLon, minLat].
     const [w, n, e, s] = p.extent;

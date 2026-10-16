@@ -5,6 +5,7 @@ import { lang, locale, t } from '../i18n';
 import { focusSearch, useFocusOnMount } from './a11y';
 import { CloseIcon, CopyIcon, NearbyIcon, RouteIcon, ShareIcon } from './icons';
 import { copy, share } from './native';
+import { Departures } from './Departures';
 import { PlaceDetails } from './PlaceDetails';
 import { Sheet } from './Sheet';
 import { usePlaceDetails } from './usePlaceDetails';
@@ -66,6 +67,7 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
         </button>
       </header>
       {details && <PlaceDetails details={details} lng={place.lng} />}
+      <Departures place={place} lang={lang} />
       <button type="button" className="coords" title={t.copy} onClick={onCopy}>
         {copied ? t.copied : formatLngLat(place, 5, locale)}
         {!copied && <CopyIcon size={13} />}
