@@ -1,4 +1,5 @@
 import { distance, type LngLat } from './geo';
+import { fold } from './categories';
 import { isStopOsm } from './departures';
 import { kindOfOsm, type PlaceKind } from './placeKind';
 
@@ -32,8 +33,35 @@ export interface SearchBias extends LngLat {
   zoom: number;
 }
 
-export function searchUrl(query: string, lang: string, bias?: SearchBias, limit = 7): string {
+/**
+ * Kinds of place the map's tiles do not list, which people look for by their kind alone: the
+ * whole query naming one asks Photon for those only, so "Flughafen" finds airports, not every
+ * Flughafenstrasse and bus stop of that name first.
+ */
+const WORLD_KINDS: Record<string, string> = Object.fromEntries(
+  [
+    'flughafen',
+    'airport',
+    'airports',
+    'flugplatz',
+    'airfield',
+    'aerodrome',
+    'aeroport',
+    'aeroporto',
+    'aeropuerto',
+  ].map((w) => [w, 'aeroway:aerodrome']),
+);
+
+/** The OSM tag to search for alone, when the query is the word for such a kind. */
+export const worldKind = (query: string): string | undefined => WORLD_KINDS[fold(query).trim()];
+
+/** Enough names to scroll through: a short word matches many places. */
+const LIMIT = 15;
+
+export function searchUrl(query: string, lang: string, bias?: SearchBias, limit = LIMIT): string {
   const q = new URLSearchParams({ q: query.trim(), limit: String(limit) });
+  const tag = worldKind(query);
+  if (tag) q.set('osm_tag', tag);
   if (PHOTON_LANGS.has(lang)) q.set('lang', lang);
   if (bias) {
     q.set('lat', bias.lat.toFixed(4));

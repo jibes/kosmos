@@ -33,6 +33,23 @@ test.describe('search', () => {
     await expect(page.locator('.pin')).toHaveCount(0);
   });
 
+  test('finds airports by the word, and more names than fit, scrolling', async ({ page }) => {
+    const input = page.getByRole('combobox');
+    await input.fill('Flughafen');
+    const option = page.getByRole('option').filter({ hasText: 'Flughafen Zürich' });
+    await expect(option).toBeVisible();
+    await expect(option.locator('svg[data-kind="plane"]')).toBeVisible();
+    await expect(page.getByRole('option').filter({ hasText: 'Flughafenstraße' })).toHaveCount(0);
+
+    await input.fill('Platz');
+    const rows = page.getByRole('option').filter({ hasText: /^Platz \d+/ });
+    await expect(rows).toHaveCount(12);
+    const list = page.locator('.results');
+    expect(await list.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
+    await rows.last().scrollIntoViewIfNeeded();
+    await expect(rows.last()).toBeInViewport();
+  });
+
   test('never shows the places of a category as answers to a name', async ({ page, context }) => {
     await context.route(/photon\.komoot\.io\/api\//, async (route) => {
       await new Promise((r) => setTimeout(r, 2000));

@@ -35,6 +35,21 @@ describe('searchUrl', () => {
     expect(p.get('limit')).toBe('3');
   });
 
+  it('asks for enough names to scroll through', () => {
+    expect(Number(new URL(searchUrl('x', 'de')).searchParams.get('limit'))).toBeGreaterThan(10);
+  });
+
+  it('asks for airports alone when the query is the word for them', () => {
+    const tag = (q: string) => new URL(searchUrl(q, 'de')).searchParams.get('osm_tag');
+    expect(tag('Flughafen')).toBe('aeroway:aerodrome');
+    expect(tag(' Flughäfen ')).toBe('aeroway:aerodrome');
+    expect(tag('airport')).toBe('aeroway:aerodrome');
+    expect(tag('Aéroport')).toBe('aeroway:aerodrome');
+    // A name with the word in it is a name: searched as typed.
+    expect(tag('Flughafen Zürich')).toBeNull();
+    expect(tag('Flughafenstrasse')).toBeNull();
+  });
+
   it('builds reverse lookups', () => {
     const p = new URL(reverseUrl({ lng: 1, lat: 2 }, 'fr')).searchParams;
     expect(p.get('lat')).toBe('2.000000');

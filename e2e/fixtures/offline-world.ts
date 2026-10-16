@@ -232,47 +232,78 @@ export async function offlineWorld(context: BrowserContext) {
     route.fulfill({ contentType: 'application/x-protobuf', body: Buffer.alloc(0) }),
   );
   await context.route(/photon\.komoot\.io\/api\//, (route) => {
-    const q = new URL(route.request().url()).searchParams.get('q') ?? '';
-    const hits = /brandenburg/i.test(q)
-      ? [
-          photonPoint(SEARCH_HIT.lng, SEARCH_HIT.lat, {
-            name: SEARCH_HIT.name,
-            street: 'Pariser Platz',
-            district: 'Mitte',
-            city: 'Berlin',
-            country: 'Deutschland',
-            osm_type: 'W',
-            osm_id: 518071791,
-          }),
-          photonPoint(13.0, 52.4, {
-            name: 'Brandenburg an der Havel',
-            country: 'Deutschland',
-            // A town: an extent to fit, [minLon, maxLat, maxLon, minLat].
-            extent: [12.45, 52.47, 12.65, 52.36],
-          }),
-        ]
-      : /einstein/i.test(q)
-        ? // Another branch of the same name, 2 km away; the tapped one is not in the index.
-          [
-            photonPoint(CENTER.lng + 0.03, CENTER.lat, {
-              name: 'Café Einstein',
-              street: 'Kurfürstenstraße',
-              city: 'Berlin',
-              osm_type: 'N',
-              osm_id: 777,
+    const params = new URL(route.request().url()).searchParams;
+    const q = params.get('q') ?? '';
+    const hits = /^flughafen$/i.test(q)
+      ? // Asked for airports alone, the airport; else only a street of that name.
+        params.get('osm_tag') === 'aeroway:aerodrome'
+        ? [
+            photonPoint(CENTER.lng + 0.2, CENTER.lat + 0.1, {
+              name: 'Flughafen Zürich',
+              city: 'Kloten',
+              osm_key: 'aeroway',
+              osm_value: 'aerodrome',
             }),
           ]
-        : /media/i.test(q)
-          ? // The chain's branches Photon knows: one far away, one in view.
-            [
-              photonPoint(CENTER.lng, CENTER.lat - 0.05, { name: 'MediaMarkt', city: 'Berlin' }),
-              // One of the branches in view: its row would repeat the chain's.
-              photonPoint(CENTER.lng - 250 / 67800, CENTER.lat - 500 / 111200, {
-                name: 'MediaMarkt',
-                city: 'Mitte',
+        : [
+            photonPoint(CENTER.lng, CENTER.lat + 0.01, {
+              name: 'Flughafenstraße',
+              city: 'Berlin',
+              osm_key: 'highway',
+              type: 'street',
+            }),
+          ]
+      : /^platz$/i.test(q)
+        ? // A short word many places share: more than a screen of them.
+          Array.from({ length: 12 }, (_, i) =>
+            photonPoint(CENTER.lng + i * 0.002, CENTER.lat, {
+              name: `Platz ${i + 1}`,
+              city: 'Berlin',
+            }),
+          )
+        : /brandenburg/i.test(q)
+          ? [
+              photonPoint(SEARCH_HIT.lng, SEARCH_HIT.lat, {
+                name: SEARCH_HIT.name,
+                street: 'Pariser Platz',
+                district: 'Mitte',
+                city: 'Berlin',
+                country: 'Deutschland',
+                osm_type: 'W',
+                osm_id: 518071791,
+              }),
+              photonPoint(13.0, 52.4, {
+                name: 'Brandenburg an der Havel',
+                country: 'Deutschland',
+                // A town: an extent to fit, [minLon, maxLat, maxLon, minLat].
+                extent: [12.45, 52.47, 12.65, 52.36],
               }),
             ]
-          : [];
+          : /einstein/i.test(q)
+            ? // Another branch of the same name, 2 km away; the tapped one is not in the index.
+              [
+                photonPoint(CENTER.lng + 0.03, CENTER.lat, {
+                  name: 'Café Einstein',
+                  street: 'Kurfürstenstraße',
+                  city: 'Berlin',
+                  osm_type: 'N',
+                  osm_id: 777,
+                }),
+              ]
+            : /media/i.test(q)
+              ? // The chain's branches Photon knows: one far away, one in view.
+                [
+                  photonPoint(CENTER.lng, CENTER.lat - 0.05, {
+                    name: 'MediaMarkt',
+                    city: 'Berlin',
+                  }),
+                  // One of the branches in view: its row would repeat the chain's.
+                  photonPoint(CENTER.lng - 250 / 67800, CENTER.lat - 500 / 111200, {
+                    name: 'MediaMarkt',
+                    city: 'Mitte',
+                  }),
+                ]
+              : [];
     photonSearches.push(q);
     return route.fulfill({ contentType: 'application/json', body: photon(hits) });
   });
