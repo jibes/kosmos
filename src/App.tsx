@@ -17,6 +17,8 @@ import { SearchBar, useSearch } from './ui/SearchBar';
 import { Toasts, useToast } from './ui/Toasts';
 import { useLocation } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
+import { useCompassFollow } from './ui/useCompassFollow';
+import { useShared } from './ui/useShared';
 import { useMap } from './ui/useMap';
 import { useCategory } from './ui/useCategory';
 import { useRide } from './ui/useRide';
@@ -340,48 +342,14 @@ export function App() {
 
   // Compass: the beam on the dot always; in compass mode the map turns with the phone.
   const lastNavMoving = useRef(false);
-  useEffect(() => {
-    if (!map) return;
-    let frame = 0;
-    let latest = 0;
-    const off = compass.subscribe((h) => {
-      latest = h;
-      if (roadNavRef.current) {
-        // Slow or standing: GPS course is noise, so the arrow shows where the phone faces.
-        if (!lastNavMoving.current) me.current?.heading(h);
-        return;
-      }
-      me.current?.facing(h);
-      if (followRef.current !== 'compass' || frame) return;
-      const turn = () => {
-        if (followRef.current !== 'compass') {
-          frame = 0;
-          return;
-        }
-        // Another camera move (e.g. the fly-in after tapping locate) runs, or a finger is on
-        // the map: try again next frame.
-        if (map.isMoving() || touching.current.size) {
-          frame = requestAnimationFrame(turn);
-          return;
-        }
-        frame = 0;
-        // A turn too small to see is not worth a camera move (each one is a moveend).
-        const delta = Math.abs(((latest - map.getBearing() + 540) % 360) - 180);
-        if (delta >= 0.5) map.setBearing(latest);
-      };
-      frame = requestAnimationFrame(turn);
-    });
-    // Turning the map by hand leaves compass mode but keeps following the position.
-    const onRotate = (e: { originalEvent?: Event }) => {
-      if (e.originalEvent && followRef.current === 'compass') setFollow('position');
-    };
-    map.on('rotatestart', onRotate);
-    return () => {
-      off();
-      cancelAnimationFrame(frame);
-      map.off('rotatestart', onRotate);
-    };
-  }, [map, compass]);
+  useCompassFollow(map, compass, {
+    me,
+    roadNavRef,
+    navMovingRef: lastNavMoving,
+    followRef,
+    touching,
+    setFollow,
+  });
 
   // Route: alternatives under the chosen one; refit only when the trip itself changes.
   const shown = route.routes;
@@ -582,6 +550,7 @@ export function App() {
   useAutoLocate(map, start, flyOnFix);
 
   useHint(map, showToast, dismissText, !!selection || !!trip || navigating);
+  useShared(map, select, search.setQuery);
 
   const panelRef = usePanel(map, sel && !trip && !navigating ? sel : null, selection?.loading);
 

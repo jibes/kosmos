@@ -48,9 +48,14 @@ const Kosmos = isNative
       log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
       light(o: { on: boolean }): Promise<{ available: boolean }>;
       vibrate(o: { pattern: number[] }): Promise<void>;
+      takeShared(): Promise<{ text?: string }>;
       addListener(
         event: 'light',
         listener: (e: { lux: number }) => void,
+      ): Promise<PluginListenerHandle>;
+      addListener(
+        event: 'shared',
+        listener: (e: { text: string }) => void,
       ): Promise<PluginListenerHandle>;
     }>('Kosmos')
   : null;
@@ -76,6 +81,25 @@ export function vibrate(pattern: readonly number[]) {
       // Not allowed here (no user gesture yet, or a desktop browser): nothing to feel.
     }
   }
+}
+
+/**
+ * Android: what other apps hand over (a geo: link, a map link, a shared message), the one the
+ * app was opened with first; `null` on the web, where the address bar brings it.
+ */
+export function watchShared(onText: (text: string) => void): (() => void) | null {
+  const kosmos = Kosmos;
+  if (!kosmos) return null;
+  let stopped = false;
+  const handle = kosmos.addListener('shared', (e) => !stopped && onText(e.text));
+  void kosmos
+    .takeShared()
+    .then((r) => !stopped && r.text && onText(r.text))
+    .catch(() => undefined);
+  return () => {
+    stopped = true;
+    void handle.then((h) => h.remove());
+  };
 }
 
 /**

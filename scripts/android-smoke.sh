@@ -52,6 +52,27 @@ if ! grep -q "kosmos:ready" "$OUT/logcat.txt"; then
 fi
 [ "$fail" = 0 ] || exit "$fail"
 
+# A place handed over by another app, through the app's own intent filters: a geo: link, then
+# a shared message. Both are taken (the app logs which kind, never the place), with no crash.
+adb logcat -c
+adb shell am start -W -p "$PKG" -a android.intent.action.VIEW -d "'geo:52.5163,13.3777?z=17'" >/dev/null
+sleep 4
+adb shell am start -W -p "$PKG" -a android.intent.action.SEND -t text/plain \
+  --es android.intent.extra.TEXT "'Brandenburger Tor, Pariser Platz, Berlin'" >/dev/null
+sleep 4
+adb logcat -d > "$OUT/logcat-shared.txt"
+for kind in point words; do
+  if ! grep -q "shared: $kind" "$OUT/logcat-shared.txt"; then
+    echo "::error::a $kind handed over by another app never arrived (no 'shared: $kind' in logcat)"
+    fail=1
+  fi
+done
+if ! adb shell pidof "$PKG" >/dev/null || grep -E "FATAL EXCEPTION" "$OUT/logcat-shared.txt"; then
+  echo "::error::kOSMos crashed on a place handed over by another app"
+  fail=1
+fi
+[ "$fail" = 0 ] || exit "$fail"
+
 # Guidance's location service, as Start leaves it once location is allowed. The service is not
 # exported; root may start it. The app stays in front with the screen on, as at Start.
 if ! adb root; then

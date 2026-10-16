@@ -394,6 +394,26 @@ test.describe('map', () => {
     expect(stopTimesRequests.length).toBe(asked + 1);
   });
 
+  test('opens a place handed over by another app', async ({ page }) => {
+    // A map link shared to the app (the web share target): its point, its card, the map there.
+    const link = 'https://www.openstreetmap.org/?mlat=52.5163&mlon=13.3777#map=17/52.5163/13.3777';
+    await page.goto(`./?url=${encodeURIComponent(link)}`);
+    const card = page.locator('.card');
+    await expect(card).toContainText('Unter den Linden 5');
+    await idle(page);
+    const c = await page.evaluate(() => window.kosmos!.getCenter());
+    expect(Math.abs(c.lat - 52.5163)).toBeLessThan(0.005);
+    // The address bar no longer holds it: a reload does not open it again.
+    expect(page.url()).not.toContain('url=');
+
+    // A message with a link only its maker can open: its words are searched.
+    const text = 'Café Einstein, Kurfürstenstraße 58, 10785 Berlin https://maps.app.goo.gl/AbC1';
+    await page.goto(`./?text=${encodeURIComponent(text)}`);
+    const input = page.getByRole('combobox');
+    await expect(input).toHaveValue('Café Einstein, Kurfürstenstraße 58, 10785 Berlin');
+    await expect(input).toBeFocused();
+  });
+
   test('says when the map has no connection, covering nothing', async ({ page, context }) => {
     const note = page.getByRole('status').filter({ hasText: 'No connection' });
     await context.setOffline(true);

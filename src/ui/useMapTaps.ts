@@ -57,7 +57,7 @@ export async function addressOf(
 }
 
 /** What is at a dropped pin: the nearest object's name and address, by reverse lookup. */
-async function spotOf(at: LngLat): Promise<Partial<Place>> {
+export async function spotOf(at: LngLat): Promise<Partial<Place>> {
   const [hit] = parsePhoton(await fetchJson(reverseUrl(at, lang)));
   return hit
     ? { name: hit.name, detail: hit.detail, ...(hit.osm ? { osm: hit.osm } : {}) }

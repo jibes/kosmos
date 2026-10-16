@@ -28,8 +28,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 /**
  * The app's own small native helpers: its page in the system settings (where a refused location
  * permission is allowed again), other audio ducking under spoken prompts, the ambient light
- * while guiding (for the map's theme), a buzz for a turn when the voice is off, and a log line
- * under its own tag. Release builds forward nothing
+ * while guiding (for the map's theme), a buzz for a turn when the voice is off, a place opened
+ * or shared from another app, and a log line under its own tag. Release builds forward nothing
  * else from the WebView to the system log, so no position ever ends up there; the CI smoke test
  * reads the "loaded" line and web errors from this tag.
  */
@@ -184,5 +184,43 @@ public class KosmosPlugin extends Plugin {
             vibrator.vibrate(effect);
         }
         call.resolve();
+    }
+
+    /**
+     * What another app handed over: a link it opened here (geo:, a map link), or the text of a
+     * message it shared (a place's name, address and link). The web app reads the place.
+     */
+    private static String sharedText(Intent intent) {
+        if (intent == null) return null;
+        if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
+            return intent.getData().toString();
+        }
+        if (Intent.ACTION_SEND.equals(intent.getAction()) && "text/plain".equals(intent.getType())) {
+            String text = intent.getStringExtra(Intent.EXTRA_TEXT);
+            String subject = intent.getStringExtra(Intent.EXTRA_SUBJECT);
+            if (text == null) return subject;
+            return subject != null && !text.contains(subject) ? subject + "\n" + text : text;
+        }
+        return null;
+    }
+
+    /** The place the app was opened with, once: taken, it is not handed over again. */
+    @PluginMethod
+    public void takeShared(PluginCall call) {
+        String text = sharedText(getActivity().getIntent());
+        if (text != null) getActivity().setIntent(new Intent(Intent.ACTION_MAIN));
+        JSObject result = new JSObject();
+        if (text != null) result.put("text", text);
+        call.resolve(result);
+    }
+
+    /** A place handed over while the app runs. */
+    @Override
+    protected void handleOnNewIntent(Intent intent) {
+        String text = sharedText(intent);
+        if (text == null) return;
+        JSObject data = new JSObject();
+        data.put("text", text);
+        notifyListeners("shared", data, true);
     }
 }

@@ -50,6 +50,12 @@ export default defineConfig({
         theme_color: '#121417',
         background_color: '#121417',
         categories: ['navigation', 'travel', 'utilities'],
+        // A place shared from another app opens here (`ui/useShared.ts` reads the address).
+        share_target: {
+          action: './',
+          method: 'GET',
+          params: { title: 'title', text: 'text', url: 'url' },
+        },
         icons: [
           { src: 'icons/192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/512.png', sizes: '512x512', type: 'image/png' },
