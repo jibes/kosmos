@@ -1,4 +1,5 @@
 import { distance, type LngLat } from './geo';
+import type { PlaceKind } from './placeKind';
 
 /**
  * What the user searched for and took, newest first, kept on the device only: a place found by
@@ -14,6 +15,7 @@ export type Recent =
         lat: number;
         osm?: string;
         bbox?: [number, number, number, number];
+        kind?: PlaceKind;
       };
       at: number;
     }

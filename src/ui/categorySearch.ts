@@ -14,6 +14,7 @@ import {
   type Kind,
 } from '../core/categories';
 import { isStopPoi } from '../core/departures';
+import { kindOfPoi } from '../core/placeKind';
 import type { LngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { t } from '../i18n';
@@ -223,13 +224,14 @@ export async function findCategory(
       unnamed: !own,
       // A stop's card shows its departures, as when its label is tapped.
       ...(isStopPoi(s.props) ? { stop: true } : {}),
+      kind: kindOfPoi(s.props),
       beyond: !inView(s),
       lng: s.lng,
       lat: s.lat,
     };
   });
   return nearest(pois, from, widened ? BEYOND_SHOWN : undefined).map(
-    ({ name, unnamed, beyond, stop, lng, lat, m }) => ({
+    ({ name, unnamed, beyond, stop, kind, lng, lat, m }) => ({
       name,
       detail: '',
       lng,
@@ -238,6 +240,7 @@ export async function findCategory(
       ...(unnamed ? { unnamed } : {}),
       ...(beyond ? { beyond } : {}),
       ...(stop ? { stop } : {}),
+      kind,
     }),
   );
 }

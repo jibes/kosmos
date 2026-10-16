@@ -1,10 +1,20 @@
 import type { ReactNode } from 'react';
 import type { LaneView } from '../core/lanes';
 import type { TravelMode, Turn } from '../core/route';
+import type { PlaceKind } from '../core/placeKind';
 import type { Vehicle } from '../core/transit';
 
-const Svg = ({ children, size = 20 }: { children: ReactNode; size?: number }) => (
+const Svg = ({
+  children,
+  size = 20,
+  kind,
+}: {
+  children: ReactNode;
+  size?: number;
+  kind?: string;
+}) => (
   <svg
+    data-kind={kind}
     width={size}
     height={size}
     viewBox="0 0 24 24"
@@ -231,4 +241,38 @@ const VEHICLE_PATHS: Record<Vehicle, ReactNode> = {
 /** What a line runs with: bus, tram, underground, train, ferry, cable car, plane. */
 export const VehicleIcon = ({ vehicle, size = 14 }: { vehicle: Vehicle; size?: number }) => (
   <Svg size={size}>{VEHICLE_PATHS[vehicle]}</Svg>
+);
+
+/** The kinds that are not vehicles: a line drawing each, at the size of a row's text. */
+const KIND_PATHS: Record<Exclude<PlaceKind, Vehicle>, ReactNode> = {
+  food: <path d="M7 3v8m-2.5-8v5a2.5 2.5 0 0 0 5 0V3M7 11v10M16.5 21V3c-2 1.5-3 4-3 8h3" />,
+  cafe: (
+    <path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9Zm11 1.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3m4-3v3" />
+  ),
+  drink: <path d="M5 4h14l-7 8-7-8Zm7 8v8m-4 0h8" />,
+  shop: <path d="M5 8h14l-1 12H6L5 8Zm4 0V6.5a3 3 0 0 1 6 0V8" />,
+  stay: (
+    <path d="M3 18V7m0 7h18v4m0-4v-2.5A2.5 2.5 0 0 0 18.5 9H11v5M7 12.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
+  ),
+  culture: <path d="M3 9.5 12 4l9 5.5M5 10v8m4.7-8v8m4.6-8v8M19 10v8M3 20h18" />,
+  park: <path d="M12 21v-6m0 0c3.3 0 6-2.5 6-5.5S15.3 3 12 3 6 6 6 9.5 8.7 15 12 15Z" />,
+  health: <path d="M9.5 4h5v5.5H20v5h-5.5V20h-5v-5.5H4v-5h5.5V4Z" />,
+  school: <path d="M3 9 12 5l9 4-9 4-9-4Zm4 2v5c1.5 1.3 3 2 5 2s3.5-.7 5-2v-5M21 9v5" />,
+  town: <path d="M4 20V9l5-3v14m0 0V11h6v9m0-6h5v6M3 20h18M12 14v.01M12 17v.01" />,
+  street: <path d="M8 3 5 21m11-18 3 18M12 4v2.5m0 4v3m0 4V20" />,
+  address: <path d="M4 11 12 4l8 7m-14-1.5V20h12V9.5M10 20v-5h4v5" />,
+  place: (
+    <path d="M12 21s-6.5-5.8-6.5-11a6.5 6.5 0 0 1 13 0c0 5.2-6.5 11-6.5 11Zm0-8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+  ),
+};
+
+const VEHICLES = new Set<string>(['train', 'subway', 'tram', 'bus', 'ferry', 'plane']);
+
+/** A search result's kind at a glance: the vehicle of a station, a cup for a café. */
+export const KindIcon = ({ kind, size = 18 }: { kind: PlaceKind; size?: number }) => (
+  <Svg size={size} kind={kind}>
+    {VEHICLES.has(kind)
+      ? VEHICLE_PATHS[kind as Vehicle]
+      : KIND_PATHS[kind as Exclude<PlaceKind, Vehicle>]}
+  </Svg>
 );

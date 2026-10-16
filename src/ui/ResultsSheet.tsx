@@ -3,6 +3,7 @@ import { formatDistance } from '../core/route';
 import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
 import { wide } from './layout';
+import { KindIcon } from './icons';
 import { Sheet } from './Sheet';
 
 interface Props {
@@ -107,6 +108,7 @@ export function ResultsSheet({
                 onFocus={() => setHeld(i)}
                 onBlur={() => setHeld(null)}
               >
+                <KindIcon kind={p.kind ?? 'place'} />
                 <span className="r-name">{p.name}</span>
                 <span className="r-detail">
                   {p.distance !== undefined ? formatDistance(p.distance, lang, units) : p.detail}

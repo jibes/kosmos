@@ -404,6 +404,20 @@ h2[tabindex='-1']:focus-visible {
   align-items: center;
 }
 
+/* A place found: what it is at a glance (a station, a café), its name and its line. */
+.results li.r-place {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  column-gap: 10px;
+  align-items: center;
+}
+
+.r-place > svg,
+.results-list button > svg {
+  grid-row: span 2;
+  color: var(--muted);
+}
+
 /* A search taken before: the clock, its name and line, and a way to forget it. */
 .results li.r-recent {
   display: grid;

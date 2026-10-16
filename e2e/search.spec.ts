@@ -427,6 +427,8 @@ test.describe('search', () => {
     await page.getByRole('option').filter({ hasText: 'Stations' }).click();
     const rows = await resultRows(page);
     await expect(rows).toHaveText([/Bahnhof Friedrichstraße/]);
+    // What it is shows before its name is read: a train for a station.
+    await expect(rows.first().locator('svg[data-kind="train"]')).toBeVisible();
     await rows.first().click();
     const card = page.locator('.card');
     await expect(card.getByRole('heading', { level: 2 })).toHaveText('Bahnhof Friedrichstraße');

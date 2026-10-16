@@ -21,7 +21,7 @@ import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/sea
 import { getJson, nominatimSlot } from './http';
 import { fill, t, units } from '../i18n';
 import { touch } from './layout';
-import { ClockIcon, CloseIcon, SearchIcon } from './icons';
+import { ClockIcon, CloseIcon, KindIcon, SearchIcon } from './icons';
 import { forgetRecent, rememberRecent, useRecent } from './useRecent';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
@@ -357,9 +357,17 @@ export function SearchBar({
   const pick = (place: Place) => {
     // Found by name (not a dot from the map): worth finding again without typing.
     if (place.distance === undefined) {
-      const { name, detail, lng, lat, osm, bbox } = place;
+      const { name, detail, lng, lat, osm, bbox, kind } = place;
       rememberRecent({
-        place: { name, detail, lng, lat, ...(osm ? { osm } : {}), ...(bbox ? { bbox } : {}) },
+        place: {
+          name,
+          detail,
+          lng,
+          lat,
+          ...(osm ? { osm } : {}),
+          ...(bbox ? { bbox } : {}),
+          ...(kind ? { kind } : {}),
+        },
       });
     }
     onPick(place);
@@ -475,7 +483,7 @@ export function SearchBar({
               }
               role="option"
               id={`${listId}-${i}`}
-              className={it.recent ? 'r-recent' : it.cat ? 'r-cat' : undefined}
+              className={it.recent ? 'r-recent' : it.cat ? 'r-cat' : 'r-place'}
               aria-selected={i === active}
               onPointerDown={(e) => e.preventDefault()}
               onClick={() => choice(it)}
@@ -514,6 +522,7 @@ export function SearchBar({
                 </>
               ) : (
                 <>
+                  <KindIcon kind={it.place.kind ?? 'place'} />
                   <span className="r-name">{it.place.name}</span>
                   {it.place.distance !== undefined ? (
                     <span className="r-detail">
