@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { filterHeading, headingOf, type HeadingFilter } from '../core/compass';
+import { filterHeading, headingOf, norm, type HeadingFilter } from '../core/compass';
+import type { LngLat } from '../core/geo';
+import { decimalYear, declination } from '../core/magnetic';
 
 type Listener = (heading: number) => void;
 
@@ -8,10 +10,19 @@ interface IOSOrientationEvent {
 }
 
 /**
- * The device compass, smoothed. Headings stream to subscribers (60 Hz is too fast for React
- * state); `available` flips once, when the first north-anchored reading arrives.
+ * The device compass, smoothed, to true north. Headings stream to subscribers (60 Hz is too fast
+ * for React state); `available` flips once, when the first north-anchored reading arrives.
+ * Phones read magnetic north; the map is drawn to true north, so each reading adds the
+ * declination where the user is (`where`, kept to a tenth of a degree; none before a fix).
  */
-export function useCompass() {
+export function useCompass(where: LngLat | null) {
+  const lat = where ? Math.round(where.lat * 10) / 10 : null;
+  const lng = where ? Math.round(where.lng * 10) / 10 : null;
+  const offset = useRef(0);
+  useEffect(() => {
+    offset.current =
+      lat === null || lng === null ? 0 : declination({ lng, lat }, decimalYear(Date.now()));
+  }, [lat, lng]);
   const heading = useRef<number | null>(null);
   const filter = useRef<HeadingFilter | null>(null);
   const listeners = useRef(new Set<Listener>());
@@ -41,8 +52,9 @@ export function useCompass() {
         screen.orientation?.angle ?? 0,
       );
       if (h == null) return;
+      const north = norm(h + offset.current);
       if (heading.current == null) setAvailable(true);
-      filter.current = filterHeading(filter.current, h, e.timeStamp || performance.now());
+      filter.current = filterHeading(filter.current, north, e.timeStamp || performance.now());
       heading.current = filter.current.heading;
       for (const fn of listeners.current) fn(heading.current);
     };

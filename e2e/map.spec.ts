@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { decimalYear, declination } from '../src/core/magnetic';
 import { CENTER } from './fixtures/scene';
 import {
   SEARCH_HIT,
@@ -226,6 +227,9 @@ test.describe('map', () => {
         }
       }, 360 - heading);
     const locate = page.locator('.controls > button').first();
+    // Phones read magnetic north; the map's is true north, the declination east of it here.
+    const decl = declination(CENTER, decimalYear(Date.now()));
+    expect(decl).toBeGreaterThan(3);
     // What this browser offers, for the log when this test fails on a new Chromium.
     console.log(
       'orientation support',
@@ -244,7 +248,7 @@ test.describe('map', () => {
     // continuously, so keep sending until the first one lands.
     await expect
       .poll(async () => {
-        await face(0);
+        await face(-decl);
         return page.locator('.me.facing').count();
       })
       .toBe(1);
@@ -280,7 +284,10 @@ test.describe('map', () => {
     await locate.click();
     await expect(locate).toHaveAttribute('data-follow', 'compass');
     await face(90);
-    await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getBearing()))).toBe(90);
+    // Facing magnetic east, the map turns to east of true north by the declination.
+    await expect
+      .poll(() => page.evaluate(() => window.kosmos!.getBearing()))
+      .toBeCloseTo(90 + decl, 0);
 
     // The orientation button returns to north-up but keeps following.
     await page.getByRole('button', { name: /north|Norden/ }).click();

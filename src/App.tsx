@@ -73,7 +73,7 @@ export function App() {
   const { fix, status, start, subscribe, background } = useLocation();
   /** Off, follow the position north-up, or follow and turn the map with the compass. */
   const [follow, setFollow] = useState<Follow>('off');
-  const compass = useCompass();
+  const compass = useCompass(fix);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [about, setAbout] = useState(false);
   const { toast, showToast, dismiss, dismissText } = useToast();
