@@ -16,6 +16,8 @@ export const fold = (s: string) =>
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase()
+    // "Straße" and "Strasse" are one word.
+    .replace(/ß/g, 'ss')
     .trim();
 
 /**

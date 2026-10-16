@@ -25,13 +25,17 @@ export const PLACE_WORDS: Record<string, string> = {
   bicycle:
     'bicycle shop|bicycle store|bike|bike parts|bike shop|bike store|fahrrad-geschaft|fahrrad-handlung|fahrradgeschaft|fahrradladen|hobby|radservice|repair|tricycle|unicycle|velogeschaft|veloladen',
   bicycle_parking:
-    'bicycle lockers|bicycle parking|bicycle parking garage|bicycle shed|bicycle stand|bike|bike parking|bike rack|bike stands|cycle parking|cycling|fahrradparkgarage|fahrradparkplatz|fahrradschließfacher|fahrradschuppen|fahrradstander|veloparkplatz|velostander',
+    'bicycle lockers|bicycle parking|bicycle parking garage|bicycle shed|bicycle stand|bike|bike parking|bike rack|bike stands|cycle parking|cycling|fahrradparkgarage|fahrradparkplatz|fahrradschliessfacher|fahrradschuppen|fahrradstander|veloparkplatz|velostander',
   bicycle_rental:
     'bicycle|bicycle rental|bicycle share|bike|bike share|bikeshare|cycle dock|cycle hub|cycleshare|cycling|fahrradmietstation|fahrradverleih|rent a bike',
   biergarten: 'beer|beer garden|bier|biergarten|booze',
   books:
     'book seller|book shop|book store|bookseller|bookshop|bookstore|bucher|buchhandler|buchhandlung|buchladen|hobby',
   boutique: 'boutique',
+  bus_station:
+    'bus|bus station|bus terminal|busbahnhof|bushaltestelle|bushof|bustation|busterminal|public transit|public transportation|station|terminal|transit|transportation|zob',
+  bus_stop:
+    'bus|bus stop|bushaltestelle|platform|public transit|public transportation|transit|transportation',
   butcher:
     'beef|butcher|butcher shop|butchery|chicken|fleischer|fleischerei|fleischhackerei|lamb|meat|metzger|metzgerei|pork|pork store|schlachter|schlachterei',
   cafe: 'bistro|bubble tea cafe|bubble-tea-cafe|cafe|cafebar|coffee|coffeehouse|espresso|kaffee|kaffeehaus|latte|tea|teahouse|teehaus|teestube',
@@ -57,7 +61,7 @@ export const PLACE_WORDS: Record<string, string> = {
   chemist:
     'apothecary|apotheke|beauty|chemist|dispensary|drogerie|drug store|drugstore|gift|hair|medicine|pharmacy|prescription|tooth',
   cinema:
-    'autokino|cinema|drive-in|film|filmpalast|filmtheater|flick|großbildleinwand|imax|kino|lichtspielhaus|lichtspieltheater|movie|multiplex|picture|screen|show|theater',
+    'autokino|cinema|drive-in|film|filmpalast|filmtheater|flick|grossbildleinwand|imax|kino|lichtspielhaus|lichtspieltheater|movie|multiplex|picture|screen|show|theater',
   clinic:
     'abortion clinic|abtreibungsklinik|arztezentrum|clinic|facharztzentrum|fertility clinic|gesundheitszentrum|kinderwunschklinik|klinik|medical|medizinisches versorgungszentrum|mvz|urgentcare|versorgungszentrum',
   clothes:
@@ -67,7 +71,7 @@ export const PLACE_WORDS: Record<string, string> = {
   computer:
     'computer store|computerfachhandel|computergeschaft|computerladen|desktop|hardware|laptop|operating system|software',
   convenience:
-    'bodega|convenience shop|convenience store|corner shop|corner store|greißler|kleines lebensmittelgeschaft|mini-market|mini-mart|minimarkt|nachbarschaftsladen|spatkauf|spatverkauf|superette|tankstellenverkauf|tante-emma-laden',
+    'bodega|convenience shop|convenience store|corner shop|corner store|greissler|kleines lebensmittelgeschaft|mini-market|mini-mart|minimarkt|nachbarschaftsladen|spatkauf|spatverkauf|superette|tankstellenverkauf|tante-emma-laden',
   copyshop: 'copy shop|copy store|copy-shop|kopieranstalt|kopierladen|print|scan',
   cosmetics: 'cosmetics store|drogerie|kosmetikgeschaft|kosmetikladen|make-up|makeup',
   deli: 'charcuterie|cold cuts|deli|delicatessen|delikatessen-laden|feinkost-geschaft|feinkostladen|fine food store|gourmet food shop|gourmet food store|specialty food store',
@@ -103,7 +107,7 @@ export const PLACE_WORDS: Record<string, string> = {
   garden_centre:
     'garden center|gartencenter|gartenmarkt|gartenzentrum|landscape|mulch|nursery|plant nursery|retail plant nursery|shrub|tree',
   general:
-    'dorfladen|gemischtwarenhandlung|general dealer|general merchandise store|general merchant store|general store|greißler|small-town store|tante-emma-laden|village shop',
+    'dorfladen|gemischtwarenhandlung|general dealer|general merchandise store|general merchant store|general store|greissler|small-town store|tante-emma-laden|village shop',
   gift: 'geschenkartikelladen|geschenkehandlung|geschenkeladen|gift shop|present|souvenir shop|souvenirgeschaft|souvenirladen|tourist trap',
   golf_course: 'golf course|golfclub|golfkurs|golfplatz|links',
   grave_yard:
@@ -114,6 +118,7 @@ export const PLACE_WORDS: Record<string, string> = {
     'airbnb|b & b|b and b|b&b|bed & breakfast|bed and breakfast|bnb|fruhstuckspension|gastehaus|guest house|herberge|lodging|overnight accommodations|pension',
   hairdresser:
     "barber|barber shop|barber's|barbershop|barbier|friseur|frisor|hair salon|hair stylist|haircut|hairdresser",
+  halt: 'eisenbahn-haltepunkt|eisenbahn-station|halt|public transit|public transportation|rail|station|track|train|train station|transit|transportation|whistle stop',
   hardware:
     'craft|diy|do it yourself|eisenwarengeschaft|eisenwarenhandel|eisenwarenhandlung|eisenwarenladen|hardware|hardware shop|hardware store|home improvement|tools',
   hearing_aids:
@@ -165,10 +170,10 @@ export const PLACE_WORDS: Record<string, string> = {
     'bergsport- und camping|camping|climbing|hiking|hobby|outdoor equipment|outdoor supplies|outdoorbekleidungsgeschaft|outdoorgeschaft|outdoors store|outfitter',
   paint: 'anstreicherbedarf|farbengeschaft|farbenhandel|malerbedarf|paint store',
   parcel_locker:
-    'automated postal box|dropoff|locker|mail|package|package locker|packstation|paketautomat|paketschließfach|paketstation|parcel|parcel locker|pickup|schließfach',
+    'automated postal box|dropoff|locker|mail|package|package locker|packstation|paketautomat|paketschliessfach|paketstation|parcel|parcel locker|pickup|schliessfach',
   park: 'esplanade|estate|forest|garden|grass|green|grounds|grunanlage|lawn|lot|lustgarten|meadow|park|parkanlage|parkland|playground|plaza|pleasure garden|recreation area|square|stadtpark|tract|village green|woodland',
   parking:
-    'automobile parking|car parking|multilevel parking garage|p+r parkplatz|park & ride lot|parken|parken im seitenraum einer straße|parkhaus|parking|parkmoglichkeit|parkplatz|parkplatz im freien|parkplatze|parkstand|parkstande|rv parking|stellplatz|stellplatze|street-side parking|surface parking lot|tiefgarage|truck parking|underground parking|vehicle parking',
+    'automobile parking|car parking|multilevel parking garage|p+r parkplatz|park & ride lot|parken|parken im seitenraum einer strasse|parkhaus|parking|parkmoglichkeit|parkplatz|parkplatz im freien|parkplatze|parkstand|parkstande|rv parking|stellplatz|stellplatze|street-side parking|surface parking lot|tiefgarage|truck parking|underground parking|vehicle parking',
   perfumery: 'cologne|fragrance|parfumerie|parfumgeschaft|perfume|perfume store',
   pet: 'animal|cat|dog|fish|goldfisch|haustier|kitten|pet shop|pet store|puppy|reptile|tierhandlung|tiernahrung|tierzubehor|zoofachgeschaft|zoohandlung',
   pharmacy:
@@ -176,7 +181,7 @@ export const PLACE_WORDS: Record<string, string> = {
   photo:
     'camera|film|fotofachgeschaft|fotogeschaft|fotograf|fotoladen|lens|photo|photography store',
   pitch:
-    '-grube|american football field|american handball court|american-football-feld|amerikanischer handballplatz|archery range|australian football field|australian-football-feld|badminton court|badmintonplatz|baseball field|baseballfeld|basketball court|basketballplatz|beach volleyball court|beachvolleyballfeld|biathlon range|biathlon schießstand|bocce court|boccia-platz|bogenschießanlage|boules|bowling green|bowlingrasen|cricket field|cricket-spielfeld|discus ring|discus sector|diskusring|dreisprunggrube|field|field hockey pitch|foosball table|four square court|four square-spielfeld|funnel ball court|funnelballfeld|futsal court|futsalplatz|fußballplatz|gaga pit|gagaballfeld|giant chess board|großes schachbrett|hammer throw ring|hammer throw sector|hammerwurfring|handballplatz|high jump area|hochsprunganlage|hockeyfeld|horseback riding|horseback riding ring|horseshoes pit|hufeisenwurfplatz|javelin sector|kickertisch|kreissektor|kugelstoßring|leichtathletikanlage|long jump pit|netball court|netballfeld|padel court|padelplatz|paintball field|paintball gelande|pickleball court|pickleballplatz|ping pong table|pit|pole vault pit|reitbahn|reitplatz|rodeo arena|rugby league field|rugby union field|rugby-league-feld|rugby-union-feld|schießbahn|sector|shooting range|shot put pit|shot put ring|shuffleboard court|shuffleboard-platz|skate park|skatepark|soccer field|softball field|softballfeld|speerwurfsektor|spielfeld|sport field|sport pitch|sportfeld|sportplatz|stabhochsprunggrube|team handball court|tennis court|tennisplatz|tetherball court|tetherballplatz|tischfußballtisch|tischtennisplatte|track & field pitch|triple jump pit|volleyball court|volleyballplatz|weitsprunganlage',
+    '-grube|american football field|american handball court|american-football-feld|amerikanischer handballplatz|archery range|australian football field|australian-football-feld|badminton court|badmintonplatz|baseball field|baseballfeld|basketball court|basketballplatz|beach volleyball court|beachvolleyballfeld|biathlon range|biathlon schiessstand|bocce court|boccia-platz|bogenschiessanlage|boules|bowling green|bowlingrasen|cricket field|cricket-spielfeld|discus ring|discus sector|diskusring|dreisprunggrube|field|field hockey pitch|foosball table|four square court|four square-spielfeld|funnel ball court|funnelballfeld|fussballplatz|futsal court|futsalplatz|gaga pit|gagaballfeld|giant chess board|grosses schachbrett|hammer throw ring|hammer throw sector|hammerwurfring|handballplatz|high jump area|hochsprunganlage|hockeyfeld|horseback riding|horseback riding ring|horseshoes pit|hufeisenwurfplatz|javelin sector|kickertisch|kreissektor|kugelstossring|leichtathletikanlage|long jump pit|netball court|netballfeld|padel court|padelplatz|paintball field|paintball gelande|pickleball court|pickleballplatz|ping pong table|pit|pole vault pit|reitbahn|reitplatz|rodeo arena|rugby league field|rugby union field|rugby-league-feld|rugby-union-feld|schiessbahn|sector|shooting range|shot put pit|shot put ring|shuffleboard court|shuffleboard-platz|skate park|skatepark|soccer field|softball field|softballfeld|speerwurfsektor|spielfeld|sport field|sport pitch|sportfeld|sportplatz|stabhochsprunggrube|team handball court|tennis court|tennisplatz|tetherball court|tetherballplatz|tischfussballtisch|tischtennisplatte|track & field pitch|triple jump pit|volleyball court|volleyballplatz|weitsprunganlage',
   place_of_worship:
     "abbey|abtei|altarraum|andachtsstatte|basilica|basilika|bethel|buddhist temple|buddhistischer tempel|cathedral|chancel|chantry|chapel|christian church|christliche kirche|church|dom|fold|gebetshaus|geweihter ort|gotteshaus|heiligtum|hindu temple|hindutempel|house of god|house of prayer|house of worship|jewish synagogue|judische synagoge|kantorei|kapelle|kathedrale|kingdom hall of jehovah's witnesses|kirche|kirchgemeinde|konigreichssaal der zeugen jehovas|la luz del mundo tempel|la luz del mundo temple|minster|mission|moschee|mosque|multifaith centre|multifaith place of worship|multifaith prayer room|multifaith space|muslim mosque|muslimische moschee|oratorium|oratory|place of worship|quaker friends meeting house|quaker-versammlungshaus|religion|religionsubergreifende andachtsstatte|religious|sacellum|sanctuary|schrein|shinto shrine|shinto-schrein|shrine|sikh temple|sikh-tempel|synagoge|synagogue|tabernacle|tabernakel|tao-tempel|taoist temple|tempel|temple",
   playground:
@@ -201,8 +206,10 @@ export const PLACE_WORDS: Record<string, string> = {
     'boots|cleats|clogs|footwear|heels|loafers|oxfords|sandals|schuhgeschaft|schuhladen|shoe store|slippers|sneakers',
   sports: 'athletics|equestrian|fitness|hobby|sportgeschaft|sporthandlung|sporting goods store',
   sports_centre:
-    '-komplex|adventure park|athletic center|athletic centre|badeanstalt|climbing gym|complex|go kart facility|go-kart-anlage|hippodrome|hochseilgarten|horse race course|horse racecourse|kletterhalle|pferderennbahn|recreation center|recreation centre|schießsportanlage|shooting range facility|sportcomplex|sporthalle|sportplatz|sports center|sports centre|sports complex|sportzentrum|swimming pool facility',
+    '-komplex|adventure park|athletic center|athletic centre|badeanstalt|climbing gym|complex|go kart facility|go-kart-anlage|hippodrome|hochseilgarten|horse race course|horse racecourse|kletterhalle|pferderennbahn|recreation center|recreation centre|schiesssportanlage|shooting range facility|sportcomplex|sporthalle|sportplatz|sports center|sports centre|sports complex|sportzentrum|swimming pool facility',
   stadium: 'arena|stadion|stadium',
+  station:
+    'eisenbahn-station|public transit|public transportation|rail|railway station|station|terminal|track|train|train station|transit|transportation',
   stationery:
     'burobedarf|burobedarfsladen|card|office supply store|paper|schreibwarengeschaft|schreibwarenhandel|schreibwarenladen|stationary|stationery store',
   supermarket:
@@ -221,6 +228,7 @@ export const PLACE_WORDS: Record<string, string> = {
   townhall:
     'barangay hall|barangay halle|city|city hall|courthouse|gemeindeamt|gemeindeverwaltung|gemeindezentrum|government|municipal|rathaus|stadtisches rathaus|town hall|verwaltung|verwaltungszentrum|village',
   toys: 'games|hobby|spielwarengeschaft|spielzeuggeschaft|spielzeughandlung|spielzeugladen|teddy|toy store',
+  tram_stop: 'strassenbahn-halteplatz|tram stopping position',
   travel_agency:
     'cruises|flights|holiday|hotels|reiseburo|reiseveranstalter|tickets|tour operator|tours|travel agency|travel packages|vacation',
   university:
@@ -230,7 +238,7 @@ export const PLACE_WORDS: Record<string, string> = {
   video_games: 'computerspieleladen|hobby|video game store|videospielgeschaft|videospielladen',
   viewpoint: 'aussichtspunkt|lookout|overlook|scenery|scenic|vantage point|viewpoint|vista',
   watches: 'uhrengeschaft|uhrenladen|watches shop',
-  water_park: 'badeparadies|dive|erlebnisbad|freizeitpark|pool|spaßbad|swim|wasserpark|water park',
+  water_park: 'badeparadies|dive|erlebnisbad|freizeitpark|pool|spassbad|swim|wasserpark|water park',
   wine: 'enothek|vinothek|weinhandel|weinhandlung|weinhaus|weinladen|wine shop',
   zoo: 'animal|petting zoo|safari park|safaripark|streichelzoo|tierpark|wildlife park|wildpark|wildtiergehege|zoo|zoologischer garten',
 };

@@ -55,7 +55,7 @@ export function useCategory(
         type: 'FeatureCollection',
         features: places.map((p) => ({
           type: 'Feature',
-          properties: { name: p.name },
+          properties: { name: p.name, ...(p.stop ? { stop: true } : {}) },
           geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
         })),
       }),

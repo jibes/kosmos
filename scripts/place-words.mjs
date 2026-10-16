@@ -24,13 +24,14 @@ const STOP = new Set([
 ]);
 
 /** The OSM keys whose values OpenMapTiles keeps as the `poi` subclass. */
-const KEYS = ['amenity', 'shop', 'leisure', 'tourism', 'historic', 'landuse'];
+const KEYS = ['amenity', 'shop', 'leisure', 'tourism', 'historic', 'landuse', 'railway', 'highway'];
 
 const fold = (s) =>
   s
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase()
+    .replace(/ß/g, 'ss')
     .replace(/\(.*?\)/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -49,7 +50,8 @@ for (const [id, preset] of Object.entries(presets)) {
     const p = names[id];
     if (!p) continue;
     const all = [
-      ...(p.name ?? '').split(/[/,]/),
+      // "Train Station (Halt / Request)": the words in brackets explain, they do not name.
+      ...(p.name ?? '').replace(/\(.*?\)/g, '').split(/[/,]/),
       ...list(p.aliases),
       ...(own ? list(p.terms) : []),
     ];

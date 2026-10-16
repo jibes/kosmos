@@ -125,7 +125,8 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
           ? { lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }
           : e.lngLat;
       const radius = RADIUS_M[f.layer.id] ?? PLACE_RADIUS_M;
-      const stop = f.layer.id === 'label-poi' && isStopPoi(props);
+      // A stop's label, or the dot of a stop a search found.
+      const stop = (f.layer.id === 'label-poi' && isStopPoi(props)) || props.stop === true;
       select({ name, detail: '', ...at, ...(stop ? { stop } : {}) }, () =>
         addressOf(name, at, radius),
       );

@@ -52,6 +52,18 @@ describe('categories', () => {
     expect(categoriesFor('mosque')).toEqual(['worship']);
   });
 
+  it('finds stations and stops', () => {
+    expect(categoriesFor('Bahnhof')).toEqual(['station']);
+    expect(categoriesFor('U-Bahn')).toEqual(['station']);
+    expect(categoriesFor('train station')).toEqual(['station']);
+    expect(categoriesFor('Haltestelle')).toEqual(['tram_stop', 'bus_stop']);
+    expect(categoriesFor('Straßenbahn')).toEqual(['tram_stop']);
+    expect(categoriesFor('Strassenbahn')).toEqual(['tram_stop']);
+    expect(categoriesFor('Bushaltestelle')).toEqual(['bus_stop']);
+    expect(isOf('station', { name: 'Friedrichstraße', subclass: 'station' })).toBe(true);
+    expect(isOf('bus_stop', { name: 'Unter den Linden', subclass: 'bus_stop' })).toBe(true);
+  });
+
   it('offers what a beginning may mean, exact words first, at most two', () => {
     expect(categoriesFor('Lebens')).toEqual(['groceries']);
     expect(categoriesFor('bar')[0]).toBe('bar');

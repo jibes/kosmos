@@ -414,6 +414,19 @@ test.describe('search', () => {
     await expect(page.locator('.results-sheet')).toBeVisible();
   });
 
+  test('finds stations as a kind of place, their cards with departures', async ({ page }) => {
+    await jump(page, { ...CENTER, zoom: 15 });
+    const input = page.getByRole('combobox');
+    await input.fill('Bahnhof');
+    await page.getByRole('option').filter({ hasText: 'Stations' }).click();
+    const rows = await resultRows(page);
+    await expect(rows).toHaveText([/Bahnhof Friedrichstraße/]);
+    await rows.first().click();
+    const card = page.locator('.card');
+    await expect(card.getByRole('heading', { level: 2 })).toHaveText('Bahnhof Friedrichstraße');
+    await expect(card.locator('.departures li')).toHaveCount(2);
+  });
+
   test('asks Nominatim only for a settled query when Photon fails at once', async ({ page }) => {
     test.slow();
     await page.route(/photon\.komoot\.io\/api\//, (route) =>

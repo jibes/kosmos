@@ -384,7 +384,12 @@ function city(): Layers {
   layers.poi.push(
     point(m(140, -170), { class: 'cafe', name: 'Café Einstein', rank: 5 }),
     point(m(-320, 520), { class: 'museum', name: 'Museum für Naturkunde', rank: 2 }),
-    point(m(60, 230), { class: 'railway', name: 'Bahnhof Friedrichstraße', rank: 1 }),
+    point(m(60, 230), {
+      class: 'railway',
+      subclass: 'station',
+      name: 'Bahnhof Friedrichstraße',
+      rank: 1,
+    }),
     point(m(-1000, -330), { class: 'attraction', name: 'Brandenburger Tor', rank: 1 }),
   );
   layers.place.push(
