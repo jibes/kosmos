@@ -20,7 +20,7 @@ import { useCompass } from './ui/useCompass';
 import { useCompassFollow } from './ui/useCompassFollow';
 import { useShared } from './ui/useShared';
 import { useMap } from './ui/useMap';
-import { useCategory } from './ui/useCategory';
+import { ASKED, useCategory } from './ui/useCategory';
 import { useRide } from './ui/useRide';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useGuidance } from './ui/useGuidance';
@@ -313,11 +313,11 @@ export function App() {
     if (touching.current.size) return;
     if (flyOnFix.current) {
       flyOnFix.current = false;
-      map.flyTo({
-        center: [fix.lng, fix.lat],
-        zoom: Math.max(map.getZoom(), 15),
-        duration: motion(1800),
-      });
+      // Asked for by the location button: the search's results may now be elsewhere.
+      map.flyTo(
+        { center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: motion(1800) },
+        ASKED,
+      );
     } else if (followRef.current === 'position') {
       // Never cut short a running camera move (the fly-in after tapping locate would stop at
       // globe zoom); catch up when it ends, to the newest fix, since underground no further
@@ -504,11 +504,10 @@ export function App() {
     }
     setFollow('position');
     if (fix && map) {
-      map.flyTo({
-        center: [fix.lng, fix.lat],
-        zoom: Math.max(map.getZoom(), 15),
-        duration: motion(1400),
-      });
+      map.flyTo(
+        { center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: motion(1400) },
+        ASKED,
+      );
     } else {
       flyOnFix.current = true;
     }

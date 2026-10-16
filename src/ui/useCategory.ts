@@ -9,6 +9,12 @@ import { findCategory, seen, sharedNameInView } from './categorySearch';
 
 const SEARCH_LAYERS = ['search-dots', 'search-names'];
 
+/**
+ * A camera move the user asked for, though the app makes it (the location button): passed as
+ * the move's event data, it counts like their own pan, so the results may be elsewhere now.
+ */
+export const ASKED = { asked: true } as const;
+
 /** Moved this share of the view's width, or zoomed by a step, and the results are elsewhere. */
 const MOVED_SHARE = 0.4;
 const ZOOMED = 1;
@@ -32,6 +38,10 @@ export function useCategory(
   });
   const [active, setActive] = useState<Kind | null>(null);
   const [moved, setMoved] = useState(false);
+  const movedRef = useRef(moved);
+  useEffect(() => {
+    movedRef.current = moved;
+  });
   const [run, setRun] = useState(0);
   const token = useRef(0);
   const searched = useRef<{
@@ -175,12 +185,15 @@ export function useCategory(
     // ends: a drag or a fling with the gesture's own event, the app's camera (locate, follow,
     // show all) without one, also when it cuts a fling short (locate tapped while the map still
     // glides). The app's moves re-anchor the results and take back an offer already made.
-    const onMoveEnd = (e: { originalEvent?: Event }) => {
+    const onMoveEnd = (e: { originalEvent?: Event; asked?: boolean }) => {
       const s = searched.current;
       if (!s) return;
-      if (!e.originalEvent) {
-        searched.current = { ...s, center: map.getCenter(), zoom: map.getZoom() };
-        setMoved(false);
+      if (!e.originalEvent && !e.asked) {
+        // The app's own move (following the position, show all): the results move with it,
+        // unless the user has already looked elsewhere, which stands.
+        if (!movedRef.current) {
+          searched.current = { ...s, center: map.getCenter(), zoom: map.getZoom() };
+        }
         return;
       }
       const b = map.getBounds();
@@ -197,8 +210,11 @@ export function useCategory(
     };
   }, [map]);
 
-  /** Every result on screen at once, none chosen. */
-  const showAll = useCallback(() => fit(searched.current?.fit ?? []), [fit]);
+  /** Every result on screen at once, none chosen: back where they are. */
+  const showAll = useCallback(() => {
+    setMoved(false);
+    fit(searched.current?.fit ?? []);
+  }, [fit]);
 
   /** The dot of the `index`th result stands out; `null` puts it back. */
   const highlight = useCallback(

@@ -272,12 +272,19 @@ test.describe('search', () => {
     await expect.poll(dots).toBe(3);
     await input.blur();
 
-    // The app's own camera moves (here: locate) do not count as looking elsewhere.
+    // The location button takes the map where the user is: the results are elsewhere now, so
+    // it offers to search there, as the user's own pan would; searching there clears it.
     const here = page.getByRole('button', { name: 'Search this area' });
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: CENTER.lat + 0.03, longitude: CENTER.lng });
     await page.locator('.controls > button').first().click();
     await idle(page);
+    await expect(here).toBeVisible();
+    await here.click();
+    await expect(here).toHaveCount(0);
+    // Following the position moves the camera too, but asks nothing.
+    await context.setGeolocation({ latitude: CENTER.lat + 0.0302, longitude: CENTER.lng });
+    await page.waitForTimeout(1500);
     await expect(here).toHaveCount(0);
 
     // Dragging the map away offers to search the new area, without changing the zoom; there
@@ -318,7 +325,7 @@ test.describe('search', () => {
     await expect.poll(dots).toBe(3);
   });
 
-  test('locating the user while the map still glides offers no new search', async ({
+  test('locating the user while the map still glides offers to search there', async ({
     page,
     context,
   }) => {
@@ -341,8 +348,7 @@ test.describe('search', () => {
     await page.mouse.up();
     await page.locator('.controls > button').first().click();
     await idle(page);
-    await page.waitForTimeout(500);
-    await expect(page.getByRole('button', { name: 'Search this area' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Search this area' })).toBeVisible();
   });
 
   test('offers recent searches and common kinds in an empty field, kept on the device', async ({
