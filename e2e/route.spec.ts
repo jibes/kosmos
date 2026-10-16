@@ -140,7 +140,17 @@ test.describe('routes', () => {
     await expect(legs).toContainText('→ Alt-Tegel · 3 stops · +2 min late');
     // A ride opens to every stop with its time.
     await legs.getByRole('button', { name: /Alt-Tegel/ }).click();
-    await expect(legs.locator('.stops li')).toHaveText([/Französische Straße/, /Friedrichstraße/]);
+    await expect(legs.locator('.ride .stops li')).toHaveText([
+      /Stadtmitte/,
+      /Französische Straße/,
+      /Friedrichstraße/,
+      /Unter den Linden/,
+    ]);
+    // The times in one column, the names beside them all at the same place.
+    const lefts = await legs
+      .locator('.ride .stops li span')
+      .evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
+    expect(new Set(lefts).size).toBe(1);
     await expect(legs.locator('.ride time').first()).toHaveAttribute('data-late');
     await expect(legs.locator('.walk')).toHaveCount(2);
     await expect(card.locator('.summary')).toContainText('Direct');
@@ -285,11 +295,20 @@ test.describe('routes', () => {
     await banner.click();
     const trip = page.locator('.ride-details');
     await expect(trip.locator('[data-current]')).toContainText('U6');
-    await expect(trip.locator('.stops li').first()).toHaveAttribute('data-passed', 'true');
-    await expect(trip.locator('.stops li').nth(1)).not.toHaveAttribute('data-passed');
+    // Closed at first: boarding and getting off, the stops between a tap away.
+    const between = trip.locator('.stops li:not(.end)');
+    await expect(between).toHaveCount(0);
+    await expect(trip.locator('.ride .stops li.end')).toHaveCount(2);
+    await trip.getByRole('button', { name: /Alt-Tegel/ }).click();
+    await expect(trip.locator('.ride .stops li.end').first()).toHaveAttribute(
+      'data-passed',
+      'true',
+    );
+    await expect(between.first()).toHaveAttribute('data-passed', 'true');
+    await expect(between.nth(1)).not.toHaveAttribute('data-passed');
     // A progress line: the next stop marked on it.
     await expect(trip.locator('.stops li[data-next]')).toHaveCount(1);
-    await expect(trip.locator('.stops li').nth(1)).toHaveAttribute('data-next', 'true');
+    await expect(between.nth(1)).toHaveAttribute('data-next', 'true');
     await expect(trip.locator('.walk').first()).toHaveAttribute('data-done', 'true');
     // The banner keeps its place at the top, the trip right under it: nothing shifted over it.
     await expect

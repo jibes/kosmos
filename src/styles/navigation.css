@@ -165,8 +165,55 @@ button.via[aria-expanded='true']::after {
    stop ringed, faint ahead. */
 .legs .stops {
   --stop-line: var(--leg, color-mix(in srgb, var(--text) 45%, transparent));
-  margin-left: calc(-1 * var(--leg-col) - 10px);
   padding-left: 16px;
+}
+
+.legs .walk .stops {
+  margin-left: calc(-1 * var(--leg-col) - 10px);
+}
+
+/* A ride: its line and what it does on top, then its stops, boarding and getting off among
+   them, the times in one column so the names keep the width. */
+.legs .ride {
+  display: block;
+}
+
+.ride-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.legs .ride-head .via {
+  margin: 0;
+}
+
+.legs .ride .stops {
+  margin: 6px 0 0;
+}
+
+.legs .stops li.end {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.legs .stops li.end small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legs .stops li.end time {
+  font-weight: 600;
+}
+
+/* The line runs from the boarding stop's dot to the dot of the stop to get off at. */
+.legs .stops li.end:first-child::before {
+  top: 50%;
+}
+
+.legs .stops li.end:last-child::before {
+  bottom: 50%;
 }
 
 .legs .stops li {

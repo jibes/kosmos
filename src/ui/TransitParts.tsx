@@ -111,23 +111,25 @@ export function DepartTime({
 interface LegsProps {
   transit: Transit;
   lang: string;
-  /** While riding: the leg the rider is on, opened, with the stops behind them dimmed. */
+  /** While guiding: the leg the rider is on, with the stops behind them dimmed. */
   current?: number;
   /** Stops of the current ride already passed (of `via` plus the last). */
   passed?: number;
+  /** On board the current leg's vehicle: its first stop is behind. */
+  riding?: boolean;
   /** The destination's own name for the last leg; the planner calls it "END". */
   destination?: string;
 }
 
 /**
- * The connection leg by leg. Each ride and each walk opens to its detail: every stop with its
- * time, every turn with its street.
+ * The connection leg by leg, all closed at first. Each ride and each walk opens to its detail:
+ * every stop with its time, every turn with its street. A ride's times stand in one column,
+ * its stops on a line in the line's colour, which while guiding shows how far the ride is.
  */
-export function TransitLegs({ transit, lang, current, passed = 0, destination }: LegsProps) {
+export function TransitLegs(props: LegsProps) {
+  const { transit, lang, current, passed = 0, riding = false, destination } = props;
   const clock = (ms: number) => formatClock(new Date(ms), lang);
-  const [open, setOpen] = useState<Set<number>>(
-    () => new Set(current === undefined ? [] : [current]),
-  );
+  const [open, setOpen] = useState<Set<number>>(() => new Set());
   const toggle = (i: number) =>
     setOpen((o) => {
       const next = new Set(o);
@@ -158,17 +160,8 @@ export function TransitLegs({ transit, lang, current, passed = 0, destination }:
               data-current={here || undefined}
               data-done={(current !== undefined && i < current) || undefined}
             >
-              <LineChip leg={l} />
-              <div>
-                <p>
-                  <time data-late={l.delay > 0 || undefined}>{clock(l.start)}</time>
-                  <span>{l.from.name}</span>
-                  {l.from.track && (
-                    <small>
-                      {platformWord(l)} {l.from.track}
-                    </small>
-                  )}
-                </p>
+              <div className="ride-head">
+                <LineChip leg={l} />
                 {l.via.length > 0 ? (
                   <button
                     type="button"
@@ -181,28 +174,39 @@ export function TransitLegs({ transit, lang, current, passed = 0, destination }:
                 ) : (
                   <small className="via">{summary}</small>
                 )}
-                {shown && (
-                  <ol
-                    className="stops"
-                    style={l.color ? ({ '--leg': l.color } as CSSProperties) : undefined}
-                  >
-                    {l.via.map((v, k) => (
-                      <li
-                        key={k}
-                        data-passed={(here && k < passed) || undefined}
-                        data-next={(here && k === passed) || undefined}
-                      >
-                        <time>{v.arrival ? clock(v.arrival) : ''}</time>
-                        <span>{v.name}</span>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-                <p>
+              </div>
+              <ol
+                className="stops"
+                style={l.color ? ({ '--leg': l.color } as CSSProperties) : undefined}
+              >
+                <li className="end" data-passed={(here && riding) || undefined}>
+                  <time data-late={l.delay > 0 || undefined}>{clock(l.start)}</time>
+                  <span>{l.from.name}</span>
+                  {l.from.track && (
+                    <small>
+                      {platformWord(l)} {l.from.track}
+                    </small>
+                  )}
+                </li>
+                {shown &&
+                  l.via.map((v, k) => (
+                    <li
+                      key={k}
+                      data-passed={(here && k < passed) || undefined}
+                      data-next={(here && riding && k === passed) || undefined}
+                    >
+                      <time>{v.arrival ? clock(v.arrival) : ''}</time>
+                      <span>{v.name}</span>
+                    </li>
+                  ))}
+                <li
+                  className="end"
+                  data-next={(here && riding && passed >= l.via.length) || undefined}
+                >
                   <time>{clock(l.end)}</time>
                   <span>{i === last && destination ? destination : l.to.name}</span>
-                </p>
-              </div>
+                </li>
+              </ol>
             </li>
           );
         }

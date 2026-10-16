@@ -19,13 +19,21 @@ export function useCompass(where: LngLat | null) {
   const lat = where ? Math.round(where.lat * 10) / 10 : null;
   const lng = where ? Math.round(where.lng * 10) / 10 : null;
   const offset = useRef(0);
-  useEffect(() => {
-    offset.current =
-      lat === null || lng === null ? 0 : declination({ lng, lat }, decimalYear(Date.now()));
-  }, [lat, lng]);
   const heading = useRef<number | null>(null);
   const filter = useRef<HeadingFilter | null>(null);
   const listeners = useRef(new Set<Listener>());
+  useEffect(() => {
+    const next =
+      lat === null || lng === null ? 0 : declination({ lng, lat }, decimalYear(Date.now()));
+    const shift = next - offset.current;
+    offset.current = next;
+    // The first fix (or a long way travelled) turns the heading shown at once, not only with
+    // the next reading: a phone lying still may send few.
+    if (!filter.current || !shift) return;
+    filter.current = { ...filter.current, heading: norm(filter.current.heading + shift) };
+    heading.current = filter.current.heading;
+    for (const fn of listeners.current) fn(heading.current);
+  }, [lat, lng]);
   const [available, setAvailable] = useState(false);
   const stop = useRef<(() => void) | null>(null);
 

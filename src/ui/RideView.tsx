@@ -197,6 +197,7 @@ export function RideView(props: Props) {
               lang={lang}
               current={Math.min(st.leg, transit.legs.length - 1)}
               passed={passed}
+              riding={st.phase === 'ride'}
               destination={destination}
             />
           </RideDetails>
