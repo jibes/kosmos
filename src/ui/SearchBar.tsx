@@ -417,7 +417,7 @@ export function SearchBar({
       // "Restaurants" + search: show them all where they are, without choosing one.
       // Close the list first, so the fit measures the map the user will see.
       input.current?.blur();
-      if (results.length && onShowAll) requestAnimationFrame(onShowAll);
+      if (onShowAll) requestAnimationFrame(() => onShowAll());
     } else if (
       e.key === 'Enter' &&
       (status === 'error' || status === 'slow' || (current?.fallback && !results.length)) &&

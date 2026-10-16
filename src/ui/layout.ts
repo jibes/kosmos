@@ -104,3 +104,10 @@ export function followNav(map: maplibregl.Map, v: NavCamera, duration: number) {
     easing: (x) => x,
   });
 }
+
+/** The map's centre is more than a thumb's width from `p`. */
+export function offCentre(map: maplibregl.Map, p: { lng: number; lat: number }) {
+  const a = map.project([p.lng, p.lat]);
+  const c = map.project(map.getCenter());
+  return Math.hypot(a.x - c.x, a.y - c.y) > 48;
+}

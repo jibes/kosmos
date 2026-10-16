@@ -108,6 +108,7 @@ export const en = {
   cat_bicycle_parking: 'Bicycle parking',
   cat_bicycle: 'Bicycle shops',
   cat_bicycle_rental: 'Bike hire',
+  cat_stops: 'Public transport stops',
   cat_station: 'Stations',
   cat_tram_stop: 'Tram stops',
   cat_bus_stop: 'Bus stops',

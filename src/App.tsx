@@ -27,7 +27,7 @@ import { useGuidance } from './ui/useGuidance';
 import { FRESH_MS } from './ui/useNav';
 import { useRouteLayer } from './ui/useRouteLayer';
 import { motion } from './ui/motion';
-import { NO_PADDING, followNav, padding, routePadding, startBearing } from './ui/layout';
+import { NO_PADDING, followNav, offCentre, padding, routePadding, startBearing } from './ui/layout';
 import { MODE_KEY, store, storedMode } from './ui/prefs';
 import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
@@ -239,7 +239,11 @@ export function App() {
   const search = useSearch();
   /** "Nearby" on a place card: distances count from that place while it is in view. */
   const [near, setNear] = useState<Place | null>(null);
-  const category = useCategory(map, LABEL_LANG, routePadding, !!trip, near ?? fix);
+  const lookAway = useCallback(() => {
+    flyOnFix.current = false;
+    setFollow('off');
+  }, []);
+  const category = useCategory(map, LABEL_LANG, routePadding, !!trip, near ?? fix, lookAway);
 
   const bias = useCallback(() => {
     if (!map) return undefined;
@@ -491,6 +495,14 @@ export function App() {
     void compass.start();
     // The user's own place again: distances count from there, not from a "nearby" place.
     setNear(null);
+    // Following, yet the map shows somewhere else (a fit to results): back to the user first.
+    if (follow !== 'off' && fix && map && !map.isMoving() && offCentre(map, fix)) {
+      map.flyTo(
+        { center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: motion(1400) },
+        ASKED,
+      );
+      return;
+    }
     if (follow === 'position') {
       // Second tap: let the map turn with the phone, like a held paper map.
       if (compass.available) setFollow('compass');

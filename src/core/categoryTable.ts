@@ -174,6 +174,23 @@ export const TABLE = {
     tags: ['bicycle_rental'],
     words: ['fahrradverleih', 'leihrad', 'leihfahrrad', 'bike rental', 'bike hire', 'bike share'],
   },
+  stops: {
+    tags: ['station', 'halt', 'tram_stop', 'bus_stop', 'bus_station', 'ferry_terminal'],
+    words: [
+      'haltestelle',
+      'haltestellen',
+      'oepnv',
+      'opnv',
+      'nahverkehr',
+      'offentlicher nahverkehr',
+      'offentliche verkehrsmittel',
+      'public transport',
+      'public transit',
+      'transit',
+      'stop',
+      'stops',
+    ],
+  },
   station: {
     tags: ['station', 'halt'],
     words: [
@@ -189,6 +206,9 @@ export const TABLE = {
       'u-bahn',
       'ubahn',
       'u-bahnhof',
+      's-bahnhof',
+      'sbahnhof',
+      'ubahnhof',
       'metro',
       'subway',
       'underground',
@@ -199,20 +219,18 @@ export const TABLE = {
   },
   tram_stop: {
     tags: ['tram_stop'],
-    words: ['tram', 'tram stop', 'strassenbahn', 'strassenbahnhaltestelle', 'haltestelle'],
+    words: [
+      'tram',
+      'tram stop',
+      'tram stops',
+      'strassenbahn',
+      'strassenbahnhaltestelle',
+      'tramhaltestelle',
+    ],
   },
   bus_stop: {
     tags: ['bus_stop', 'bus_station'],
-    words: [
-      'bus',
-      'bus stop',
-      'bus station',
-      'bushaltestelle',
-      'bushalt',
-      'busbahnhof',
-      'zob',
-      'haltestelle',
-    ],
+    words: ['bus', 'bus stop', 'bus station', 'bushaltestelle', 'bushalt', 'busbahnhof', 'zob'],
   },
   taxi: {
     tags: ['taxi'],

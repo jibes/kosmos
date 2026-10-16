@@ -56,7 +56,14 @@ describe('categories', () => {
     expect(categoriesFor('Bahnhof')).toEqual(['station']);
     expect(categoriesFor('U-Bahn')).toEqual(['station']);
     expect(categoriesFor('train station')).toEqual(['station']);
-    expect(categoriesFor('Haltestelle')).toEqual(['tram_stop', 'bus_stop']);
+    // Every kind of stop at once, by the word for all of them.
+    expect(categoriesFor('Haltestelle')).toEqual(['stops']);
+    expect(categoriesFor('ÖPNV')).toEqual(['stops']);
+    expect(categoriesFor('public transport')[0]).toBe('stops');
+    expect(categoriesFor('Tramhaltestelle')).toEqual(['tram_stop']);
+    expect(categoriesFor('S-Bahnhof')).toEqual(['station']);
+    expect(isOf('stops', { name: 'Friedrichstraße', subclass: 'station' })).toBe(true);
+    expect(isOf('stops', { name: 'Am Kupfergraben', subclass: 'tram_stop' })).toBe(true);
     expect(categoriesFor('Straßenbahn')).toEqual(['tram_stop']);
     expect(categoriesFor('Strassenbahn')).toEqual(['tram_stop']);
     expect(categoriesFor('Bushaltestelle')).toEqual(['bus_stop']);

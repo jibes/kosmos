@@ -65,6 +65,7 @@ describe('parsePhoton', () => {
     expect(p).toEqual({
       name: 'Brandenburger Tor',
       detail: 'Pariser Platz, Mitte, Berlin, Deutschland',
+      kind: 'place',
       lng: 13.405,
       lat: 52.52,
     });

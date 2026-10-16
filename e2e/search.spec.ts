@@ -420,6 +420,63 @@ test.describe('search', () => {
     await expect(page.locator('.results-sheet')).toBeVisible();
   });
 
+  test('the location button comes back from results elsewhere and offers to search there', async ({
+    page,
+    context,
+  }) => {
+    test.slow();
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.05, longitude: CENTER.lng });
+    await page.reload();
+    await idle(page);
+    const locate = page.locator('.controls > button').first();
+    await locate.click();
+    await idle(page);
+    // Still following, the map shows somewhere else: the user searches there.
+    await jump(page, { ...CENTER, zoom: 14 });
+    await idle(page);
+    const input = page.getByRole('combobox');
+    await input.fill('Restaurants');
+    await page.getByRole('option').filter({ hasText: 'Restaurants' }).click();
+    await expect(await resultRows(page)).toHaveCount(3);
+    // Locate takes the map back to the user (not the compass), and offers the area there.
+    await locate.click();
+    await idle(page);
+    const lat = () => page.evaluate(() => window.kosmos!.getCenter().lat);
+    expect(await lat()).toBeCloseTo(CENTER.lat + 0.05, 3);
+    await expect(page.getByRole('button', { name: 'Search this area' })).toBeVisible();
+    // The search key now means here: the map stays with the user.
+    await input.focus();
+    await input.press('Enter');
+    await expect(page.getByRole('button', { name: 'Search this area' })).toHaveCount(0);
+    await page.waitForTimeout(1500);
+    expect(await lat()).toBeCloseTo(CENTER.lat + 0.05, 3);
+  });
+
+  test('"show all" stops following, so the results stay on screen', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.05, longitude: CENTER.lng });
+    await page.reload();
+    await idle(page);
+    await page.locator('.controls > button').first().click();
+    await idle(page);
+    await jump(page, { ...CENTER, zoom: 14 });
+    await idle(page);
+    const input = page.getByRole('combobox');
+    await input.fill('Restaurants');
+    await input.press('Enter');
+    await expect(await resultRows(page)).toHaveCount(3);
+    // The search key again: all of them on screen.
+    await input.focus();
+    await input.press('Enter');
+    await idle(page);
+    // A new fix does not pull the camera off the results.
+    await context.setGeolocation({ latitude: CENTER.lat + 0.0501, longitude: CENTER.lng });
+    await page.waitForTimeout(1500);
+    const lat = await page.evaluate(() => window.kosmos!.getCenter().lat);
+    expect(Math.abs(lat - CENTER.lat)).toBeLessThan(0.02);
+  });
+
   test('finds stations as a kind of place, their cards with departures', async ({ page }) => {
     await jump(page, { ...CENTER, zoom: 15 });
     const input = page.getByRole('combobox');

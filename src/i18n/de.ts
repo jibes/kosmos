@@ -110,6 +110,7 @@ export const de = {
   cat_bicycle_parking: 'Fahrradstellplätze',
   cat_bicycle: 'Fahrradläden',
   cat_bicycle_rental: 'Fahrradverleih',
+  cat_stops: 'Haltestellen',
   cat_station: 'Bahnhöfe',
   cat_tram_stop: 'Straßenbahnhaltestellen',
   cat_bus_stop: 'Bushaltestellen',

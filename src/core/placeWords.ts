@@ -90,6 +90,8 @@ export const PLACE_WORDS: Record<string, string> = {
   farm: 'baked goods|farm shop|farm stand|fresh food|fruits|greengrocer|hofladen|obst- und gemusestand|orchard|organics|produce stand|vegetables',
   fast_food:
     'bagel fast food|burger fast food|cafeteria|chicken fast food|chicken wings fast food|chinese fast food|chinesisches fast food|donut fast food|drive thru|drive-through|eisdiele|fast food|fish & chips fast food|food truck|hot dog fast food|hot-dog-stand|huhner fast food|ice cream fast food|imbiss|indian fast food|indisches fast food|juice fast food|kebab fast food|mexican fast food|mexikanisches fast food|pizza fast food|restaurant|saftbar|sandwich fast food|schnellimbiss|schnellrestaurant|sushi fast food|takeaway|takeout',
+  ferry_terminal:
+    'anleger|boat|boot|dock|fahre|fahrterminal|ferry|ferry terminal|pier|public transit|public transportation|schiffsanleger|station|terminal|transit|transportation',
   fitness_centre:
     'fitness center|fitness-center|fitness-studio|fitnesscenter|fitnessstudio|gym|gymnastikstudio|health|leisure|pilates|studio|yoga studio|yoga-studio',
   florist: 'blumengeschaft|blumenhandler|blumenladen|bouquet|florist|flower|flowers',

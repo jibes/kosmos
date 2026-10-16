@@ -9,6 +9,8 @@ import { findCategory, seen, sharedNameInView } from './categorySearch';
 
 const SEARCH_LAYERS = ['search-dots', 'search-names'];
 
+const anchor = (map: maplibregl.Map) => ({ center: map.getCenter(), zoom: map.getZoom() });
+
 /**
  * A camera move the user asked for, though the app makes it (the location button): passed as
  * the move's event data, it counts like their own pan, so the results may be elsewhere now.
@@ -31,7 +33,13 @@ export function useCategory(
   hidden: boolean,
   /** The user's position: distances count from there when it is in view. */
   me: LngLat | null,
+  /** The camera goes to the results: following the position would pull it off them. */
+  onFit: () => void,
 ) {
+  const onFitRef = useRef(onFit);
+  useEffect(() => {
+    onFitRef.current = onFit;
+  });
   const meRef = useRef(me);
   useEffect(() => {
     meRef.current = me;
@@ -85,6 +93,7 @@ export function useCategory(
   const fit = useCallback(
     (places: Place[]) => {
       if (!map || !places.length) return;
+      onFitRef.current();
       if (places.length === 1) {
         map.flyTo({
           center: [places[0].lng, places[0].lat],
@@ -134,7 +143,7 @@ export function useCategory(
         }));
         dots(places);
         setResults({ kind: c, places });
-        searched.current = { places, fit: near, center: map.getCenter(), zoom: map.getZoom() };
+        searched.current = { places, fit: near, ...anchor(map) };
         // Once the list has closed, so the fit measures the map the user will see.
         requestAnimationFrame(() => fit(near));
         return places;
@@ -148,12 +157,7 @@ export function useCategory(
         if (mine === token.current) {
           dots(places);
           setResults({ kind: c, places });
-          searched.current = {
-            places,
-            fit: places,
-            center: map.getCenter(),
-            zoom: map.getZoom(),
-          };
+          searched.current = { places, fit: places, ...anchor(map) };
         }
         return places;
       } catch (e) {
@@ -192,7 +196,7 @@ export function useCategory(
         // The app's own move (following the position, show all): the results move with it,
         // unless the user has already looked elsewhere, which stands.
         if (!movedRef.current) {
-          searched.current = { ...s, center: map.getCenter(), zoom: map.getZoom() };
+          searched.current = { ...s, ...anchor(map) };
         }
         return;
       }
@@ -210,9 +214,17 @@ export function useCategory(
     };
   }, [map]);
 
-  /** Every result on screen at once, none chosen: back where they are. */
+  /**
+   * Every result on screen at once, none chosen: back where they are. With the map moved away
+   * (the offer up) the search key means here instead, as the offer does.
+   */
   const showAll = useCallback(() => {
     setMoved(false);
+    const c = last.current;
+    if (movedRef.current && c && foundOf(c) === null) {
+      setRun((n) => n + 1);
+      return;
+    }
     fit(searched.current?.fit ?? []);
   }, [fit]);
 
