@@ -78,7 +78,7 @@ async function fetchPlaces(url: string, tile: TileId): Promise<Spot[]> {
  * The map the user sees: beside the side panel in the wide layout, the whole view otherwise;
  * and its middle, from which distances are measured when the user is elsewhere.
  */
-function seen(map: maplibregl.Map) {
+export function seen(map: maplibregl.Map) {
   const { width, height } = map.getCanvas().getBoundingClientRect();
   const panel = wide() ? document.querySelector('.panel')?.getBoundingClientRect() : undefined;
   const left = panel?.width ? panel.right : 0;

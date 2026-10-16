@@ -6,7 +6,7 @@ import {
   photonSearches,
   routeRequests,
 } from './fixtures/offline-world';
-import { shot, idle, jump, centreBeside, inWorld, watchPages } from './helpers';
+import { shot, idle, jump, centreBeside, inWorld, resultRows, watchPages } from './helpers';
 
 watchPages();
 
@@ -42,9 +42,8 @@ test.describe('search', () => {
     const input = page.getByRole('combobox');
     await input.fill('restaurant');
     await input.press('Enter');
-    await expect(page.getByRole('option').filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(
-      1,
-    );
+    const rows = await resultRows(page);
+    await expect(rows.filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(1);
     await input.fill('brandenburger');
     await page.waitForTimeout(300);
     await expect(page.getByRole('option').filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(
@@ -66,12 +65,17 @@ test.describe('search', () => {
     await expect(options.first()).toHaveAttribute('aria-selected', 'true');
     await input.press('Enter');
     await expect(input).toHaveValue('Restaurants');
+    // The list makes way for the map; the places are a sheet over it, nearest first.
+    await expect(options).toHaveCount(0);
+    const sheet = page.locator('.results-sheet');
+    await expect(sheet).toContainText(/Restaurants\s*3 · nearest \d+ m/, { timeout: 10_000 });
+    const rows = await resultRows(page);
 
     // A zoom-in, then up to 48 tiles read: slow machines need longer than the default.
-    await expect(options).toHaveCount(3, { timeout: 10_000 });
-    await expect(options.first()).toContainText('Zur Letzten Instanz');
-    await expect(options.first()).toContainText(/\d+ m/);
-    await expect(options.nth(2)).toContainText('Borchardt');
+    await expect(rows).toHaveCount(3, { timeout: 10_000 });
+    await expect(rows.first()).toContainText('Zur Letzten Instanz');
+    await expect(rows.first()).toContainText(/\d+ m/);
+    await expect(rows.nth(2)).toContainText('Borchardt');
     // Found from far out, though the tiles on screen hold only the most important places;
     // the first search from a very wide view looked closer, once, but not all the way.
     const zoom = () => page.evaluate(() => window.kosmos!.getZoom());
@@ -83,9 +87,12 @@ test.describe('search', () => {
         return data.features.length;
       });
     await expect.poll(dots).toBe(3);
-    // A category preselects nothing: Enter means "show me all of them".
-    await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
     await shot(page, info, 'category');
+    // Back in the field, the list has them; a category preselects nothing: Enter means "show
+    // me all of them".
+    await input.focus();
+    await expect(options).toHaveCount(3);
+    await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
     await input.press('Enter');
     await expect(options).toHaveCount(0);
     // The fit starts once the list has closed (next frame); a click before it ends would stop it.
@@ -126,7 +133,10 @@ test.describe('search', () => {
       .toBe(true);
     await page.mouse.click(borchardt.x, borchardt.y);
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Borchardt');
+    // The card stands in for the sheet, which comes back as it was when the card closes.
+    await expect(sheet).toBeHidden();
     await page.locator('.card').getByRole('button', { name: /close/i }).click();
+    await expect(sheet).toBeVisible();
 
     // Up close, the map's own label of a result gives way to the result's name: never twice.
     await jump(page, { lng: 13.405 + 500 / 67800, lat: 52.52 - 400 / 111200, zoom: 17 });
@@ -142,9 +152,10 @@ test.describe('search', () => {
     await jump(page, { ...CENTER, zoom: 15 });
     await input.fill('Lebensmittel');
     await options.filter({ hasText: 'Groceries' }).click();
-    await expect(options).toHaveCount(2);
-    await expect(options.first()).toContainText('Kiezmarkt');
-    await options.first().click();
+    const groceries = await resultRows(page);
+    await expect(groceries).toHaveCount(2);
+    await expect(groceries.first()).toContainText('Kiezmarkt');
+    await groceries.first().click();
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Kiezmarkt');
 
     await input.fill('');
@@ -160,7 +171,7 @@ test.describe('search', () => {
     await expect(suggestion).toContainText('Places in view');
     await suggestion.click();
     await expect(input).toHaveValue('Museums and galleries');
-    await expect(page.getByRole('option')).toHaveText([/Pergamonmuseum/]);
+    await expect(await resultRows(page)).toHaveText([/Pergamonmuseum/]);
     // Editing the text searches by name again.
     await input.fill('Muse');
     await expect(suggestion).toBeVisible();
@@ -186,8 +197,9 @@ test.describe('search', () => {
     await expect(options.nth(1)).toContainText('Berlin');
     await options.first().click();
     await expect(input).toHaveValue('MediaMarkt');
-    await expect(options).toHaveCount(2);
-    await expect(options.first()).toContainText(/\d+ m/);
+    const rows = await resultRows(page);
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText(/\d+ m/);
     const dots = () =>
       page.evaluate(async () => {
         const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
@@ -204,10 +216,13 @@ test.describe('search', () => {
     await input.fill('Kita');
     const options = page.getByRole('option');
     await options.filter({ hasText: 'Nurseries and kindergartens' }).click();
-    await expect(options).toHaveText([/Kita Sonnenschein.*\d+ m/]);
-    await expect(page.locator('.results')).toContainText('None in view. The nearest around it:');
-    // The map stays where it is until asked: Enter shows them.
+    await expect(await resultRows(page)).toHaveText([/Kita Sonnenschein.*\d+ m/]);
+    await expect(page.locator('.results-sheet')).toContainText(
+      'None in view. The nearest around it:',
+    );
+    // The map stays where it is until asked: Enter in the field shows them.
     expect(await page.evaluate(() => window.kosmos!.getZoom())).toBeCloseTo(17, 1);
+    await input.focus();
     await input.press('Enter');
     await expect
       .poll(() =>
@@ -229,7 +244,7 @@ test.describe('search', () => {
     await expect(options).toHaveText([/Nurseries and kindergartens/]);
     await input.press('Enter');
     await expect(input).toHaveValue('Nurseries and kindergartens');
-    await expect(options).toHaveText([/Kita Sonnenschein/]);
+    await expect(await resultRows(page)).toHaveText([/Kita Sonnenschein/]);
   });
 
   test('offers to search a new area only after the user moves the map', async ({
@@ -243,7 +258,7 @@ test.describe('search', () => {
     const input = page.getByRole('combobox');
     await input.fill('Restaurants');
     await input.press('Enter');
-    await expect(page.getByRole('option')).toHaveCount(3);
+    await expect(await resultRows(page)).toHaveCount(3);
     const zoom = () => page.evaluate(() => window.kosmos!.getZoom());
     const dots = () =>
       page.evaluate(async () => {
@@ -269,14 +284,18 @@ test.describe('search', () => {
     await idle(page);
     const drag = async (dx: number) => {
       const box = (await page.locator('canvas.maplibregl-canvas').boundingBox())!;
-      // Inside the canvas from edge to edge: a release outside the window never arrives.
+      // On the map itself, beside the column in the side layout (its results sheet is open
+      // there), and inside the canvas: a release outside the window never arrives.
+      const panel = (await page.locator('.panel').boundingBox())!;
+      const left = panel.y < box.height / 2 && panel.x < box.width / 2 ? panel.x + panel.width : 0;
+      const x = (share: number) => left + (box.width - left) * share;
       const y = box.y + box.height * 0.3;
-      const [from, to] = dx < 0 ? [0.9, 0.1] : [0.1, 0.9];
+      const [from, to] = dx < 0 ? [0.95, 0.05] : [0.05, 0.95];
       for (let i = 0; i < 2; i++) {
-        await page.mouse.move(box.x + box.width * from, y);
+        await page.mouse.move(x(from), y);
         await page.mouse.down();
-        await page.mouse.move(box.x + box.width * 0.5, y, { steps: 6 });
-        await page.mouse.move(box.x + box.width * to, y, { steps: 6 });
+        await page.mouse.move(x(0.5), y, { steps: 6 });
+        await page.mouse.move(x(to), y, { steps: 6 });
         await page.mouse.up();
         await idle(page);
       }
@@ -375,20 +394,51 @@ test.describe('search', () => {
     const input = page.getByRole('combobox');
     await input.fill('restaurant');
     await input.press('Enter');
-    await expect(page.getByRole('option').filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(
-      1,
-      { timeout: 5000 },
-    );
+    const rows = await resultRows(page);
+    await expect(rows.filter({ hasText: 'Zur Letzten Instanz' })).toHaveCount(1, {
+      timeout: 5000,
+    });
   });
 
-  test('Enter jumps to the first result, even before results load', async ({ page }) => {
+  test('Enter opens the only result, even before results load', async ({ page }) => {
+    const input = page.getByRole('combobox');
+    await input.fill('einstein');
+    await input.press('Enter');
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Café Einstein');
+    await idle(page);
+    const c = await page.evaluate(() => window.kosmos!.getCenter());
+    expect(Math.abs(c.lng - (CENTER.lng + 0.03))).toBeLessThan(0.01);
+  });
+
+  test('Enter shows all of several names, nearest first, none picked', async ({ page }) => {
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');
     await input.press('Enter');
-    await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    // No place card: the names are a sheet over the map, by distance.
+    await expect(page.locator('.card')).toHaveCount(0);
+    const rows = await resultRows(page);
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText(/\d+(\.\d)? k?m/);
+    const dots = () =>
+      page.evaluate(async () => {
+        const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
+        return ((await src.getData()) as GeoJSON.FeatureCollection).features.length;
+      });
+    await expect.poll(dots).toBe(2);
+    // Both are on screen: the town lies within 30 km of the gate.
     await idle(page);
-    const c = await page.evaluate(() => window.kosmos!.getCenter());
-    expect(Math.abs(c.lng - SEARCH_HIT.lng)).toBeLessThan(0.01);
+    const inView = await page.evaluate(
+      ([a, b]) => [a, b].every((p) => window.kosmos!.getBounds().contains(p as [number, number])),
+      [
+        [SEARCH_HIT.lng, SEARCH_HIT.lat],
+        [13.0, 52.4],
+      ],
+    );
+    expect(inView).toBe(true);
+    // A row opens its place; the search stays, its address is Photon's.
+    await rows.filter({ hasText: SEARCH_HIT.name }).click();
+    await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    await expect(page.locator('.card')).toContainText('Pariser Platz');
   });
 
   test('keeps a category search across a route, its dots out of the way meanwhile', async ({
@@ -402,8 +452,8 @@ test.describe('search', () => {
     const input = page.getByRole('combobox');
     await input.fill('Restaurants');
     await input.press('Enter');
-    const options = page.getByRole('option');
-    await expect(options).toHaveCount(3, { timeout: 10_000 });
+    const rows = await resultRows(page);
+    await expect(rows).toHaveCount(3, { timeout: 10_000 });
     const dots = () =>
       page.evaluate(async () => {
         const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
@@ -413,7 +463,7 @@ test.describe('search', () => {
       page.evaluate(
         () => window.kosmos!.getLayoutProperty('search-dots', 'visibility') ?? 'visible',
       );
-    await options.first().click();
+    await rows.first().click();
     const card = page.locator('.card');
     await card.getByRole('button', { name: /^Route$/ }).click();
     await expect(page.locator('.card.route')).toBeVisible();
@@ -439,9 +489,10 @@ test.describe('search', () => {
     const options = page.getByRole('option');
     await expect(options.first()).toHaveText(/Toilets/);
     await input.press('Enter');
-    await expect(options).toHaveCount(1, { timeout: 10_000 });
-    await expect(options.first()).toContainText('Toilet');
-    await options.first().click();
+    const rows = await resultRows(page);
+    await expect(rows).toHaveCount(1, { timeout: 10_000 });
+    await expect(rows.first()).toContainText('Toilet');
+    await rows.first().click();
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Toilet');
     await expect(page.locator('.card')).toContainText('Unter den Linden 5');
   });
@@ -489,6 +540,9 @@ test.describe('search', () => {
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');
     await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name);
+    // Down and up again: the first row, chosen, not only offered.
+    await input.press('ArrowDown');
+    await input.press('ArrowUp');
     await input.press('Enter');
     const place = page.locator('.card');
     await expect(place.getByRole('heading')).toBeFocused();

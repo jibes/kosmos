@@ -200,9 +200,22 @@ export function nearest<T extends Poi>(pois: T[], from: LngLat, limit = 20): (T 
  * What the map is searched for: a kind of place, or the places whose name begins so
  * ("name:MediaMarkt"), a chain or a name several places share.
  */
-export type Kind = Category | `name:${string}`;
+export type Kind = Category | `name:${string}` | `found:${string}`;
 export const byName = (name: string): Kind => `name:${name}`;
 export const nameOf = (k: Kind): string | null => (k.startsWith('name:') ? k.slice(5) : null);
+/**
+ * Places found by name, all shown at once (Enter without picking one of several): Photon's
+ * answer to the text, not a search of the map.
+ */
+export const foundFor = (text: string): Kind => `found:${text}`;
+export const foundOf = (k: Kind): string | null => (k.startsWith('found:') ? k.slice(6) : null);
+
+/** A view of several places found by name stays within this of the best: not the next town. */
+export const FOUND_NEAR_M = 30_000;
+
+/** The places to fit when showing them all: the best one and those near it. */
+export const nearBest = <T extends LngLat>(places: T[]): T[] =>
+  places.filter((p) => distance(places[0], p) <= FOUND_NEAR_M);
 
 /** A name to compare by: "Media Markt", "MediaMarkt" and "mediamarkt" are one. */
 export const squeeze = (s: string) => fold(s).replace(/[^\p{L}\p{N}]/gu, '');

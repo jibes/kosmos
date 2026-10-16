@@ -10,6 +10,7 @@ import { isNative, openAppSettings } from './ui/native';
 import { NavView, NavWaiting } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
 import { connectionStart, RideView, rideWords } from './ui/RideView';
+import { ResultsSheet } from './ui/ResultsSheet';
 import { RouteCard } from './ui/RouteCard';
 import { SearchBar, useSearch } from './ui/SearchBar';
 import { Toasts, useToast } from './ui/Toasts';
@@ -197,10 +198,11 @@ export function App() {
         return;
       }
       setFollow('off');
-      // A place found by category comes from the map; its address comes from Photon.
+      // A place found by category comes from the map; its address comes from Photon. (Names
+      // shown all at once have a distance too, and their address already.)
       select(
         place,
-        place.distance === undefined
+        place.distance === undefined || place.detail
           ? undefined
           : () => addressOf(place.unnamed ? '' : place.name, place),
       );
@@ -679,6 +681,20 @@ export function App() {
                   onClose={clear}
                   onToast={showToast}
                   onRoute={openRoute}
+                />
+              )}
+              {/* What a search put on the map, by distance; under a place card it waits. */}
+              {search.category && !trip && (
+                <ResultsSheet
+                  key={search.category}
+                  label={search.query.trim()}
+                  places={
+                    category.results?.kind === search.category ? category.results.places : null
+                  }
+                  failed={category.results?.kind === search.category && category.results.failed}
+                  lang={lang}
+                  onPick={pick}
+                  hidden={!!selection}
                 />
               )}
               <SearchBar

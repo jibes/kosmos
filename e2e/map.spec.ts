@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { CENTER } from './fixtures/scene';
 import { SEARCH_HIT, lookupRequests, offlineWorld, tileset } from './fixtures/offline-world';
-import { shot, idle, jump, screenAt, inWorld, watchPages } from './helpers';
+import { shot, idle, jump, screenAt, inWorld, swipe, watchPages } from './helpers';
 
 watchPages();
 
@@ -86,6 +86,35 @@ test.describe('map', () => {
     await shot(page, info, 'minimised');
     await card.locator('.peek').click();
     await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+  });
+
+  test('a finger pulls a card down from anywhere on it, and up again', async ({ page }, info) => {
+    test.skip(!info.project.use.hasTouch, 'touch only');
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    const card = page.locator('.card');
+    await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    await card.evaluate((e) =>
+      Promise.all(e.getAnimations({ subtree: true }).map((a) => a.finished)),
+    );
+    // From the place's name, not the grab bar.
+    const head = (await card.getByRole('heading').boundingBox())!;
+    const at = { x: head.x + 20, y: head.y + head.height / 2 };
+    // Sideways is not a pull.
+    await swipe(page, at, { x: at.x + 120, y: at.y + 10 });
+    await expect(card).not.toHaveAttribute('data-min');
+    await swipe(page, at, { x: at.x, y: at.y + 160 });
+    await expect(card).toHaveAttribute('data-min');
+    // Settled as the strip first: it springs back into place after the finger lets go.
+    await page.waitForTimeout(500);
+    const strip = (await card.boundingBox())!;
+    const mid = { x: strip.x + strip.width / 2, y: strip.y + strip.height / 2 };
+    await swipe(page, mid, { x: mid.x, y: mid.y - 160 });
+    await expect(card).not.toHaveAttribute('data-min');
+    await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    // A tap is still a tap.
+    await card.getByRole('button', { name: 'Close' }).tap();
+    await expect(card).toHaveCount(0);
   });
 
   test('keeps the map buttons low, just above the panel', async ({ page }) => {

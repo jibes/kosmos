@@ -159,8 +159,12 @@ button.via[aria-expanded='true']::after {
   font-variant-numeric: tabular-nums;
 }
 
-.legs .walk .stops {
-  margin-left: 0;
+/* An opened leg's stops and turns use the leg's whole width, from under its line chip, along
+   a thin line in the line's colour, so they need not squeeze into the column beside it. */
+.legs .stops {
+  margin-left: calc(-1 * var(--leg-col) - 10px);
+  padding-left: 10px;
+  border-left: 2px solid var(--leg, color-mix(in srgb, var(--text) 30%, transparent));
 }
 
 .stops.turns li {

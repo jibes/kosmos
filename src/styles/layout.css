@@ -93,7 +93,8 @@
   }
 
   .modes button:not([aria-checked='true']):hover,
-  .alts button:not([aria-checked='true']):hover {
+  .alts button:not([aria-checked='true']):hover,
+  .results-list button:hover {
     background: var(--hover);
   }
 
@@ -163,7 +164,8 @@
 
   /* Every card scrolls inside the screen, also a phone held sideways; under the search bar
      when there is one. */
-  .panel .card {
+  .panel .card,
+  .panel .results-sheet {
     max-height: calc(100dvh - 2 * var(--gutter) - var(--safe-top) - var(--safe-bottom) - 74px);
     overflow-y: auto;
     overscroll-behavior: contain;

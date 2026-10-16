@@ -1,11 +1,11 @@
 import { motion } from './motion';
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Kind } from '../core/categories';
+import { foundOf, nearBest, nearest, type Kind } from '../core/categories';
 import { distance, type LngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { SEARCH_SOURCE } from '../core/style';
-import { findCategory, sharedNameInView } from './categorySearch';
+import { findCategory, seen, sharedNameInView } from './categorySearch';
 
 const SEARCH_LAYERS = ['search-dots', 'search-names'];
 
@@ -34,9 +34,19 @@ export function useCategory(
   const [moved, setMoved] = useState(false);
   const [run, setRun] = useState(0);
   const token = useRef(0);
-  const searched = useRef<{ places: Place[]; center: maplibregl.LngLat; zoom: number } | null>(
-    null,
-  );
+  const searched = useRef<{
+    places: Place[];
+    /** What "show all" fits: all of them, or for names the best and those near it. */
+    fit: Place[];
+    center: maplibregl.LngLat;
+    zoom: number;
+  } | null>(null);
+  /** What the map shows now, for the results sheet; `failed` when the tiles did not come. */
+  const [results, setResults] = useState<{
+    kind: Kind;
+    places: Place[];
+    failed?: boolean;
+  } | null>(null);
   /** Only the user's own panning and zooming moves away from results; the app's camera moves
    * (locate, follow, show all) re-anchor them instead. */
   const userMove = useRef(false);
@@ -55,28 +65,87 @@ export function useCategory(
     [map],
   );
 
+  /** Every one of `places` on screen at once, none chosen. */
+  const fit = useCallback(
+    (places: Place[]) => {
+      if (!map || !places.length) return;
+      if (places.length === 1) {
+        map.flyTo({
+          center: [places[0].lng, places[0].lat],
+          zoom: Math.max(map.getZoom(), 16),
+          padding: padding(),
+          duration: motion(1200),
+        });
+        return;
+      }
+      const lngs = places.map((p) => p.lng);
+      const lats = places.map((p) => p.lat);
+      map.fitBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)], {
+        padding: padding(),
+        absolutePadding: true,
+        maxZoom: 17,
+        duration: motion(900),
+      });
+    },
+    [map, padding],
+  );
+
+  /**
+   * Shows a kind of place on the map, or (`found:`) the places `given` by a name search: those
+   * nearest first, and the view fitted to the best and those near it at once.
+   */
   const onCategory = useCallback(
-    async (c: Kind | null) => {
+    async (c: Kind | null, given?: Place[]) => {
       const mine = ++token.current;
       setActive(c);
       setMoved(false);
       if (!map || !c) {
         last.current = null;
         searched.current = null;
+        setResults(null);
         dots([]);
         return [];
+      }
+      if (foundOf(c) !== null) {
+        last.current = c;
+        const { inView, middle } = seen(map);
+        const me = meRef.current;
+        const from = me && inView(me) ? me : middle;
+        const near = nearBest(given ?? []);
+        const places = nearest(given ?? [], from, Infinity).map(({ m, ...p }) => ({
+          ...p,
+          distance: m,
+        }));
+        dots(places);
+        setResults({ kind: c, places });
+        searched.current = { places, fit: near, center: map.getCenter(), zoom: map.getZoom() };
+        // Once the list has closed, so the fit measures the map the user will see.
+        requestAnimationFrame(() => fit(near));
+        return places;
       }
       // A new category may zoom in from a wide view; the same one again searches in place.
       const fresh = c !== last.current;
       last.current = c;
-      const places = await findCategory(map, c, lang, fresh, meRef.current);
-      if (mine === token.current) {
-        dots(places);
-        searched.current = { places, center: map.getCenter(), zoom: map.getZoom() };
+      setResults((r) => (r?.kind === c ? r : null));
+      try {
+        const places = await findCategory(map, c, lang, fresh, meRef.current);
+        if (mine === token.current) {
+          dots(places);
+          setResults({ kind: c, places });
+          searched.current = {
+            places,
+            fit: places,
+            center: map.getCenter(),
+            zoom: map.getZoom(),
+          };
+        }
+        return places;
+      } catch (e) {
+        if (mine === token.current) setResults({ kind: c, places: [], failed: true });
+        throw e;
       }
-      return places;
     },
-    [map, lang, dots],
+    [map, lang, dots, fit],
   );
 
   useEffect(() => {
@@ -125,27 +194,7 @@ export function useCategory(
   }, [map]);
 
   /** Every result on screen at once, none chosen. */
-  const showAll = useCallback(() => {
-    const places = searched.current?.places;
-    if (!map || !places?.length) return;
-    if (places.length === 1) {
-      map.flyTo({
-        center: [places[0].lng, places[0].lat],
-        zoom: Math.max(map.getZoom(), 16),
-        padding: padding(),
-        duration: motion(1200),
-      });
-      return;
-    }
-    const lngs = places.map((p) => p.lng);
-    const lats = places.map((p) => p.lat);
-    map.fitBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)], {
-      padding: padding(),
-      absolutePadding: true,
-      maxZoom: 17,
-      duration: motion(900),
-    });
-  }, [map, padding]);
+  const showAll = useCallback(() => fit(searched.current?.fit ?? []), [fit]);
 
   /** The name several places in view share that a text begins: a chain to search for. */
   const names = useCallback(
@@ -159,5 +208,7 @@ export function useCategory(
     setRun((n) => n + 1);
   }, []);
 
-  return { onCategory, names, showAll, searchHere, run, offerHere: !!active && moved };
+  // Names found are Photon's answer, not the map's: there is no area to search again.
+  const offerHere = !!active && foundOf(active) === null && moved;
+  return { onCategory, names, showAll, searchHere, run, offerHere, results };
 }

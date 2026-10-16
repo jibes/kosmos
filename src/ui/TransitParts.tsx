@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
 import { clockValue, departureAt, vehicleOf, type Transit, type TransitLeg } from '../core/transit';
 import { t, units } from '../i18n';
@@ -179,7 +179,10 @@ export function TransitLegs({ transit, lang, current, passed = 0, destination }:
                   <small className="via">{summary}</small>
                 )}
                 {shown && (
-                  <ol className="stops">
+                  <ol
+                    className="stops"
+                    style={l.color ? ({ '--leg': l.color } as CSSProperties) : undefined}
+                  >
                     {l.via.map((v, k) => (
                       <li key={k} data-passed={(here && k < passed) || undefined}>
                         <time>{v.arrival ? clock(v.arrival) : ''}</time>

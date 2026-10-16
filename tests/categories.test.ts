@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   byName,
+  foundFor,
+  foundOf,
+  nearBest,
   categoriesFor,
   edits,
   isCategoryWord,
@@ -188,5 +191,14 @@ describe('names in view', () => {
     const photon = [at('MediaMarkt Alexa', 60), at('MediaMarkt', 900), at('Saturn', 2000)];
     expect(without(photon, shown).map((p) => p.lng)).toEqual([photon[1].lng, photon[2].lng]);
     expect(without(photon, [])).toEqual(photon);
+  });
+
+  it('shows names found by the text, fitting the best and those near it', () => {
+    expect(foundOf(foundFor('brandenburger'))).toBe('brandenburger');
+    expect(foundOf('restaurant')).toBeNull();
+    expect(nameOf(foundFor('x'))).toBeNull();
+    const at = (dx: number) => ({ lng: 13.4 + dx / 67800, lat: 52.5 });
+    const places = [at(0), at(20_000), at(60_000), at(-29_000)];
+    expect(nearBest(places)).toEqual([places[0], places[1], places[3]]);
   });
 });

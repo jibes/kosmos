@@ -136,3 +136,40 @@ export function inWorld() {
     expect(errors).toEqual([]);
   });
 }
+
+/**
+ * The rows of the results sheet (what a search put on the map), opened first when it starts as
+ * a strip, as on a phone.
+ */
+export async function resultRows(page: Page) {
+  const sheet = page.locator('.results-sheet');
+  await expect(sheet).toBeVisible();
+  const peek = sheet.locator('.peek');
+  if (await peek.isVisible()) await peek.click();
+  return sheet.locator('.results-list button');
+}
+
+/**
+ * A finger's drag from one point to another (Chromium's touch input, as on a phone): steps of
+ * real touch events, so the page decides between its own drag and scrolling.
+ */
+export async function swipe(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  steps = 8,
+) {
+  const cdp = await page.context().newCDPSession(page);
+  const point = (x: number, y: number) => [{ x, y, id: 1 }];
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: point(from.x, from.y),
+  });
+  for (let i = 1; i <= steps; i++) {
+    const x = from.x + ((to.x - from.x) * i) / steps;
+    const y = from.y + ((to.y - from.y) * i) / steps;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: point(x, y) });
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}

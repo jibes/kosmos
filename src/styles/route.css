@@ -225,9 +225,14 @@
   font-size: 14px;
 }
 
+.legs {
+  /* The line chip's column; the stops of an opened leg reach back under it. */
+  --leg-col: 64px;
+}
+
 .legs li {
   display: grid;
-  grid-template-columns: 64px 1fr;
+  grid-template-columns: var(--leg-col) 1fr;
   align-items: start;
   gap: 10px;
   padding: 8px 0;

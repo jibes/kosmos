@@ -4,6 +4,8 @@ import {
   categoriesFor,
   isCategoryWord,
   misspeltFor,
+  foundFor,
+  foundOf,
   nameOf,
   NAME_MIN,
   squeeze,
@@ -75,7 +77,7 @@ interface Props {
    * Places of a category from the map itself, nearest first; `null` ends the category. Without
    * it the bar searches by name only (choosing a route's start or destination).
    */
-  onCategory?: (c: Kind | null) => Promise<Place[]>;
+  onCategory?: (c: Kind | null, given?: Place[]) => Promise<Place[]>;
   /** The name several places in view share that the text begins: "media" → MediaMarkt, 3. */
   onNames?: (text: string) => Promise<Shared | null>;
   /** Bumped to search the category again where the map now is. */
@@ -84,7 +86,7 @@ interface Props {
   onShowAll?: () => void;
 }
 
-const label = (k: Kind) => nameOf(k) ?? t[`cat_${k as Category}`];
+const label = (k: Kind) => nameOf(k) ?? foundOf(k) ?? t[`cat_${k as Category}`];
 
 const DEBOUNCE_MS = 200;
 /** A search server that has not answered by now is not going to; say so instead of spinning. */
@@ -147,6 +149,8 @@ export function SearchBar({
   const listId = useId();
   /** Enter pressed before results arrived: jump to the first one when they do. */
   const jumpFor = useRef<string | null>(null);
+  /** The names Enter showed all of (a `found:` kind): Photon's answer, handed to the map. */
+  const foundPlaces = useRef<Place[]>([]);
   /** When the text last changed, and the query Enter asked again for (it may ask at once). */
   const edited = useRef(0);
   const askedFor = useRef<string | null>(null);
@@ -211,7 +215,7 @@ export function SearchBar({
     const ask = onCategoryRef.current;
     if (!ask) return;
     let live = true;
-    ask(category)
+    ask(category, category && foundOf(category) !== null ? foundPlaces.current : undefined)
       .then((places) => {
         if (!live || !category) return;
         setResponse({ key: `cat|${category}`, places, status: 'done' });
@@ -257,7 +261,12 @@ export function SearchBar({
       setResponse({ key, places, status: 'done', fallback });
       if (jumpFor.current === key) {
         jumpFor.current = null;
-        if (places[0]) {
+        // Several: all of them on the map, as for a kind of place; one: that one.
+        if (places.length > 1 && onCategoryRef.current) {
+          foundPlaces.current = places;
+          setCategory(foundFor(q));
+          input.current?.blur();
+        } else if (places[0]) {
           onPickRef.current(places[0]);
           input.current?.blur();
         }
@@ -317,7 +326,7 @@ export function SearchBar({
       ctrl.abort();
       fallback.abort();
     };
-  }, [q, key, lang, bias, category, retry]);
+  }, [q, key, lang, bias, category, retry, setCategory]);
 
   // "/" focuses search from anywhere, like most of the web.
   useEffect(() => {
@@ -335,10 +344,18 @@ export function SearchBar({
     input.current?.blur();
   };
 
-  /** Search the map for a kind of place; the field shows its name. */
+  /** Search the map for a kind of place; the field shows its name, the map its places. */
   const choose = (c: Kind) => {
     setCategory(c);
     setQuery(label(c));
+    input.current?.blur();
+  };
+
+  /** Enter without picking one of several names: all of them on the map, nearest first. */
+  const showFound = (places: Place[]) => {
+    foundPlaces.current = places;
+    setCategory(foundFor(q));
+    input.current?.blur();
   };
 
   const choice = (it: Item) => (it.cat ? choose(it.cat) : pick(it.place));
@@ -375,7 +392,10 @@ export function SearchBar({
       // Only rows for exactly this query; stale names from the last query would jump wrong.
       const fresh = current || active < suggestions.length;
       const it = fresh ? items[active] : undefined;
-      if (it) choice(it);
+      // The top row was not chosen, only offered: with several names, Enter shows them all.
+      const all = !!onCategory && !!it?.place && cursor.key !== key && results.length > 1;
+      if (all) showFound(results);
+      else if (it) choice(it);
       else if (q.length >= 2 && status === 'loading') jumpFor.current = key;
     } else if (e.key === 'Escape') {
       if (query) {

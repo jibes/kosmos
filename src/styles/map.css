@@ -63,14 +63,16 @@
   text-decoration: none;
 }
 
-.card {
+.card,
+.results-sheet {
   padding: 18px 18px 16px;
   border-radius: var(--radius);
   animation: rise 0.36s var(--ease);
 }
 
 /* A place with hours, phone and website still leaves the map in view. */
-.card:not(.route) {
+.card:not(.route),
+.results-sheet {
   max-height: min(70dvh, 640px);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -196,6 +198,12 @@
   flex-direction: column-reverse;
   gap: 10px;
   transition: bottom 0.25s var(--ease);
+  /* Only the buttons take taps: between and around them is still the map. */
+  pointer-events: none;
+}
+
+.ui > .controls > * {
+  pointer-events: auto;
 }
 
 /* Typing: the result list has the room, the map buttons step aside (a small phone with the
@@ -568,4 +576,60 @@
   font-size: 14px;
   font-weight: 500;
   animation: drop-in 0.3s var(--ease);
+}
+
+/* ---------- Results sheet: what a search put on the map, by distance ---------- */
+
+/* The search's own list has them while it is open: never both. */
+.panel:has(.search[data-open]) .results-sheet {
+  display: none;
+}
+
+/* It comes back each time the list closes: no rise, which would also throw the camera's
+   padding (measured from the panel) off while it moves. */
+.results-sheet {
+  animation: none;
+}
+
+.results-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.results-title span,
+.results-note {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.results-note {
+  margin: 0 0 6px;
+}
+
+.results-list {
+  list-style: none;
+  margin: 0 -10px;
+  padding: 0;
+}
+
+.results-list button {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  text-align: left;
+}
+
+.results-list button:focus-visible,
+.results-list button:active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }

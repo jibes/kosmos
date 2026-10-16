@@ -1,3 +1,4 @@
+import { useRef, useState, type ReactNode } from 'react';
 import { FRESH_MS, type RidePrompt, type RideState } from '../core/ride';
 import type { Place } from '../core/search';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
@@ -6,6 +7,7 @@ import { capital, fill, t, units } from '../i18n';
 import { LocateIcon, ModeIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
 import { LineChip, TransitLegs, lineName, platformWord, sayPlatformOf } from './TransitParts';
+import { useSwipe } from './useSwipe';
 
 interface Props {
   transit: Transit;
@@ -185,7 +187,7 @@ export function RideView(props: Props) {
           )}
         </section>
         {open && (
-          <section className="ride-details surface">
+          <RideDetails onClose={() => on.onOpen(false)}>
             <TransitLegs
               transit={transit}
               lang={lang}
@@ -193,7 +195,7 @@ export function RideView(props: Props) {
               passed={passed}
               destination={destination}
             />
-          </section>
+          </RideDetails>
         )}
       </div>
 
@@ -219,5 +221,37 @@ export function RideView(props: Props) {
         )}
       </NavBar>
     </>
+  );
+}
+
+/** Past this, or with a quick flick, a pull up closes the trip list. */
+const CLOSE_PX = 64;
+const FLICK_PX_PER_MS = 0.5;
+
+/**
+ * The whole trip under the banner: pulled up from anywhere on it, once its list is scrolled to
+ * the end, it folds away again (Back does too).
+ */
+function RideDetails({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const el = useRef<HTMLElement>(null);
+  const [dy, setDy] = useState(0);
+  useSwipe(
+    el,
+    () => ({ dir: -1, scrollFirst: true }),
+    (raw) => setDy(raw < 0 ? raw : raw * 0.2),
+    (dist, v) => {
+      setDy(0);
+      if (dist < -CLOSE_PX || v < -FLICK_PX_PER_MS) onClose();
+    },
+  );
+  return (
+    <section
+      ref={el}
+      className="ride-details surface"
+      data-dragging={dy !== 0 || undefined}
+      style={dy ? { transform: `translateY(${dy}px)` } : undefined}
+    >
+      {children}
+    </section>
   );
 }
