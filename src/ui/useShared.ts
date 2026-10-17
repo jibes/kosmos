@@ -2,11 +2,28 @@ import type * as maplibregl from 'maplibre-gl';
 import { useEffect, useRef } from 'react';
 import type { Place } from '../core/search';
 import { parseShared, type Shared } from '../core/shared';
-import { t } from '../i18n';
+import { lookupUrl, parseLookup, parseLookupPlace } from '../core/details';
+import { lang, t } from '../i18n';
+import { getJson, nominatimSlot, nominatimWait } from './http';
+import { knowDetails } from './usePlaceDetails';
 import { focusSearch } from './a11y';
 import { motion } from './motion';
 import { nativeLog, watchShared } from './native';
 import { addressOf, spotOf, type Enrich } from './useMapTaps';
+
+/** An OSM object by its id, through Nominatim's one-a-second slot; `null` when not found. */
+async function lookUp(osm: string) {
+  await new Promise((go) => setTimeout(go, nominatimWait()));
+  nominatimSlot();
+  try {
+    const r = await getJson(lookupUrl(osm, lang), new AbortController().signal);
+    if (!r.ok) return null;
+    knowDetails(osm, parseLookup(r.json));
+    return parseLookupPlace(r.json);
+  } catch {
+    return null;
+  }
+}
 
 /** The address keys a shared place may come in: the web share target's, and `?geo=`. */
 const KEYS = ['geo', 'title', 'text', 'url'] as const;
@@ -36,6 +53,20 @@ export function useShared(
         focusSearch();
         return;
       }
+      if ('osm' in s) {
+        // One lookup by its id, the same the card would make, so the card asks nothing more.
+        lookUp(s.osm).then((found) => {
+          if (!found) return setQuery('');
+          const { lng, lat, name, detail } = found;
+          select({ name: name ?? t.droppedPin, detail, lng, lat, osm: s.osm });
+          map.flyTo({
+            center: [lng, lat],
+            zoom: Math.max(map.getZoom(), 16),
+            duration: motion(1200),
+          });
+        });
+        return;
+      }
       const { at, name, zoom } = s;
       select({ name: name ?? t.droppedPin, detail: '', ...at }, () =>
         name ? addressOf(name, at) : spotOf(at),
@@ -54,7 +85,7 @@ export function useShared(
       const s = parseShared(text);
       if (!s) return;
       // Which kind only, never the place: the CI smoke test reads this line.
-      nativeLog('info', `shared: ${'at' in s ? 'point' : 'words'}`);
+      nativeLog('info', `shared: ${'at' in s ? 'point' : 'osm' in s ? 'object' : 'words'}`);
       show.current(s);
     };
     // The web: the address the share target (or a link) opened the app with, then cleared.

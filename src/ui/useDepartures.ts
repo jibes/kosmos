@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { parseDepartures, stopTimesUrl, type Departure } from '../core/departures';
+import { parseDepartures, stillToCome, stopTimesUrl, type Departure } from '../core/departures';
 import type { Place } from '../core/search';
 import { getJson } from './http';
+import { useNow } from './useNow';
 
 /** The same stop opened again soon (back from a route, a second look): no new request. */
 const KEEP_MS = 60_000;
@@ -15,6 +16,7 @@ export function useDepartures(place: Place, lang: string): Departure[] | null | 
   const { stop, lng, lat } = place;
   const key = stop ? `${lat.toFixed(5)},${lng.toFixed(5)}|${lang}` : '';
   const [result, setResult] = useState<{ key: string; list: Departure[] | null } | null>(null);
+  const now = useNow();
 
   useEffect(() => {
     if (!key) return;
@@ -33,6 +35,8 @@ export function useDepartures(place: Place, lang: string): Departure[] | null | 
   }, [key, lng, lat, lang]);
 
   if (!key) return [];
-  // The newest answer for this stop; the one kept from before while a new one comes.
-  return result?.key === key ? result.list : cache.get(key)?.list;
+  // The newest answer for this stop; the one kept from before while a new one comes. Those gone
+  // since drop off while the card stays open (no new request).
+  const list = result?.key === key ? result.list : cache.get(key)?.list;
+  return list ? stillToCome(list, now) : list;
 }

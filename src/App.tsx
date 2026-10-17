@@ -2,6 +2,7 @@ import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Place } from './core/search';
 import { roadModeOf, type TravelMode } from './core/route';
+import { departed } from './core/transit';
 import { lang, locale, t } from './i18n';
 import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
@@ -386,6 +387,13 @@ export function App() {
   const startNav = () => {
     if (!trip) return;
     beginVoice(trip.mode);
+    // A plan for "now" left open until its first vehicle has gone: the next ones instead.
+    const tr = shown[chosen]?.transit;
+    if (trip.mode === 'transit' && !trip.at && tr && departed(tr, Date.now())) {
+      route.retry();
+      showToast(t.replanned);
+      return;
+    }
     if (trip.mode === 'transit') {
       // The connection stays as planned, from wherever it starts; the map follows the dot.
       // In the app, location comes from its service, which asks for it (see `background`).
@@ -632,7 +640,8 @@ export function App() {
                   }
                   onRetry={route.retry}
                   onClose={closeRoute}
-                  onStart={startNav}
+                  // Guidance starts from where the user is: not to there.
+                  onStart={trip.to.here ? undefined : startNav}
                   at={trip.at ?? null}
                   onDepart={(at) => {
                     setActive(0);

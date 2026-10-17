@@ -27,6 +27,8 @@ const LATE_MAX_MS = 60 * 60_000;
 /** On board a vehicle that has left: this close to its line and this far along it. */
 const ON_LINE_M = 40;
 const PAST_STOP_M = 60;
+/** Still at the stop this long after the departure, not along the line: it left without them. */
+const LEFT_BEHIND_MS = 3 * 60_000;
 
 export type Phase = 'walk' | 'wait' | 'ride' | 'arrived';
 
@@ -233,6 +235,13 @@ function evaluate(tr: Transit, prev: RideState, seen: Fix | null, time: number):
   if (l.cancelled)
     return { ...base, phase: 'wait', stopsLeft: stops.length, toGo: 0, cancelled: true };
   if (time < l.start) return { ...base, phase: 'wait', stopsLeft: stops.length, toGo: 0 };
+  // Still standing at the stop well after it left (a late vehicle takes the rider along the
+  // line, which ends this): waiting, and the new connection is offered.
+  if (fix && time > l.start + LEFT_BEHIND_MS && metres(fix, l.from) < atStop(fix)) {
+    const at = project(l.coords, fix);
+    if (at.along < PAST_STOP_M)
+      return { ...base, phase: 'wait', stopsLeft: stops.length, toGo: 0, missed: true };
+  }
   // Position along the line where there is one; otherwise stops whose arrival is still ahead.
   let left: number;
   // From the last position on the line, a vehicle covers at most this much: no jumping to
@@ -323,7 +332,10 @@ export function ridePrompt(tr: Transit, st: RideState): RidePrompt | null {
     if (change || st.cancelled) return change;
     return st.time >= next.start - BOARD_AHEAD_MS ? ask('board', st.leg + 1) : null;
   }
-  if (st.phase === 'wait') return changes(st.leg) ?? (st.cancelled ? null : ask('board', st.leg));
+  if (st.phase === 'wait') {
+    if (st.missed) return ask('missed', st.leg);
+    return changes(st.leg) ?? (st.cancelled ? null : ask('board', st.leg));
+  }
   return st.stopsLeft === 1 ? ask('next', st.leg) : null;
 }
 

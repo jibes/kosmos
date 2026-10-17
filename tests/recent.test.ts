@@ -47,5 +47,15 @@ describe('recent searches', () => {
     expect(
       parseRecent(JSON.stringify([ok, { place: { name: 'x' }, at: 1 }, { kind: 3, at: 1 }])),
     ).toEqual([ok]);
+    // A kind an update renamed or dropped is forgotten; a chain or a search by name stays.
+    const kinds = [
+      { kind: 'cafe', label: 'Cafés', at: 3 },
+      { kind: 'cat_gone', label: 'Old', at: 2 },
+      { kind: 'name:Rewe', label: 'Rewe', at: 1 },
+    ];
+    expect(parseRecent(JSON.stringify(kinds)).map((r) => ('kind' in r ? r.kind : ''))).toEqual([
+      'cafe',
+      'name:Rewe',
+    ]);
   });
 });

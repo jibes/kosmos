@@ -180,11 +180,18 @@ export interface Poi extends LngLat {
   subclass?: string;
 }
 
+/** Places shown for a kind at most: the map's labels thin out by themselves, the list scrolls. */
+export const SHOWN_MAX = 60;
+
 /**
  * The nearest places first, each once: tiles overlap at their edges, so the same place can
  * come back twice from neighbouring tiles.
  */
-export function nearest<T extends Poi>(pois: T[], from: LngLat, limit = 20): (T & { m: number })[] {
+export function nearest<T extends Poi>(
+  pois: T[],
+  from: LngLat,
+  limit = SHOWN_MAX,
+): (T & { m: number })[] {
   const seen = new Set<string>();
   return pois
     .map((p) => ({ ...p, m: distance(from, p) }))

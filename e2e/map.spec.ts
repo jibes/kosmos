@@ -421,6 +421,14 @@ test.describe('map', () => {
     // The address bar no longer holds it: a reload does not open it again.
     expect(page.url()).not.toContain('url=');
 
+    // An OpenStreetMap object's page: one lookup gives the place and its card's details.
+    const asked = lookupRequests.length;
+    await page.goto(`./?url=${encodeURIComponent('https://www.openstreetmap.org/way/518071791')}`);
+    await expect(card.getByRole('heading')).toHaveText('Brandenburger Tor');
+    await expect(card).toContainText('Pariser Platz');
+    await expect(card).toContainText('+49 30 1234567');
+    expect(lookupRequests.length).toBe(asked + 1);
+
     // A message with a link only its maker can open: its words are searched.
     const text = 'Café Einstein, Kurfürstenstraße 58, 10785 Berlin https://maps.app.goo.gl/AbC1';
     await page.goto(`./?text=${encodeURIComponent(text)}`);

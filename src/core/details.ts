@@ -26,6 +26,23 @@ export function lookupUrl(osm: string, lang: string): string {
   return `${NOMINATIM_URL}/lookup?${q}`;
 }
 
+/** Where a looked-up object is and what it is called: an OSM link opened from elsewhere. */
+export function parseLookupPlace(
+  json: unknown,
+): { lng: number; lat: number; name?: string; detail: string } | null {
+  const o = (
+    json as { lat?: string; lon?: string; name?: string; display_name?: string }[] | null
+  )?.[0];
+  const lat = Number(o?.lat);
+  const lng = Number(o?.lon);
+  if (!o || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const name = o.name?.trim() || undefined;
+  // The rest of its display name: where it is.
+  const parts = (o.display_name ?? '').split(', ');
+  const detail = (name && parts[0] === name ? parts.slice(1) : parts).slice(0, 3).join(', ');
+  return { lng, lat, ...(name ? { name } : {}), detail };
+}
+
 /** Websites without the scheme read better; links still need it. */
 export const withScheme = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
 

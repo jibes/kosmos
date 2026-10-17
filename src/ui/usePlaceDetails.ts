@@ -4,6 +4,9 @@ import { getJson, nominatimSlot, nominatimWait } from './http';
 
 const cache = new Map<string, Details>();
 
+/** Details already in hand (an OSM link's own lookup): the card does not ask again. */
+export const knowDetails = (osm: string, details: Details) => cache.set(osm, details);
+
 /** Opening hours and contacts for a place with an OSM id; `undefined` while they load. */
 export function usePlaceDetails(osm: string | undefined, lang: string): Details | undefined {
   const [result, setResult] = useState<{ osm: string; details: Details } | null>(null);

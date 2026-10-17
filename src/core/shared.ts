@@ -6,7 +6,11 @@ import type { LngLat } from './geo';
  * (maps.app.goo.gl) cannot be opened without asking Google, so their message's words are
  * searched instead; the name and address usually come with them.
  */
-export type Shared = { at: LngLat; zoom?: number; name?: string } | { query: string };
+export type Shared =
+  | { at: LngLat; zoom?: number; name?: string }
+  | { query: string }
+  /** An OSM object (`N123`, `W456`, `R789`) from an openstreetmap.org/node/… link. */
+  | { osm: string };
 
 const point = (lat: number, lng: number): LngLat | null =>
   Number.isFinite(lat) &&
@@ -53,13 +57,23 @@ function fromUrl(u: URL): Shared | null {
     const at = point(Number(p.get('mlat')), Number(p.get('mlon')));
     const map = /map=(\d+(?:\.\d+)?)\/(-?[\d.]+)\/(-?[\d.]+)/.exec(u.hash);
     const there = at ?? (map ? point(Number(map[2]), Number(map[3])) : null);
-    return there ? { at: there, ...(map ? { zoom: zoomOf(map[1]) } : {}) } : null;
+    if (there) return { at: there, ...(map ? { zoom: zoomOf(map[1]) } : {}) };
+    // A node, way or relation's own page: the object itself, looked up by its id.
+    const obj = /^\/(node|way|relation)\/(\d+)/.exec(u.pathname);
+    return obj ? { osm: `${obj[1][0].toUpperCase()}${obj[2]}` } : null;
   }
   if (/(^|\.)google\.[a-z.]+$/.test(host) || host === 'maps.google.com') {
-    // `/maps/place/Name/@lat,lng,17z`, `?q=lat,lng`, `?ll=lat,lng`.
+    // `/maps/place/Name/@lat,lng,17z/data=…!3dlat!4dlng`, `?q=lat,lng`, `?ll=lat,lng`. The
+    // `@` pair is where Google's camera stood (shifted for its side panel); `!3d…!4d…` is the
+    // place itself.
     const at = /@(-?[\d.]+),(-?[\d.]+)(?:,(\d+(?:\.\d+)?)z)?/.exec(u.pathname);
+    const own = /!3d(-?[\d.]+)!4d(-?[\d.]+)/.exec(u.pathname);
     const name = /\/place\/([^/@]+)/.exec(u.pathname)?.[1];
-    const where = at ? point(Number(at[1]), Number(at[2])) : pairIn(p.get('q') ?? p.get('ll'));
+    const where = own
+      ? point(Number(own[1]), Number(own[2]))
+      : at
+        ? point(Number(at[1]), Number(at[2]))
+        : pairIn(p.get('q') ?? p.get('ll'));
     if (where) {
       return {
         at: where,

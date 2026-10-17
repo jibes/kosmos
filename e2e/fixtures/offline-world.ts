@@ -199,6 +199,9 @@ export const tripRequests: URLSearchParams[] = [];
 /** What the live trip says; a test may cancel the U6 (and must set it back). */
 export const liveTrip = { cancelled: false };
 
+/** A test may make the planner fail (and must set it back). */
+export const planFails = { on: false };
+
 /** Every Transitous plan request the app made. */
 export const transitRequests: URLSearchParams[] = [];
 
@@ -379,6 +382,7 @@ export async function offlineWorld(context: BrowserContext) {
   await context.route(/api\.transitous\.org\/api\/v5\/plan/, (route) => {
     const q = new URL(route.request().url()).searchParams;
     transitRequests.push(q);
+    if (planFails.on) return route.fulfill({ status: 503, body: '' });
     const pt = (v: string | null) => (v ?? '0,0').split(',').map(Number).reverse() as Pt;
     const time = q.get('time');
     planDepart = time ? Date.parse(time) : Date.now();
@@ -463,6 +467,10 @@ export async function offlineWorld(context: BrowserContext) {
               {
                 osm_type: 'way',
                 osm_id: 518071791,
+                lat: '52.5163',
+                lon: '13.3777',
+                name: 'Brandenburger Tor',
+                display_name: 'Brandenburger Tor, Pariser Platz, Mitte, Berlin, Deutschland',
                 extratags: {
                   opening_hours: 'Mo-Fr 09:00-18:00; Sa 10:00-14:00; Su off',
                   phone: '+49 30 1234567',

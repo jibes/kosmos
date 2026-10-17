@@ -29,12 +29,21 @@ export function useMapGestures(
     if (!map) return;
     const m = userMarker(map);
     meRef.current = m;
-    const down = (e: PointerEvent) => touchingRef.current.add(e.pointerId);
+    const down = (e: PointerEvent) => {
+      // The first finger: none is down, whatever a lost "up" left behind (the app put away
+      // mid-touch never hears it, and the camera would wait for good).
+      if (e.isPrimary) touchingRef.current.clear();
+      touchingRef.current.add(e.pointerId);
+    };
     const up = (e: PointerEvent) => touchingRef.current.delete(e.pointerId);
+    const away = () => {
+      if (document.hidden) touchingRef.current.clear();
+    };
     const surface = map.getCanvasContainer();
     surface.addEventListener('pointerdown', down);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
+    document.addEventListener('visibilitychange', away);
     const drag = () => on.current.drag();
     const look = (e: { originalEvent?: Event }) => {
       if (e.originalEvent) on.current.look();
@@ -47,6 +56,7 @@ export function useMapGestures(
       surface.removeEventListener('pointerdown', down);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
+      document.removeEventListener('visibilitychange', away);
       map.off('dragstart', drag);
       for (const ev of looks) map.off(ev, look);
     };

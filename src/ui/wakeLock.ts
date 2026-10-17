@@ -12,7 +12,10 @@ export function keepAwake(): () => void {
   const acquire = async () => {
     if (!active || document.visibilityState !== 'visible' || !('wakeLock' in navigator)) return;
     try {
-      lock = await navigator.wakeLock.request('screen');
+      const got = await navigator.wakeLock.request('screen');
+      // Guidance ended while the lock was on its way: let it go at once.
+      if (!active) void got.release().catch(() => undefined);
+      else lock = got;
     } catch {
       // Battery saver or an unsupported browser: guidance still works, the screen may sleep.
     }

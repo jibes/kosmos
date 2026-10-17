@@ -394,3 +394,16 @@ export function vehicleOf(mode: string): Vehicle | null {
       return null;
   }
 }
+
+/** How many of a ride's stops before `via[k]` it stops at: skipped ones are passed by. */
+export const servedBefore = (l: Pick<TransitLeg, 'via'>, k: number) =>
+  l.via.slice(0, k).filter((v) => !v.skipped).length;
+
+/**
+ * The connection's first vehicle has left already: a plan for "now" left open too long. Its
+ * own leg's start counts (with a live delay where it was checked), not the walk before it.
+ */
+export function departed(tr: Transit, now: number): boolean {
+  const first = tr.legs.find((l) => l.ride);
+  return !!first && first.start < now;
+}

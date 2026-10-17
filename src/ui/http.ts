@@ -10,6 +10,8 @@ const USER_AGENT = `kOSMos/${__BUILD__.version} (+https://github.com/jibes/kosmo
 
 /** The native request cannot be aborted; it gives up by itself after this. */
 const NATIVE_TIMEOUT_MS = 15_000;
+/** A browser's request gives up after this (the volunteer servers can stall under load). */
+const WEB_TIMEOUT_MS = 20_000;
 
 /** Rejects once the signal aborts: the caller stops waiting even where the request goes on. */
 const aborted = (signal: AbortSignal) =>
@@ -41,9 +43,21 @@ export async function getJson(url: string, signal: AbortSignal, body?: string) {
     ]);
     return { ok: res.status >= 200 && res.status < 300, status: res.status, json: res.data };
   }
-  // Sent as plain text, the POST stays a "simple" request for CORS: no preflight.
-  const res = await fetch(url, body ? { signal, method: 'POST', body } : { signal });
-  return { ok: res.ok, status: res.status, json: res.ok ? await res.json() : null };
+  // A server that never answers ends as a failure (with Retry), not "Finding route…" for good.
+  const ctrl = new AbortController();
+  const stop = () => ctrl.abort();
+  const timer = setTimeout(stop, WEB_TIMEOUT_MS);
+  if (signal.aborted) stop();
+  else signal.addEventListener('abort', stop, { once: true });
+  try {
+    // Sent as plain text, the POST stays a "simple" request for CORS: no preflight.
+    const init = { signal: ctrl.signal, ...(body ? { method: 'POST', body } : {}) };
+    const res = await fetch(url, init);
+    return { ok: res.ok, status: res.status, json: res.ok ? await res.json() : null };
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', stop);
+  }
 }
 
 let nominatimNext = 0;

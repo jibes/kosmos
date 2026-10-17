@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUZZ, buzzFor } from '../src/core/haptics';
+import { BUZZ, buzzFor, rideBuzz } from '../src/core/haptics';
 
 const p = (key: string) => ({ key, text: '' });
 
@@ -14,5 +14,16 @@ describe('turn buzzes', () => {
     expect(buzzFor(p('2:post'), 'foot', true, 5)).toBeNull();
     expect(buzzFor(p('2:pre'), 'foot', false, 5)).toBeNull();
     expect(buzzFor(p('2:pre'), 'car', true, 5)).toBeNull();
+  });
+
+  it('buzzes a ride in a pocket: boarding and getting off, trouble, arrival', () => {
+    expect(rideBuzz('next', true)).toBe(BUZZ.now);
+    expect(rideBuzz('board', true)).toBe(BUZZ.now);
+    expect(rideBuzz('missed', true)).toBe(BUZZ.warn);
+    expect(rideBuzz('arrived', true)).toBe(BUZZ.arrive);
+    expect(rideBuzz('walk', true)).toBeNull();
+    expect(rideBuzz('delay', true)).toBeNull();
+    // The voice says it instead.
+    expect(rideBuzz('next', false)).toBeNull();
   });
 });

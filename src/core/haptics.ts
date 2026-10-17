@@ -1,4 +1,5 @@
 import type { Prompt } from './nav';
+import type { RidePromptKind } from './ride';
 import type { Mode } from './route';
 
 /**
@@ -13,6 +14,8 @@ export const BUZZ = {
   now: [60, 90, 60],
   /** At the destination. */
   arrive: [250],
+  /** Something went wrong: three short. */
+  warn: [60, 90, 60, 90, 60],
 } as const;
 
 /**
@@ -30,4 +33,26 @@ export function buzzFor(
   if (kind === 'alert') return BUZZ.ahead;
   if (kind === 'pre') return Number(index) === lastManeuver ? BUZZ.arrive : BUZZ.now;
   return null;
+}
+
+/**
+ * A public transport prompt felt in a pocket when the voice is off: boarding and getting off
+ * like a turn, what went wrong (missed, cancelled, a new platform) as a warning, arrival long.
+ * Walking to a stop and a mere delay ask nothing at once.
+ */
+export function rideBuzz(kind: RidePromptKind, muted: boolean): readonly number[] | null {
+  if (!muted) return null;
+  switch (kind) {
+    case 'board':
+    case 'next':
+      return BUZZ.now;
+    case 'missed':
+    case 'cancelled':
+    case 'platform':
+      return BUZZ.warn;
+    case 'arrived':
+      return BUZZ.arrive;
+    default:
+      return null;
+  }
 }

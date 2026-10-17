@@ -225,6 +225,10 @@ describe('formatting', () => {
     expect(formatDistance(12, 'en')).toBe('10 m');
     expect(formatDistance(437, 'en')).toBe('440 m');
     expect(formatDistance(4234, 'en')).toBe('4.2 km');
+    // Never "1000 m" or "10.0 km": rounding up says the next step's way.
+    expect(formatDistance(996, 'en')).toBe('1.0 km');
+    expect(formatDistance(994, 'en')).toBe('990 m');
+    expect(formatDistance(9960, 'en')).toBe('10 km');
     expect(formatDistance(4234, 'de')).toBe('4,2 km');
     expect(formatDistance(37_400, 'en')).toBe('37 km');
   });

@@ -87,6 +87,11 @@ export function useGuidance(o: Options) {
 
   const onStep = useCallback(
     (nav: NavState, f: Fix) => {
+      // Too coarse to guide by (network, tunnels): the dot shows it, guidance and camera wait.
+      if (nav.weak) {
+        meRef.current?.update({ lng: f.lng, lat: f.lat, accuracy: f.accuracy });
+        return;
+      }
       const s = nav.snap;
       // On the line the arrow rides the route; off it (or after arriving) it is where the fix
       // is, and so is the camera: a missed turn must not leave the user off the screen.

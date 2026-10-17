@@ -245,6 +245,8 @@ export const en = {
   followCompass: 'Turn map with compass',
   followHeading: 'Turn map with your way',
   speedLimit: 'limit {n}',
+  notServed: 'not served today',
+  replanned: 'That one has left: here are the next connections.',
   northUp: 'North up',
   noCompass: 'No compass on this device',
   lanes: 'Lanes',

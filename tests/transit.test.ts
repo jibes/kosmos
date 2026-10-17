@@ -9,6 +9,8 @@ import {
   vehicleOf,
   tripUrl,
   withLiveTrip,
+  servedBefore,
+  departed,
 } from '../src/core/transit';
 
 const at = (hh: number, mm: number, day = 13) => new Date(2026, 9, day, hh, mm).getTime();
@@ -277,5 +279,28 @@ describe('vehicleOf', () => {
     expect(vehicleOf('AERIAL_LIFT')).toBe('cable');
     expect(vehicleOf('WALK')).toBeNull();
     expect(vehicleOf('OTHER')).toBeNull();
+  });
+});
+
+describe('servedBefore', () => {
+  it('counts only the stops the vehicle stops at', () => {
+    const via = [{ name: 'A' }, { name: 'B', skipped: true }, { name: 'C' }];
+    expect(servedBefore({ via } as never, 0)).toBe(0);
+    expect(servedBefore({ via } as never, 2)).toBe(1);
+    expect(servedBefore({ via } as never, 3)).toBe(2);
+  });
+});
+
+describe('departed', () => {
+  it('tells a connection whose first vehicle has left', () => {
+    const tr = {
+      legs: [
+        { ride: false, start: 0 },
+        { ride: true, start: 8 * 60_000 },
+      ],
+    } as never;
+    expect(departed(tr, 7 * 60_000)).toBe(false);
+    expect(departed(tr, 9 * 60_000)).toBe(true);
+    expect(departed({ legs: [{ ride: false, start: 0 }] } as never, 9e9)).toBe(false);
   });
 });

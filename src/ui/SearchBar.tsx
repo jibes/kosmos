@@ -283,6 +283,23 @@ export function SearchBar({
     // Every edit asks again, a trailing space too: the edit cleared the last answer.
   }, [q, key, looksForNames, query]);
 
+  // Enter before the answer: taken once the names are here, whether Photon's answer is new
+  // or was cached and only the names in view were still being read.
+  const ready = current?.status === 'done' ? current.places : null;
+  useEffect(() => {
+    if (jumpFor.current !== key || !ready) return;
+    jumpFor.current = null;
+    // Several: all of them on the map, as for a kind of place; one: that one.
+    if (ready.length > 1 && onCategoryRef.current) {
+      foundPlaces.current = ready;
+      setCategory(foundFor(q));
+      input.current?.blur();
+    } else if (ready[0]) {
+      onPickRef.current(ready[0]);
+      input.current?.blur();
+    }
+  }, [key, ready, q, setCategory]);
+
   useEffect(() => {
     if (category || q.length < 2 || cache.has(key)) return;
     const ctrl = new AbortController();
@@ -294,18 +311,6 @@ export function SearchBar({
         cache.set(key, places);
       }
       setResponse({ key, places, status: 'done', fallback });
-      if (jumpFor.current === key) {
-        jumpFor.current = null;
-        // Several: all of them on the map, as for a kind of place; one: that one.
-        if (places.length > 1 && onCategoryRef.current) {
-          foundPlaces.current = places;
-          setCategory(foundFor(q));
-          input.current?.blur();
-        } else if (places[0]) {
-          onPickRef.current(places[0]);
-          input.current?.blur();
-        }
-      }
     };
     /** Photon failed or hung: ask Nominatim once for this settled query, in its time slot. */
     const viaNominatim = async () => {

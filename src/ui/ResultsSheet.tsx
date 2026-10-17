@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SHOWN_MAX } from '../core/categories';
 import { formatDistance } from '../core/route';
 import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
@@ -55,6 +56,8 @@ export function ResultsSheet({
   useEffect(() => () => onHighlight(null), [onHighlight]);
 
   const nearest = places?.[0]?.distance;
+  // Cut off at the nearest so many: "60+", as more lie further out.
+  const n = places && places.length >= SHOWN_MAX ? `${places.length}+` : places?.length;
   const beyond = !!places?.length && places.every((p) => p.beyond);
   const summary = failed
     ? navigator.onLine
@@ -67,9 +70,9 @@ export function ResultsSheet({
         : nearest === undefined
           ? places.length === 1
             ? t.oneResult
-            : fill(t.resultsCount, { n: places.length })
+            : fill(t.resultsCount, { n: n! })
           : fill(t.resultsPeek, {
-              n: places.length,
+              n: n!,
               d: formatDistance(nearest, lang, units),
             });
 

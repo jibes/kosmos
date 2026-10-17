@@ -3,6 +3,7 @@ import {
   isStopOsm,
   isStopPoi,
   parseDepartures,
+  stillToCome,
   stopTimesUrl,
   DEPARTURES_SHOWN,
 } from '../src/core/departures';
@@ -86,5 +87,19 @@ describe('departures', () => {
     expect(isStopOsm('railway', 'station')).toBe(true);
     expect(isStopOsm('highway', 'bus_stop')).toBe(true);
     expect(isStopOsm('highway', 'residential')).toBe(false);
+  });
+});
+
+describe('stillToCome', () => {
+  it('drops departures gone since the list came, keeping one just left', () => {
+    const at = (min: number) => ({
+      time: min * 60_000,
+      delay: 0,
+      mode: 'BUS',
+      moved: false,
+      cancelled: false,
+    });
+    const left = stillToCome([at(1), at(5.5), at(10)], 6 * 60_000);
+    expect(left.map((d) => d.time / 60_000)).toEqual([5.5, 10]);
   });
 });

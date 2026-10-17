@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
-import { clockValue, departureAt, vehicleOf, type Transit, type TransitLeg } from '../core/transit';
+import {
+  clockValue,
+  departureAt,
+  servedBefore,
+  vehicleOf,
+  type Transit,
+  type TransitLeg,
+} from '../core/transit';
 import { t, units } from '../i18n';
 import { ModeIcon, TurnIcon, VehicleIcon } from './icons';
 
@@ -189,19 +196,29 @@ export function TransitLegs(props: LegsProps) {
                   )}
                 </li>
                 {shown &&
-                  l.via.map((v, k) => (
-                    <li
-                      key={k}
-                      data-passed={(here && k < passed) || undefined}
-                      data-next={(here && riding && k === passed) || undefined}
-                    >
-                      <time>{v.arrival ? clock(v.arrival) : ''}</time>
-                      <span>{v.name}</span>
-                    </li>
-                  ))}
+                  l.via.map((v, k) => {
+                    // Its place among the stops served: skipped ones are passed without a stop.
+                    const n = servedBefore(l, k);
+                    return (
+                      <li
+                        key={k}
+                        data-passed={(here && n < passed) || undefined}
+                        data-next={(here && riding && !v.skipped && n === passed) || undefined}
+                        data-skipped={v.skipped || undefined}
+                      >
+                        <time>{v.arrival ? clock(v.arrival) : ''}</time>
+                        <span>
+                          {v.name}
+                          {v.skipped && <span className="sr-only"> ({t.notServed})</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
                 <li
                   className="end"
-                  data-next={(here && riding && passed >= l.via.length) || undefined}
+                  data-next={
+                    (here && riding && passed >= servedBefore(l, l.via.length)) || undefined
+                  }
                 >
                   <time>{clock(l.end)}</time>
                   <span>{i === last && destination ? destination : l.to.name}</span>

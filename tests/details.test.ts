@@ -4,6 +4,7 @@ import {
   lookupUrl,
   nominatimSearchUrl,
   parseLookup,
+  parseLookupPlace,
   parseNominatim,
   withScheme,
 } from '../src/core/details';
@@ -78,5 +79,25 @@ describe('Nominatim search', () => {
       parseNominatim([{ display_name: 'Unter den Linden, Berlin', lat: '1', lon: '2' }])[0].name,
     ).toBe('Unter den Linden');
     expect(parseNominatim(null)).toEqual([]);
+  });
+
+  it('reads where a looked-up object is, and what it is called', () => {
+    expect(
+      parseLookupPlace([
+        {
+          lat: '52.5163',
+          lon: '13.3777',
+          name: 'Brandenburger Tor',
+          display_name: 'Brandenburger Tor, Pariser Platz, Mitte, Berlin, Deutschland',
+        },
+      ]),
+    ).toEqual({
+      lat: 52.5163,
+      lng: 13.3777,
+      name: 'Brandenburger Tor',
+      detail: 'Pariser Platz, Mitte, Berlin',
+    });
+    expect(parseLookupPlace([])).toBeNull();
+    expect(parseLookupPlace([{ lat: 'x', lon: '1' }])).toBeNull();
   });
 });

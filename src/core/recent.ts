@@ -1,5 +1,9 @@
 import { distance, type LngLat } from './geo';
 import type { PlaceKind } from './placeKind';
+import { CATEGORY_IDS } from './categories';
+
+const knownKind = (k: unknown) =>
+  typeof k === 'string' && (/^(name|found):./.test(k) || (CATEGORY_IDS as string[]).includes(k));
 
 /**
  * What the user searched for and took, newest first, kept on the device only: a place found by
@@ -62,7 +66,8 @@ export function parseRecent(raw: string | null): Recent[] {
     return list
       .filter((r): r is Recent => {
         if (!r || typeof r !== 'object' || typeof r.at !== 'number') return false;
-        if ('kind' in r) return typeof r.kind === 'string' && typeof r.label === 'string';
+        // A kind of place an update renamed or dropped is forgotten, not shown blank.
+        if ('kind' in r) return typeof r.label === 'string' && knownKind(r.kind);
         return (
           'place' in r &&
           isPoint(r.place) &&

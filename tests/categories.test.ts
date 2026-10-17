@@ -11,6 +11,7 @@ import {
   misspeltFor,
   nameOf,
   nearest,
+  SHOWN_MAX,
   sharedName,
   squeeze,
   without,
@@ -159,6 +160,17 @@ describe('categories', () => {
     // A group holds what its finer kinds hold.
     expect(isOf('groceries', { name: 'Kamps', subclass: 'bakery' })).toBe(true);
     expect(isOf('bakery', { name: 'Kamps', subclass: 'bakery' })).toBe(true);
+  });
+
+  it('shows up to 60 of a kind, the nearest', () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({
+      name: `Café ${i}`,
+      lng: 13.4 + i * 0.001,
+      lat: 52.5,
+    }));
+    const list = nearest(many, { lng: 13.4, lat: 52.5 });
+    expect(list).toHaveLength(SHOWN_MAX);
+    expect(list.at(-1)!.name).toBe('Café 59');
   });
 
   it('lists the nearest first, each place once', () => {

@@ -185,6 +185,30 @@ describe('ride', () => {
     expect(said).not.toContain('2:walk');
   });
 
+  it('offers a new connection to a rider left standing at the stop', () => {
+    // At the stop in time (7), the U6 due at 8; at 12 the rider is still there.
+    const left = replay([
+      { fix: at(s1, min(7)), time: min(7) },
+      { fix: at(s1, min(9)), time: min(9) },
+      { fix: at(s1, min(12)), time: min(12) },
+    ]);
+    expect(left.st).toMatchObject({ leg: 1, phase: 'wait', missed: true });
+    expect(left.said).toEqual(['1:board', '1:missed']);
+    // Within the first minutes it may just be late: still the ride as planned.
+    const late = replay([
+      { fix: at(s1, min(7)), time: min(7) },
+      { fix: at(s1, min(10)), time: min(10) },
+    ]);
+    expect(late.st).toMatchObject({ leg: 1, phase: 'ride', missed: false });
+    // The late train comes after all: along the line, riding again.
+    const after = replay([
+      { fix: at(s1, min(7)), time: min(7) },
+      { fix: at(s1, min(12)), time: min(12) },
+      { fix: at(m(400, 402), min(14)), time: min(14) },
+    ]);
+    expect(after.st).toMatchObject({ leg: 1, phase: 'ride', missed: false });
+  });
+
   it('counts a departure as missed when the stop is reached after it', () => {
     const { st } = replay([
       { fix: at(start, min(0)), time: min(0) },

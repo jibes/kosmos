@@ -247,6 +247,8 @@ export const de = {
   followCompass: 'Karte mit Kompass drehen',
   followHeading: 'Karte mit der Fahrtrichtung drehen',
   speedLimit: 'Tempolimit {n}',
+  notServed: 'entfällt heute',
+  replanned: 'Die ist schon weg: hier die nächsten Verbindungen.',
   northUp: 'Norden oben',
   noCompass: 'Kein Kompass auf diesem Gerät',
   lanes: 'Fahrspuren',

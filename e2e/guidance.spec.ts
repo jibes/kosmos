@@ -473,6 +473,116 @@ test.describe('guidance', () => {
     );
   });
 
+  test('moves the dot on a coarse fix, where guidance waits for a better one', async ({
+    page,
+    context,
+  }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: from.lat, longitude: from.lng, accuracy: 5 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(page.locator('.me.nav')).toHaveCount(1);
+    await idle(page);
+    // A network fix 70 m east, 120 m accurate.
+    const coarse = { lng: from.lng + 0.001, lat: from.lat };
+    await context.setGeolocation({ latitude: coarse.lat, longitude: coarse.lng, accuracy: 120 });
+    await expect
+      .poll(async () => {
+        const b = (await page.locator('.me').boundingBox())!;
+        const p = await page.evaluate(
+          ([lng, lat]) => window.kosmos!.project([lng, lat]),
+          [coarse.lng, coarse.lat],
+        );
+        return Math.hypot(b.x + b.width / 2 - p.x, b.y + b.height / 2 - p.y);
+      })
+      .toBeLessThan(6);
+  });
+
+  test('a touch never released does not hold the camera for good', async ({ page, context }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getPitch()))).toBe(55);
+    // A finger down when the app was put away: its "up" never came.
+    await page.locator('.maplibregl-canvas-container').dispatchEvent('pointerdown', {
+      pointerId: 77,
+      isPrimary: true,
+      bubbles: true,
+    });
+    // A later tap on the map, and the camera follows the next fix again.
+    const box = (await page.locator('.map').boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.6);
+    await idle(page);
+    const before = await page.evaluate(() => window.kosmos!.getCenter().lat);
+    // On along the route at a believable pace.
+    for (let i = 1; i <= 6; i++) {
+      await go(from.lng, from.lat - 0.0003 * i);
+      await page.waitForTimeout(600);
+    }
+    await expect
+      .poll(() => page.evaluate(() => window.kosmos!.getCenter().lat), { timeout: 8000 })
+      .toBeLessThan(before - 0.001);
+  });
+
+  test('lets the screen sleep again when guidance ends before the lock came', async ({
+    page,
+    context,
+  }) => {
+    // A slow wake lock: it arrives after guidance has ended.
+    await page.evaluate(() => {
+      const w = window as unknown as { held: number };
+      w.held = 0;
+      Object.defineProperty(navigator, 'wakeLock', {
+        value: {
+          request: () =>
+            new Promise((done) =>
+              setTimeout(() => {
+                w.held++;
+                done({ release: async () => void w.held-- });
+              }, 4000),
+            ),
+        },
+      });
+    });
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({
+      latitude: CENTER.lat + 0.01,
+      longitude: CENTER.lng + 0.01,
+      accuracy: 5,
+    });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await page.getByRole('button', { name: 'End' }).click();
+    await page.getByRole('button', { name: /(Tap|Click) again to end navigation/ }).click();
+    await page.waitForTimeout(4500);
+    expect(await page.evaluate(() => (window as unknown as { held: number }).held)).toBe(0);
+  });
+
   test('shows the speed limit, the speed red when well over it', async ({
     page,
     context,

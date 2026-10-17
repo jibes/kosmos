@@ -91,6 +91,23 @@ test.describe('search', () => {
     await expect(rows.last()).toBeInViewport();
   });
 
+  test('takes Enter typed before the names in view are read', async ({ page }) => {
+    await jump(page, { ...CENTER, zoom: 14 });
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name);
+    // Again: Photon's answer is known, the names in view are read anew; Enter at once, in the
+    // same moment, as a fast typist's does.
+    await input.fill('');
+    await input.evaluate((el: HTMLInputElement) => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      set.call(el, 'brandenburger');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await expect(input).not.toBeFocused();
+  });
+
   test('never shows the places of a category as answers to a name', async ({ page, context }) => {
     await context.route(/photon\.komoot\.io\/api\//, async (route) => {
       await new Promise((r) => setTimeout(r, 2000));

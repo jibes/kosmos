@@ -5,6 +5,7 @@ import {
   SEARCH_HIT,
   routeRequests,
   liveTrip,
+  planFails,
   transitRequests,
   tripRequests,
 } from './fixtures/offline-world';
@@ -91,11 +92,14 @@ test.describe('routes', () => {
     // From the place to where the user is now.
     await expect.poll(() => routeRequests.at(-1)?.from[0]).toBeCloseTo(SEARCH_HIT.lng, 4);
     await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(CENTER.lng + 0.01, 4);
+    // Guidance always starts where the user is: towards there it has nowhere to go.
+    await expect(card.getByRole('button', { name: 'Start', exact: true })).toHaveCount(0);
     // Back again: "My location" is the live position again, not the point it was.
     await swap.click();
     await expect(ends).toHaveText(['My location', SEARCH_HIT.name]);
     await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(SEARCH_HIT.lng, 4);
     await expect(card.getByRole('button', { name: 'Use my location' })).toHaveCount(0);
+    await expect(card.getByRole('button', { name: 'Start', exact: true })).toBeVisible();
   });
 
   test('offers a way without toll roads when every other has them, coins marking tolls', async ({
@@ -371,6 +375,37 @@ test.describe('routes', () => {
     await expect(banner).toHaveCount(0);
   });
 
+  test('plans again when Start comes after the connection has left', async ({ page, context }) => {
+    await page.evaluate(() => {
+      const w = window as unknown as { offset: number };
+      w.offset = 0;
+      const now = Date.now.bind(Date);
+      Date.now = () => now() + w.offset;
+    });
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({
+      latitude: CENTER.lat + 0.01,
+      longitude: CENTER.lng + 0.01,
+      accuracy: 5,
+    });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Public transport' }).click();
+    await expect(card.locator('.legs .line').first()).toHaveText('U6');
+    // The card left open past the U6's departure (minute 8).
+    await page.evaluate(() => ((window as unknown as { offset: number }).offset = 9 * 60_000));
+    const asked = transitRequests.length;
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'has left' })).toBeVisible();
+    expect(transitRequests.length).toBe(asked + 1);
+    await expect(page.locator('.nav-banner')).toHaveCount(0);
+  });
+
   test('plans a new connection from the stop when the position is old', async ({
     page,
     context,
@@ -408,11 +443,42 @@ test.describe('routes', () => {
     // In the station, no fix for a while: the new plan starts at the stop, not the old fix.
     await minutes(7);
     const asked = transitRequests.length;
-    await banner.getByRole('button', { name: 'New connection' }).click();
-    await expect.poll(() => transitRequests.length).toBe(asked + 1);
-    const [lat, lng] = transitRequests.at(-1)!.get('fromPlace')!.split(',').map(Number);
-    expect(lat).toBeCloseTo(stopLat, 4);
-    expect(lng).toBeCloseTo(from.lng, 4);
+    // And none comes: the connection followed stays, said so, and can be asked for again.
+    planFails.on = true;
+    try {
+      await banner.getByRole('button', { name: 'New connection' }).click();
+      await expect.poll(() => transitRequests.length).toBe(asked + 1);
+      const [lat, lng] = transitRequests.at(-1)!.get('fromPlace')!.split(',').map(Number);
+      expect(lat).toBeCloseTo(stopLat, 4);
+      expect(lng).toBeCloseTo(from.lng, 4);
+      await expect(banner).toContainText('No route found');
+      await expect(banner).toContainText('U6 is cancelled');
+      await expect(banner.getByRole('button', { name: 'New connection' })).toBeEnabled();
+    } finally {
+      planFails.on = false;
+    }
+  });
+
+  test('gives up on a router that never answers, with Retry', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({
+      latitude: CENTER.lat + 0.01,
+      longitude: CENTER.lng + 0.01,
+      accuracy: 5,
+    });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    // The router takes the request and never answers.
+    await context.route(/valhalla1\.openstreetmap\.de\/route/, () => undefined);
+    await page.clock.install();
+    const asked = page.waitForRequest(/valhalla1\.openstreetmap\.de\/route/);
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await asked;
+    await page.clock.fastForward(21_000);
+    await expect(page.locator('.card.route').getByRole('button', { name: 'Retry' })).toBeVisible();
   });
 
   test('keeps the chosen route when a reroute fails', async ({ page, context }) => {

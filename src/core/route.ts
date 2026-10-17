@@ -337,11 +337,13 @@ export function formatDistance(m: number, lang: string, units: Units = 'metric')
       const step = v < 300 ? 10 : 50;
       return `${Math.max(0, Math.round(v / step) * step)} ${unit}`;
     }
-    return `${nf(m / MILE, m < 10 * MILE ? 1 : 0)} mi`;
+    // Where rounding would reach the next step ("10.0 mi"), the next step's way of saying it.
+    return `${nf(m / MILE, m < 9.95 * MILE ? 1 : 0)} mi`;
   }
   if (m < 50) return `${Math.max(0, Math.round(m / 5) * 5)} m`;
-  if (m < 1000) return `${Math.round(m / 10) * 10} m`;
-  return m < 10_000 ? `${nf(m / 1000, 1)} km` : `${nf(m / 1000, 0)} km`;
+  // 995 m is "1.0 km", not "1000 m"; 9.96 km is "10 km", not "10.0 km".
+  if (m < 995) return `${Math.round(m / 10) * 10} m`;
+  return m < 9950 ? `${nf(m / 1000, 1)} km` : `${nf(m / 1000, 0)} km`;
 }
 
 export type SpokenUnit = 'm' | 'km' | 'ft' | 'yd' | 'mi';

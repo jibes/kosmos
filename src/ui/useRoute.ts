@@ -52,15 +52,22 @@ const EXIT_WORDS: ExitWords = {
 const tripKey = (trip: Trip) =>
   `${trip.mode}|${trip.mode === 'transit' ? (trip.at ?? 'now') : ''}|${trip.to.lng},${trip.to.lat}|${trip.from ? `${trip.from.lng},${trip.from.lat}` : 'me'}`;
 
-/** A failed reroute must not take the route away from someone who is driving it. */
+/**
+ * A failed reroute must not take the route away from someone who is following it, nor a failed
+ * new connection the one being ridden (asked from elsewhere, under another key).
+ */
 const keepWhileNavigating = (
   prev: Result | null,
   next: Omit<Result, 'n'>,
   pinned: boolean,
+  transit: boolean,
 ): Result => {
   const n = (prev?.n ?? 0) + 1;
-  return pinned && !next.routes.length && prev?.key === next.key && prev.routes.length
-    ? { ...prev, kept: true, n }
+  // Across a key change only for a connection (its new start is the stop): a road route from
+  // a chosen start is no way from where the user now is.
+  const same = prev?.key === next.key || (transit && !!prev);
+  return pinned && !next.routes.length && same && prev?.routes.length
+    ? { ...prev!, key: next.key, kept: true, n }
     : { ...next, n };
 };
 
@@ -152,12 +159,19 @@ export function useRoute(
       .then(({ ok, status, routes }) => {
         if (ctrl.signal.aborted) return;
         const error = ok ? 'none' : classifyError(status);
-        setResult((prev) => keepWhileNavigating(prev, { key, routes, error }, pinned));
+        setResult((prev) =>
+          keepWhileNavigating(prev, { key, routes, error }, pinned, trip.mode === 'transit'),
+        );
       })
       .catch(() => {
         if (ctrl.signal.aborted) return;
         setResult((prev) =>
-          keepWhileNavigating(prev, { key, routes: [], error: 'failed' }, pinned),
+          keepWhileNavigating(
+            prev,
+            { key, routes: [], error: 'failed' },
+            pinned,
+            trip.mode === 'transit',
+          ),
         );
       });
   }, [trip, here, key, lang, attempt, pinned]);
@@ -169,7 +183,9 @@ export function useRoute(
   } else if (trip && !trip.from && !here) {
     status = 'locating';
   }
-  const routes = current && result ? result.routes : NO_ROUTES;
+  // A new connection asked for while riding: the one followed stays until the answer comes.
+  const waiting = pinned && trip?.mode === 'transit' && !!result?.routes.length;
+  const routes = current && result ? result.routes : waiting ? result!.routes : NO_ROUTES;
   return {
     routes,
     status,

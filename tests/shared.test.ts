@@ -32,6 +32,21 @@ describe('shared links', () => {
         'https://www.google.com/maps/place/Brandenburger+Tor/@52.5163,13.3777,17z/data=x',
       ),
     ).toEqual({ at: { lat: 52.5163, lng: 13.3777 }, zoom: 17, name: 'Brandenburger Tor' });
+    // The place itself, not where Google's camera stood beside its panel.
+    expect(
+      parseShared(
+        'https://www.google.com/maps/place/Brandenburger+Tor/@52.5161,13.3712,16z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d52.5162746!4d13.3777041!16s',
+      ),
+    ).toEqual({
+      at: { lat: 52.5162746, lng: 13.3777041 },
+      zoom: 16,
+      name: 'Brandenburger Tor',
+    });
+    // An OpenStreetMap object's page: the object, by its id.
+    expect(parseShared('https://www.openstreetmap.org/node/518071791')).toEqual({
+      osm: 'N518071791',
+    });
+    expect(parseShared('https://www.openstreetmap.org/way/4067/history')).toEqual({ osm: 'W4067' });
     expect(parseShared('https://maps.google.com/?q=52.5163,13.3777')).toEqual({
       at: { lat: 52.5163, lng: 13.3777 },
     });

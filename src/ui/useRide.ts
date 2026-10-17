@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { rideBuzz } from '../core/haptics';
 import {
   initialRide,
   markRideSpoken,
@@ -7,6 +8,7 @@ import {
   type RidePrompt,
   type RideState,
 } from '../core/ride';
+import { vibrate } from './native';
 import { DEPARTURE_CHECK_MS, tripUrl, withLiveTrip, type Transit } from '../core/transit';
 import { getJson } from './http';
 import type { Fix } from './useLocation';
@@ -57,6 +59,9 @@ export function useRide(o: Options) {
       if (p) {
         st = markRideSpoken(st, p.key);
         if (!opts.current.muted) opts.current.voice.speak(opts.current.say(live, p));
+        // Muted (every ride starts so): the phone in a pocket buzzes instead.
+        const buzz = rideBuzz(p.kind, opts.current.muted);
+        if (buzz) vibrate(buzz);
       }
       setView({ planned, live, st });
       check(now);

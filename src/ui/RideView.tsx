@@ -1,7 +1,7 @@
 import { FRESH_MS, type RidePrompt, type RideState } from '../core/ride';
 import type { Place } from '../core/search';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
-import type { Transit, TransitLeg } from '../core/transit';
+import { servedBefore, type Transit, type TransitLeg } from '../core/transit';
 import { capital, fill, t, units } from '../i18n';
 import { ModeIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
@@ -136,9 +136,11 @@ export function RideView(props: Props) {
     icon = <ModeIcon mode="transit" size={40} />;
   }
 
-  // Of the current ride's stops (those passed through, then the one to get off at), how many
-  // are behind the rider.
-  const passed = st.phase === 'ride' && leg ? leg.via.length + 1 - st.stopsLeft : 0;
+  // Of the current ride's stops served (those passed through, then the one to get off at), how
+  // many are behind the rider.
+  // Stops the vehicle skips today are not counted, as they are not stopped at.
+  const passed =
+    st.phase === 'ride' && leg ? servedBefore(leg, leg.via.length) + 1 - st.stopsLeft : 0;
 
   return (
     <>

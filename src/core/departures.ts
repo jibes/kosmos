@@ -59,7 +59,7 @@ const hex = (c: unknown) =>
     : undefined;
 
 /** A departure that left this long ago is still worth running for, not more. */
-const GONE_MS = 60_000;
+export const GONE_MS = 60_000;
 
 /**
  * The departures in a stoptimes answer, soonest first: the same vehicle once (a station's
@@ -116,3 +116,7 @@ export const isStopOsm = (key: string | undefined, value: string | undefined) =>
   (key === 'public_transport' && ['station', 'stop_position', 'platform'].includes(value ?? '')) ||
   (key === 'highway' && value === 'bus_stop') ||
   (key === 'amenity' && ['bus_station', 'ferry_terminal'].includes(value ?? ''));
+
+/** The departures still to come at `now`: a card left open does not list those gone. */
+export const stillToCome = (list: Departure[], now: number) =>
+  list.filter((d) => d.time >= now - GONE_MS);
