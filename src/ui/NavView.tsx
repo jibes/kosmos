@@ -11,7 +11,7 @@ import {
   type Mode,
   type Route,
 } from '../core/route';
-import { fill, ordinal, t, units } from '../i18n';
+import { capital, fill, ordinal, t, units } from '../i18n';
 import { LaneIcon, TurnIcon } from './icons';
 import { NavBar, ViewToggle } from './NavBar';
 import type { RouteStatus } from './RouteCard';
@@ -36,14 +36,24 @@ interface Props {
   onEnd: () => void;
 }
 
+type Step = Route['maneuvers'][number];
+
 /**
- * What the banner shows, short: a roundabout by its exit and road ("2nd exit · N52"), its way
- * out on the line below; else the street, or the router's sentence.
+ * What the banner shows, short: where the way leads when the signs say ("Towards Tullamore"),
+ * as a road's name or number runs both ways; else the street, or the router's sentence. A
+ * roundabout leads with its exit ("2nd exit · towards Tullamore").
  */
-const short = (m: Route['maneuvers'][number]) =>
-  m.type === ROUNDABOUT && m.exit
-    ? [fill(t.exitNth, { n: ordinal(m.exit) }), m.street].filter(Boolean).join(' · ')
-    : bannerText(m);
+const short = (m: Step) => {
+  if (m.type === ROUNDABOUT && m.exit) {
+    return [fill(t.exitNth, { n: ordinal(m.exit) }), m.wayOut ?? m.street]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  return m.wayOut ? capital(m.wayOut) : bannerText(m);
+};
+
+/** The road itself, under a way shown by where it leads. */
+const road = (m: Step) => (m.wayOut && m.street ? m.street : null);
 
 /** Valhalla's maneuver type for entering a roundabout. */
 const ROUNDABOUT = 26;
@@ -97,8 +107,8 @@ export function NavView(props: Props) {
     ? t.locating
     : nav.weak && !nav.arrived
       ? t.weakGps
-      : guiding
-        ? (m?.wayOut ?? null)
+      : guiding && m
+        ? road(m)
         : null;
 
   return (

@@ -49,22 +49,27 @@ export interface ExitWords {
 const add = (text: string | undefined, more: string) =>
   text ? `${text.replace(/[.\s]+$/, '')}, ${more}.` : text;
 
+/** Leaving, arriving and coming off a roundabout name no way of their own. */
+const NO_WAY = new Set([1, 2, 3, 4, 5, 6, EXIT]);
+
 /**
- * Roundabouts say which way out, not only which exit and what road: a numbered road leaves
- * in two directions. The exit's signed destination (`toward`, on the roundabout or its exit
- * maneuver), else the direction it leads, is added to the words shown and spoken.
+ * Where a maneuver leads, said by where the signs point rather than only the road's name or
+ * number, which run both ways. Every maneuver with a signed destination (`toward`) gets it as
+ * `wayOut`, added to its words unless the router said it already. Roundabouts also take the
+ * signs of their exit, and without any, the direction the exit road leads.
  */
-export function narrateRoundabouts(route: Route, words: ExitWords): Route {
+export function narrateWays(route: Route, words: ExitWords): Route {
   const ms = route.maneuvers;
-  if (!ms.some((m) => m.type === ENTER)) return route;
   const maneuvers = ms.map((m, i): Maneuver => {
-    if (m.type !== ENTER) return m;
-    const out = ms.slice(i + 1).find((x) => x.type === EXIT) ?? ms[i + 1];
+    if (NO_WAY.has(m.type)) return m;
+    const out =
+      m.type === ENTER ? (ms.slice(i + 1).find((x) => x.type === EXIT) ?? ms[i + 1]) : undefined;
     const toward = m.toward ?? out?.toward;
-    if (toward && m.instruction.includes(toward)) return m;
-    const deg = out ? headingFrom(route.coords, out.begin) : null;
+    const deg = !toward && out ? headingFrom(route.coords, out.begin) : null;
     if (!toward && deg === null) return m;
     const more = toward ? words.toward(toward) : words.heading(compassOf(deg!));
+    // Said already ("… toward Tullamore"): shown the same way, not said twice.
+    if (toward && m.instruction.includes(toward)) return { ...m, wayOut: more };
     return {
       ...m,
       wayOut: more,

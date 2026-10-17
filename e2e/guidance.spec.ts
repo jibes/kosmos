@@ -451,6 +451,32 @@ test.describe('guidance', () => {
     await expect(page.getByRole('button', { name: 'Overview' })).toBeVisible();
   });
 
+  test('shows a signed turn by where it leads, the road below', async ({ page, context }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (p: { lng: number; lat: number }) =>
+      context.setGeolocation({ latitude: p.lat, longitude: p.lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Bike' }).click();
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    const banner = page.locator('.nav-banner');
+    // The street runs both ways; the sign says which: big, the road under it.
+    await expect(banner.locator('p [aria-hidden]')).toHaveText('Towards Pariser Platz');
+    await expect(banner.locator('small')).toHaveText('Unter den Linden');
+    // Said in full, with the sign's destination.
+    await expect(banner.locator('p .sr-only')).toHaveText(
+      'Turn right onto Unter den Linden, towards Pariser Platz.',
+    );
+  });
+
   test('keeps "then" whole beside a long next instruction', async ({ page }) => {
     // The banner breaks long street names anywhere; the word before the arrow must not.
     const lines = await page.evaluate(() => {

@@ -11,7 +11,7 @@ import {
   type RouteError,
   type TravelMode,
 } from '../core/route';
-import { narrateRoundabouts, type ExitWords } from '../core/roundabout';
+import { narrateWays, type ExitWords } from '../core/roundabout';
 import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
 import { fill, t, units } from '../i18n';
@@ -131,7 +131,7 @@ export function useRoute(
         ctrl.signal,
       ).then((r) => ({
         ...r,
-        routes: r.ok ? parseValhalla(r.json).map((x) => narrateRoundabouts(x, EXIT_WORDS)) : [],
+        routes: r.ok ? parseValhalla(r.json).map((x) => narrateWays(x, EXIT_WORDS)) : [],
       }));
     const ask =
       trip.mode === 'transit'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compassOf, headingFrom, narrateRoundabouts } from '../src/core/roundabout';
+import { compassOf, headingFrom, narrateWays } from '../src/core/roundabout';
 import type { Maneuver, Route } from '../src/core/route';
 
 // Metres east (x) and north (y) of a point near Tullamore, as [lng, lat].
@@ -49,7 +49,7 @@ describe('roundabouts', () => {
   });
 
   it('says where the signs point, from the roundabout or its exit', () => {
-    const own = narrateRoundabouts(route({ toward: 'Tullamore' }), words).maneuvers[1];
+    const own = narrateWays(route({ toward: 'Tullamore' }), words).maneuvers[1];
     expect(own.instruction).toBe(
       'Enter the roundabout and take the 2nd exit onto N52, towards Tullamore.',
     );
@@ -57,12 +57,12 @@ describe('roundabouts', () => {
     expect(own.alert).toBe('Enter the roundabout, towards Tullamore.');
     // Shown on its own line under the banner's exit and road.
     expect(own.wayOut).toBe('towards Tullamore');
-    const fromExit = narrateRoundabouts(route({}, { toward: 'Birr / Dublin' }), words);
+    const fromExit = narrateWays(route({}, { toward: 'Birr / Dublin' }), words);
     expect(fromExit.maneuvers[1].instruction).toContain('towards Birr / Dublin');
   });
 
   it('says which way the exit leads when no sign does', () => {
-    const r = narrateRoundabouts(route({}), words).maneuvers[1];
+    const r = narrateWays(route({}), words).maneuvers[1];
     expect(r.instruction).toBe('Enter the roundabout and take the 2nd exit onto N52, heading e.');
   });
 
@@ -71,11 +71,32 @@ describe('roundabouts', () => {
       instruction: 'Enter the roundabout and take the 2nd exit toward Tullamore.',
       toward: 'Tullamore',
     });
-    expect(narrateRoundabouts(named, words).maneuvers[1].instruction).toBe(
-      'Enter the roundabout and take the 2nd exit toward Tullamore.',
-    );
-    const out = narrateRoundabouts(route({ toward: 'Tullamore' }), words);
+    const said = narrateWays(named, words).maneuvers[1];
+    expect(said.instruction).toBe('Enter the roundabout and take the 2nd exit toward Tullamore.');
+    // Still shown by where it leads.
+    expect(said.wayOut).toBe('towards Tullamore');
+    const out = narrateWays(route({ toward: 'Tullamore' }), words);
     expect(out.maneuvers[2].instruction).toBe('Exit the roundabout onto N52.');
     expect(out.maneuvers[0].instruction).toBe('Head north.');
+  });
+
+  it('says where any signed turn leads, and leaves unsigned ones to their street', () => {
+    const r: Route = {
+      ...route({}),
+      maneuvers: [
+        man({ type: 1, instruction: 'Head north.', toward: 'Nowhere' }),
+        man({ type: 10, begin: 1, instruction: 'Turn right onto N52.', toward: 'Birr' }),
+        man({ type: 15, begin: 2, instruction: 'Turn left onto Main Street.' }),
+        man({ type: 4, begin: 4, instruction: 'You have arrived.', toward: 'Birr' }),
+      ],
+    };
+    const [depart, right, left, arrive] = narrateWays(r, words).maneuvers;
+    expect(right.instruction).toBe('Turn right onto N52, towards Birr.');
+    expect(right.wayOut).toBe('towards Birr');
+    expect(left.wayOut).toBeUndefined();
+    expect(left.instruction).toBe('Turn left onto Main Street.');
+    // Leaving and arriving name no way.
+    expect(depart.wayOut).toBeUndefined();
+    expect(arrive.wayOut).toBeUndefined();
   });
 });

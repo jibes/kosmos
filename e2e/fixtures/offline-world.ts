@@ -44,7 +44,7 @@ const photonPoint = (lng: number, lat: number, properties: object) => ({
 type Pt = [number, number];
 
 /** An L-shaped trip through `corner`, with the maneuvers Valhalla would describe. */
-function fakeTrip(a: Pt, corner: Pt, b: Pt, speed: number) {
+function fakeTrip(a: Pt, corner: Pt, b: Pt, speed: number, signed = false) {
   const km = (p: Pt, q: Pt) => Math.hypot((q[0] - p[0]) * 67.8, (q[1] - p[1]) * 111.2);
   const k1 = km(a, corner);
   const k2 = km(corner, b);
@@ -72,6 +72,8 @@ function fakeTrip(a: Pt, corner: Pt, b: Pt, speed: number) {
             street_names: ['Unter den Linden'],
             // Two lanes straight on, the right one turns right.
             lanes: [{ directions: 2 }, { directions: 2 }, { directions: 64, active: 64 }],
+            // A signpost at the turn, as cycle routes have.
+            ...(signed ? { sign: { exit_toward_elements: [{ text: 'Pariser Platz' }] } } : {}),
             length: k2,
             time: (k2 / speed) * 3600,
             begin_shape_index: 1,
@@ -313,7 +315,7 @@ export async function offlineWorld(context: BrowserContext) {
     const noTolls = !!body.costing_options?.auto?.exclude_tolls;
     routeRequests.push({ costing: body.costing, from: s, to: e, noTolls });
     const speed = { auto: 30, bicycle: 15, pedestrian: 5 }[body.costing as string] ?? 30;
-    const main = fakeTrip(s, [s[0], e[1]], e, speed);
+    const main = fakeTrip(s, [s[0], e[1]], e, speed, body.costing === 'bicycle');
     const other = fakeTrip(s, [e[0], s[1]], e, speed * 0.8);
     // By car both ways have toll roads; asked to leave them out, a slower way without.
     if (body.costing === 'auto' && !noTolls) {

@@ -57,7 +57,7 @@ export interface Maneuver {
   exit?: number;
   /** Where the signs at this maneuver point ("Tullamore / Dublin"), from OSM destinations. */
   toward?: string;
-  /** A roundabout's way out in words ("towards Tullamore", "heading north"), once narrated. */
+  /** Where it leads in words ("towards Tullamore"; a roundabout also "heading north"). */
   wayOut?: string;
   /** Lanes approaching this maneuver, left to right, when the router knows them. */
   lanes?: Lane[];
