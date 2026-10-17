@@ -30,6 +30,13 @@ export const capital = (s: string) => s.charAt(0).toLocaleUpperCase(locale) + s.
 /** Road units follow the region (en-US: miles), whatever the UI language. */
 export const units = unitsFor(typeof navigator === 'undefined' ? '' : navigator.language);
 
+/** "2nd" in English, "2." in German: the exit of a roundabout. */
+export const ordinal = (n: number) => {
+  if (lang === 'de') return `${n}.`;
+  const tail = { one: 'st', two: 'nd', few: 'rd', other: 'th' } as Record<string, string>;
+  return `${n}${tail[new Intl.PluralRules('en', { type: 'ordinal' }).select(n)] ?? 'th'}`;
+};
+
 /** Fills `{name}` placeholders: `fill(t.walkTo, { stop: 'Hbf' })`. */
 export const fill = (s: string, vars: Record<string, string | number>) =>
   s.replace(/\{(\w+)\}/g, (all, k: string) => (k in vars ? String(vars[k]) : all));

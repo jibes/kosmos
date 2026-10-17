@@ -6,6 +6,9 @@ import type { Mode } from '../core/route';
 export const wide = () =>
   matchMedia('(min-width: 900px), (orientation: landscape) and (min-width: 560px)').matches;
 
+/** Room kept round a fitted route's ends: the start dot and the destination pin above its point. */
+const ENDS_PX = 56;
+
 /** The side layout's gutter, as in styles.css. */
 const WIDE_GUTTER = 16;
 
@@ -35,9 +38,17 @@ export const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
 /** Fits a route, a place or category results into the map area the panel leaves free, measured. */
 export const routePadding = () => {
   const panel = document.querySelector('.panel')?.getBoundingClientRect();
-  if (wide()) return { top: 64, bottom: 64, left: (panel?.right ?? beside(0)) + 48, right: 96 };
-  const bottom = panel && panel.height ? innerHeight - panel.top + 24 : 380;
-  return { top: 96, bottom: Math.min(bottom, innerHeight - 220), left: 40, right: 80 };
+  if (wide()) {
+    return {
+      top: ENDS_PX + 16,
+      bottom: ENDS_PX,
+      left: (panel?.right ?? beside(0)) + ENDS_PX,
+      right: 104,
+    };
+  }
+  // Clear of the map buttons on the right, with room for the start dot and the destination pin.
+  const bottom = panel && panel.height ? innerHeight - panel.top + 32 : 380;
+  return { top: 104, bottom: Math.min(bottom, innerHeight - 240), left: ENDS_PX, right: 96 };
 };
 
 /** A finger long-presses; a mouse right-clicks. */
@@ -62,11 +73,23 @@ export function startBearing(route: { coords: [number, number][] }): number {
   return (Math.atan2((b[0] - a[0]) * Math.cos(a[1] * RAD), b[1] - a[1]) / RAD + 360) % 360;
 }
 
-/** Room around an overview while guiding: the banner on top, the bar at the bottom. */
-const overviewPadding = () =>
-  wide()
-    ? { top: 64, bottom: 64, left: beside(64), right: 64 }
-    : { top: Math.round(innerHeight * 0.3), bottom: 150, left: 48, right: 48 };
+/**
+ * Room around an overview while guiding, measured: below the banner, above the bar, the map
+ * buttons' side kept clear, so start and destination are both in sight, not at the edge.
+ */
+const overviewPadding = () => {
+  const banner = document.querySelector('.nav-banner')?.getBoundingClientRect();
+  const bar = document.querySelector('.nav-bar')?.getBoundingClientRect();
+  if (wide()) return { top: ENDS_PX, bottom: ENDS_PX, left: beside(ENDS_PX), right: 72 };
+  const top = banner && banner.height ? banner.bottom : innerHeight * 0.3;
+  const bottom = bar && bar.height ? innerHeight - bar.top : 150;
+  return {
+    top: Math.round(top + ENDS_PX),
+    bottom: Math.round(bottom + ENDS_PX),
+    left: ENDS_PX,
+    right: 72,
+  };
+};
 
 /**
  * Off the route: the user and the nearest point of it both in view, from above, so the way

@@ -11,9 +11,10 @@ import {
   type RouteError,
   type TravelMode,
 } from '../core/route';
+import { narrateRoundabouts, type ExitWords } from '../core/roundabout';
 import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
-import { units } from '../i18n';
+import { fill, t, units } from '../i18n';
 import { getJson } from './http';
 import type { RouteStatus } from './RouteCard';
 
@@ -41,6 +42,12 @@ const MOVE_TOLERANCE_M = 150;
 /** Moving on with a road route open asks again at most this often. */
 const REFRESH_MS = 60_000;
 const NO_ROUTES: Route[] = [];
+
+/** The way out of a roundabout, in the UI's language, as the router's own words are. */
+const EXIT_WORDS: ExitWords = {
+  toward: (place) => fill(t.exitToward, { place }),
+  heading: (way) => fill(t.exitHeading, { way: t[`way_${way}`] }),
+};
 
 const tripKey = (trip: Trip) =>
   `${trip.mode}|${trip.mode === 'transit' ? (trip.at ?? 'now') : ''}|${trip.to.lng},${trip.to.lat}|${trip.from ? `${trip.from.lng},${trip.from.lat}` : 'me'}`;
@@ -122,7 +129,10 @@ export function useRoute(
           noTolls,
         ),
         ctrl.signal,
-      ).then((r) => ({ ...r, routes: r.ok ? parseValhalla(r.json) : [] }));
+      ).then((r) => ({
+        ...r,
+        routes: r.ok ? parseValhalla(r.json).map((x) => narrateRoundabouts(x, EXIT_WORDS)) : [],
+      }));
     const ask =
       trip.mode === 'transit'
         ? getJson(transitUrl(from, trip.to, lang, trip.at ?? null), ctrl.signal).then((r) => ({

@@ -423,6 +423,24 @@ test.describe('guidance', () => {
     expect(await page.evaluate(() => Math.round(window.kosmos!.getBearing()))).toBe(0);
     expect(await inView(to)).toBe(true);
     expect(await inView(from)).toBe(true);
+    // Both ends clear of the banner and the bar, with room for their markers: not at the edge.
+    const clear = (p: { lng: number; lat: number }) =>
+      page.evaluate(
+        ([lng, lat]) => {
+          const q = window.kosmos!.project([lng, lat]);
+          const top = document.querySelector('.nav-banner')!.getBoundingClientRect().bottom;
+          const bar = document.querySelector('.nav-bar')!.getBoundingClientRect();
+          const wideLayout = bar.right < innerWidth / 2 + 1 || bar.width < innerWidth / 2;
+          return (
+            q.x > 40 &&
+            q.x < innerWidth - 40 &&
+            (wideLayout || (q.y > top + 40 && q.y < bar.top - 40))
+          );
+        },
+        [p.lng, p.lat],
+      );
+    expect(await clear(to)).toBe(true);
+    expect(await clear(from)).toBe(true);
     // A new fix keeps the overview.
     await context.setGeolocation({ latitude: from.lat - 0.001, longitude: from.lng, accuracy: 5 });
     await page.waitForTimeout(1500);

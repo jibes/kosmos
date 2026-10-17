@@ -11,7 +11,7 @@ import {
   type Mode,
   type Route,
 } from '../core/route';
-import { fill, t, units } from '../i18n';
+import { fill, ordinal, t, units } from '../i18n';
 import { LaneIcon, TurnIcon } from './icons';
 import { NavBar, ViewToggle } from './NavBar';
 import type { RouteStatus } from './RouteCard';
@@ -35,6 +35,18 @@ interface Props {
   onRecenter: () => void;
   onEnd: () => void;
 }
+
+/**
+ * What the banner shows, short: a roundabout by its exit and road ("2nd exit · N52"), its way
+ * out on the line below; else the street, or the router's sentence.
+ */
+const short = (m: Route['maneuvers'][number]) =>
+  m.type === ROUNDABOUT && m.exit
+    ? [fill(t.exitNth, { n: ordinal(m.exit) }), m.street].filter(Boolean).join(' · ')
+    : bannerText(m);
+
+/** Valhalla's maneuver type for entering a roundabout. */
+const ROUNDABOUT = 26;
 
 /** A turn this close after the next one is shown with it. */
 const THEN_M = 150;
@@ -66,7 +78,7 @@ export function NavView(props: Props) {
 
   let title = m?.instruction ?? '';
   // On screen the street, where the arrow says the rest; the sentence is for screen readers.
-  let shown = m ? bannerText(m) : '';
+  let shown = m ? short(m) : '';
   let turn = m ? turnOf(m.type) : 'straight';
   // The router's text for the destination is past tense; on the way there it reads ahead.
   if (started && !nav.arrived && m && nav.next === route.maneuvers.length - 1) {
@@ -81,7 +93,13 @@ export function NavView(props: Props) {
     turn = reroute === 'failed' ? 'uturn' : 'depart';
   }
   // What the user should know besides the instruction: no position yet, or a poor one.
-  const note = !started ? t.locating : nav.weak && !nav.arrived ? t.weakGps : null;
+  const note = !started
+    ? t.locating
+    : nav.weak && !nav.arrived
+      ? t.weakGps
+      : guiding
+        ? (m?.wayOut ?? null)
+        : null;
 
   return (
     <>
@@ -108,7 +126,7 @@ export function NavView(props: Props) {
             <p className="nav-then">
               <span className="nav-then-word">{t.then}</span>
               <TurnIcon turn={turnOf(then.type)} size={18} />
-              <span className="nav-then-text">{bannerText(then)}</span>
+              <span className="nav-then-text">{short(then)}</span>
             </p>
           )}
         </div>

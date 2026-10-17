@@ -55,6 +55,10 @@ export interface Maneuver {
   /** Index into `Route.coords` where the maneuver happens. */
   begin: number;
   exit?: number;
+  /** Where the signs at this maneuver point ("Tullamore / Dublin"), from OSM destinations. */
+  toward?: string;
+  /** A roundabout's way out in words ("towards Tullamore", "heading north"), once narrated. */
+  wayOut?: string;
   /** Lanes approaching this maneuver, left to right, when the router knows them. */
   lanes?: Lane[];
 }
@@ -183,6 +187,7 @@ interface VManeuver {
   begin_shape_index?: number;
   roundabout_exit_count?: number;
   lanes?: unknown;
+  sign?: { exit_toward_elements?: { text?: string }[] };
 }
 interface VTrip {
   /** What `length` is counted in: the unit asked for in `directions_options`. */
@@ -190,6 +195,13 @@ interface VTrip {
   legs?: { shape?: string; maneuvers?: VManeuver[] }[];
   summary?: { length?: number; time?: number; has_toll?: boolean };
 }
+
+/** The places a maneuver's signs point to, as they read: "Tullamore / Dublin". */
+const towardOf = (m: VManeuver) =>
+  (m.sign?.exit_toward_elements ?? [])
+    .map((e) => e.text?.trim())
+    .filter(Boolean)
+    .join(' / ') || undefined;
 
 function toRoute(trip: VTrip | undefined): Route | null {
   if (!trip?.legs?.length) return null;
@@ -214,6 +226,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
         duration: m.time ?? 0,
         begin: offset + (m.begin_shape_index ?? 0),
         exit: m.roundabout_exit_count,
+        toward: towardOf(m),
         lanes: parseLanes(m.lanes),
       });
     }
