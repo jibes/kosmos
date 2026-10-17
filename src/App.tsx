@@ -1,7 +1,7 @@
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Place } from './core/search';
-import type { Mode, TravelMode } from './core/route';
+import { roadModeOf, type TravelMode } from './core/route';
 import { lang, locale, t } from './i18n';
 import { About } from './ui/About';
 import { Controls, type Follow } from './ui/Controls';
@@ -57,10 +57,6 @@ const ARRIVED_END_MS = 60_000;
 /** A second back press within this ends navigation. */
 const BACK_TWICE_MS = 3000;
 
-/** The way of travel road guidance uses; public transport walks are guided by the ride. */
-const roadModeOf = (trip: { mode: TravelMode } | null | undefined): Mode =>
-  trip && trip.mode !== 'transit' ? trip.mode : 'car';
-
 export function App() {
   const systemTheme = useTheme();
   const [navigating, setNavigating] = useState(false);
@@ -97,6 +93,12 @@ export function App() {
   const [connAt, setConnAt] = useState<number | null>(null);
   const [avoidTolls, setAvoidTolls] = useState(storedAvoidTolls);
   const route = useRoute(trip, fix, lang, navigating, avoidTolls);
+  /** Around toll roads or not, from the route card or while driving; asks for the route anew. */
+  const chooseTolls = (avoid: boolean) => {
+    setActive(0);
+    setAvoidTolls(avoid);
+    store(TOLLS_KEY, avoid ? 'avoid' : 'use');
+  };
   // The voice speaks the language of the words it is given: the UI's (and the router's).
   const voice = useMemo(() => systemVoice(locale), []);
   const { muted, begin: beginVoice, toggle: toggleMute } = useMuted(voice);
@@ -600,6 +602,11 @@ export function App() {
             lang={locale}
             muted={muted}
             following={view.following}
+            tolls={
+              roadMode === 'car'
+                ? { avoid: avoidTolls, onToggle: () => chooseTolls(!avoidTolls) }
+                : undefined
+            }
             overview={overview}
             reroute={rerouteState}
             onMute={toggleMute}
@@ -676,11 +683,7 @@ export function App() {
                     setTrip({ ...trip, at });
                   }}
                   avoidTolls={avoidTolls}
-                  onAvoidTolls={(avoid) => {
-                    setActive(0);
-                    setAvoidTolls(avoid);
-                    store(TOLLS_KEY, avoid ? 'avoid' : 'use');
-                  }}
+                  onAvoidTolls={chooseTolls}
                 />
               )}
               {selection && !trip && (

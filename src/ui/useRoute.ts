@@ -4,6 +4,7 @@ import {
   classifyError,
   parseValhalla,
   routeUrl,
+  tollFreeFirst,
   type Route,
   type RouteError,
   type TravelMode,
@@ -25,6 +26,8 @@ export interface Trip {
 
 interface Result {
   key: string;
+  /** The trip without route choices (tolls): while driving, its route stays until a new one. */
+  base: string;
   routes: Route[];
   error: RouteError;
   /** The last answer failed and the route being driven was kept. */
@@ -49,7 +52,7 @@ const keepWhileNavigating = (
   pinned: boolean,
 ): Result => {
   const n = (prev?.n ?? 0) + 1;
-  return pinned && !next.routes.length && prev?.key === next.key && prev.routes.length
+  return pinned && !next.routes.length && prev?.base === next.base && prev.routes.length
     ? { ...prev, kept: true, n }
     : { ...next, n };
 };
@@ -75,7 +78,8 @@ export function useRoute(
   const last = useRef<{ key: string; from: LngLat; attempt: number; at: number } | null>(null);
   const inflight = useRef<AbortController | null>(null);
   const tollFree = avoidTolls && trip?.mode === 'car';
-  const key = trip ? tripKey(trip) + (tollFree ? '|no-toll' : '') : '';
+  const base = trip ? tripKey(trip) : '';
+  const key = base + (tollFree ? '|no-toll' : '');
 
   useEffect(() => {
     if (!trip) {
@@ -120,29 +124,33 @@ export function useRoute(
             ctrl.signal,
           ).then((r) => ({
             ...r,
-            routes: r.ok ? parseValhalla(r.json) : [],
+            routes: r.ok
+              ? (tollFree ? tollFreeFirst : (x: Route[]) => x)(parseValhalla(r.json))
+              : [],
           }));
     ask
       .then(({ ok, status, routes }) => {
         if (ctrl.signal.aborted) return;
         const error = ok ? 'none' : classifyError(status);
-        setResult((prev) => keepWhileNavigating(prev, { key, routes, error }, pinned));
+        setResult((prev) => keepWhileNavigating(prev, { key, base, routes, error }, pinned));
       })
       .catch(() => {
         if (ctrl.signal.aborted) return;
         setResult((prev) =>
-          keepWhileNavigating(prev, { key, routes: [], error: 'failed' }, pinned),
+          keepWhileNavigating(prev, { key, base, routes: [], error: 'failed' }, pinned),
         );
       });
-  }, [trip, here, key, lang, attempt, pinned, tollFree]);
+  }, [trip, here, key, base, lang, attempt, pinned, tollFree]);
 
+  // While driving, a changed choice (tolls) keeps the route being followed until its new one.
+  const current = !!trip && (result?.key === key || (pinned && result?.base === base));
   let status: RouteStatus = 'loading';
-  if (trip && result?.key === key) {
+  if (current && result) {
     status = result.routes.length ? 'ready' : result.error === 'none' ? 'none' : result.error;
   } else if (trip && !trip.from && !here) {
     status = 'locating';
   }
-  const routes = trip && result?.key === key ? result.routes : NO_ROUTES;
+  const routes = current && result ? result.routes : NO_ROUTES;
   return {
     routes,
     status,

@@ -10,6 +10,10 @@ export type Mode = 'car' | 'bike' | 'foot';
 export const MODES: readonly Mode[] = ['car', 'bike', 'foot'];
 /** What the route card offers: the road modes, and public transport from Transitous. */
 export type TravelMode = Mode | 'transit';
+
+/** The way of travel road guidance uses; public transport walks are guided by the ride. */
+export const roadModeOf = (trip: { mode: TravelMode } | null | undefined): Mode =>
+  trip && trip.mode !== 'transit' ? trip.mode : 'car';
 export const TRAVEL_MODES: readonly TravelMode[] = [...MODES, 'transit'];
 const COSTING: Record<Mode, string> = { car: 'auto', bike: 'bicycle', foot: 'pedestrian' };
 
@@ -79,11 +83,16 @@ export function routeUrl(
   lang: string,
   alternates = 2,
   units: Units = 'metric',
-  /** By car: around toll roads where there is a way (`use_tolls` 0; Valhalla's default 0.5). */
+  /**
+   * By car: no toll roads. `use_tolls` 0 alone is only a preference (a toll motorway can still
+   * win), so `exclude_tolls` forbids them; with no way around, there is no route by car.
+   */
   avoidTolls = false,
 ) {
   const options =
-    mode === 'car' && avoidTolls ? { auto: { use_tolls: 0 } } : (OPTIONS[mode] ?? null);
+    mode === 'car' && avoidTolls
+      ? { auto: { use_tolls: 0, exclude_tolls: true } }
+      : (OPTIONS[mode] ?? null);
   const body = {
     locations: [
       {
@@ -226,6 +235,15 @@ function toRoute(trip: VTrip | undefined): Route | null {
     ...(trip.summary?.has_toll ? { toll: true } : {}),
   };
 }
+
+/**
+ * Toll-free routes first, in their order: should the router answer with a toll road anyway
+ * (an older one ignoring `exclude_tolls`), the route chosen is still one without.
+ */
+export const tollFreeFirst = (routes: Route[]) => [
+  ...routes.filter((r) => !r.toll),
+  ...routes.filter((r) => r.toll),
+];
 
 /** The main route first, then any alternates. */
 export function parseValhalla(json: unknown): Route[] {

@@ -8,11 +8,14 @@ import {
   formatDistance,
   formatDuration,
   parseValhalla,
+  roadModeOf,
   routeUrl,
   speedIn,
   spokenDistance,
+  tollFreeFirst,
   turnOf,
   unitsFor,
+  type Route,
 } from '../src/core/route';
 
 describe('polyline', () => {
@@ -76,7 +79,10 @@ describe('routeUrl', () => {
           routeUrl({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, mode, 'de', 2, 'metric', avoid),
         ).searchParams.get('json')!,
       );
-    expect(body('car', true).costing_options).toEqual({ auto: { use_tolls: 0 } });
+    // A preference alone still lets a toll motorway win: they are excluded.
+    expect(body('car', true).costing_options).toEqual({
+      auto: { use_tolls: 0, exclude_tolls: true },
+    });
     expect(body('car', false).costing_options).toBeUndefined();
     expect(body('bike', true).costing_options.auto).toBeUndefined();
   });
@@ -127,6 +133,14 @@ const trip = (coords: [number, number][], km: number, s: number) => ({
   summary: { length: km, time: s },
 });
 
+describe('roadModeOf', () => {
+  it('guides a road mode as it is, public transport walks and no trip as by car', () => {
+    expect(roadModeOf({ mode: 'bike' })).toBe('bike');
+    expect(roadModeOf({ mode: 'transit' })).toBe('car');
+    expect(roadModeOf(null)).toBe('car');
+  });
+});
+
 describe('parseValhalla', () => {
   it('reads the trip and alternates in metres and seconds', () => {
     const routes = parseValhalla({
@@ -169,6 +183,13 @@ describe('parseValhalla', () => {
     expect(r.maneuvers[1].distance).toBeCloseTo(900);
     expect(r.maneuvers[1].lanes).toEqual([{ directions: 2 }, { directions: 66, active: 64 }]);
     expect(r.maneuvers[0].lanes).toBeUndefined();
+  });
+
+  it('puts toll-free routes first, in their order', () => {
+    const r = (toll: boolean, duration: number) => ({ toll, duration }) as unknown as Route;
+    expect(tollFreeFirst([r(true, 1), r(false, 2), r(false, 3)]).map((x) => x.duration)).toEqual([
+      2, 3, 1,
+    ]);
   });
 
   it('says when a route uses a toll road', () => {
