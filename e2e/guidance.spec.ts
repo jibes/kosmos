@@ -43,8 +43,10 @@ test.describe('guidance', () => {
     const banner = page.locator('.nav-banner');
     // The position already known counts at once: the first turn ahead, with its distance. The
     // arrow says which way; the line says the street, the sentence is for screen readers.
-    await expect(banner.locator('p [aria-hidden]')).toHaveText('Unter den Linden');
-    await expect(banner.locator('p .sr-only')).toHaveText('Turn right onto Unter den Linden.');
+    await expect(banner.locator('p[aria-live] > [aria-hidden]')).toHaveText('Unter den Linden');
+    await expect(banner.locator('p[aria-live] > .sr-only')).toHaveText(
+      'Turn right onto Unter den Linden.',
+    );
     await expect(banner.locator('strong')).toHaveText(/km$/);
     await expect(page.locator('.me.nav')).toHaveCount(1);
     await expect(page.locator('.panel')).toBeHidden();
@@ -451,7 +453,7 @@ test.describe('guidance', () => {
     await expect(page.getByRole('button', { name: 'Overview' })).toBeVisible();
   });
 
-  test('shows a signed turn by where it leads, the road below', async ({ page, context }) => {
+  test('shows a signed turn by where it leads, the road below', async ({ page, context }, info) => {
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const go = (p: { lng: number; lat: number }) =>
       context.setGeolocation({ latitude: p.lat, longitude: p.lng, accuracy: 5 });
@@ -469,12 +471,32 @@ test.describe('guidance', () => {
     await card.getByRole('button', { name: 'Start', exact: true }).click();
     const banner = page.locator('.nav-banner');
     // The street runs both ways; the sign says which: big, the road under it.
-    await expect(banner.locator('p [aria-hidden]')).toHaveText('Towards Pariser Platz');
-    await expect(banner.locator('small')).toHaveText('Unter den Linden');
+    await expect(banner.locator('p[aria-live] > [aria-hidden]')).toHaveText(
+      'Towards Pariser Platz',
+    );
+    await expect(banner.locator('div > small')).toHaveText('Unter den Linden');
     // Said in full, with the sign's destination.
-    await expect(banner.locator('p .sr-only')).toHaveText(
+    await expect(banner.locator('p[aria-live] > .sr-only')).toHaveText(
       'Turn right onto Unter den Linden, towards Pariser Platz.',
     );
+    // The step after always shows under the next one, here its arrival.
+    await expect(banner.locator('.nav-then')).toContainText('Then');
+    await expect(banner.locator('.nav-then')).toContainText('Brandenburger Tor');
+    // A tap opens the steps ahead, each with how far it is; Back closes them, guidance goes on.
+    const steps = page.locator('.nav-steps li');
+    await expect(steps).toHaveCount(0);
+    await page.getByRole('button', { name: 'Show the steps ahead' }).click();
+    await expect(steps).toHaveCount(1);
+    await expect(steps.first()).toContainText('Brandenburger Tor');
+    await expect(steps.first()).toContainText(/\d+ m$|km$/);
+    // The same distance from here in both.
+    const far = await banner.locator('.nav-then-far').textContent();
+    await expect(steps.first()).toContainText(far!);
+    await shot(page, info, 'steps');
+    await page.keyboard.press('Escape');
+    await expect(steps).toHaveCount(0);
+    await expect(banner).toBeVisible();
+    await expect(page.getByRole('button', { name: /^End$/ })).toBeVisible();
   });
 
   test('keeps "then" whole beside a long next instruction', async ({ page }) => {

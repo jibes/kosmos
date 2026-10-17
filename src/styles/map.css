@@ -284,9 +284,11 @@
 
 /* ---------- Markers ---------- */
 
+/* Anchored at its bottom: the tip of the rotated dot (about 26 px down) on the place, its
+   shadow round it, at any zoom; a taller box left the pin floating above the spot. */
 .pin {
   width: 30px;
-  height: 40px;
+  height: 30px;
   display: grid;
   justify-items: center;
   pointer-events: none;

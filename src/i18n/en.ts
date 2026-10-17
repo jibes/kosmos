@@ -60,6 +60,7 @@ export const en = {
   departsNow: 'now',
   nextStop: 'Next stop',
   getOffAt: 'Get off at {stop}',
+  showSteps: 'Show the steps ahead',
   showTrip: 'Show the whole trip',
   newConnection: 'New connection',
   sayWalk: 'Walk to {stop}.',

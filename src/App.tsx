@@ -238,7 +238,7 @@ export function App() {
   /** Places of a category, from the map's tiles; their dots stay until the search ends. */
   /** The ride's whole trip, open under its banner: a step of its own for Back. */
   const [tripList, setTripList] = useState(false);
-  if (tripList && !riding) setTripList(false);
+  if (tripList && !navigating) setTripList(false);
   /** What is searched for, kept while a route covers the search bar, dots and all. */
   const search = useSearch();
   /** "Nearby" on a place card: distances count from that place while it is in view. */
@@ -533,7 +533,7 @@ export function App() {
   useBack((via) => {
     if (about) setAbout(false);
     else if (navigating) {
-      if (riding && tripList) setTripList(false);
+      if (tripList) setTripList(false);
       else if (arrived) finish();
       else if (Date.now() - backAt.current < BACK_TWICE_MS) endNav();
       else {
@@ -599,6 +599,8 @@ export function App() {
             muted={muted}
             following={view.following}
             overview={overview}
+            open={tripList}
+            onOpen={setTripList}
             reroute={rerouteState}
             onMute={toggleMute}
             destination={trip?.to.name ?? ''}

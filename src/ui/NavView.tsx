@@ -11,9 +11,11 @@ import {
   type Mode,
   type Route,
 } from '../core/route';
+import { stepsAhead } from '../core/navView';
 import { capital, fill, ordinal, t, units } from '../i18n';
 import { LaneIcon, TurnIcon } from './icons';
 import { NavBar, ViewToggle } from './NavBar';
+import { TripDetails } from './TripDetails';
 import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
 import { useNow } from './useNow';
@@ -34,6 +36,9 @@ interface Props {
   onMute: () => void;
   onRecenter: () => void;
   onEnd: () => void;
+  /** The steps ahead, open under the banner (a tap on it; Back closes them). */
+  open: boolean;
+  onOpen: (open: boolean) => void;
 }
 
 type Step = Route['maneuvers'][number];
@@ -55,6 +60,41 @@ const short = (m: Step) => {
 /** The road itself, under a way shown by where it leads. */
 const road = (m: Step) => (m.wayOut && m.street ? m.street : null);
 
+interface StepsProps {
+  route: Route;
+  /** The first step after the one in the banner. */
+  from: number;
+  /** Metres to the step in the banner. */
+  toNext: number;
+  lang: string;
+  destination: string;
+}
+
+/** The steps after the one in the banner, each with how far it is from here. */
+function Steps({ route, from, toNext, lang, destination }: StepsProps) {
+  const ms = route.maneuvers;
+  const at = stepsAhead(
+    ms.map((m) => m.distance),
+    from,
+    toNext,
+  );
+  const rows = ms.slice(from).map((m, k) => ({ m, at: at[k], last: from + k === ms.length - 1 }));
+  return (
+    <ol className="nav-steps">
+      {rows.map(({ m, at, last }, k) => (
+        <li key={k}>
+          <TurnIcon turn={turnOf(m.type)} size={22} />
+          <span>
+            {last ? destination : short(m)}
+            {!last && road(m) && <small>{road(m)}</small>}
+          </span>
+          <small>{formatDistance(at, lang, units)}</small>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** Valhalla's maneuver type for entering a roundabout. */
 const ROUNDABOUT = 26;
 
@@ -66,7 +106,8 @@ const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
 export function NavView(props: Props) {
-  const { route, mode, nav, lang, muted, following, overview, reroute, destination, ...on } = props;
+  const { route, mode, nav, lang, muted, following, overview, reroute, destination, open, ...on } =
+    props;
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
@@ -82,9 +123,14 @@ export function NavView(props: Props) {
   const lanes = guiding && lanesNeeded(m?.lanes) ? m.lanes : undefined;
   const size = lanes && started ? laneSize(nav.toNext, nav.speed, mode) : 'none';
 
-  // Two turns close together: the second one shows under the first, so it is no surprise.
-  const after = route.maneuvers[nav.next + 1];
-  const then = guiding && m && after && m.distance <= THEN_M ? after : undefined;
+  // The step after shows under the next one, so it is no surprise; close behind it, without
+  // the distance between them.
+  const after = route.maneuvers[started ? nav.next + 1 : 1];
+  const then = guiding && m && after ? after : undefined;
+  // How far from here, as in the steps list: the next turn's distance and on to this one.
+  const thenFar =
+    then && m.distance > THEN_M ? formatDistance((toNext ?? 0) + m.distance, lang, units) : null;
+  const thenLast = then === route.maneuvers.at(-1);
 
   let title = m?.instruction ?? '';
   // On screen the street, where the arrow says the rest; the sentence is for screen readers.
@@ -113,43 +159,67 @@ export function NavView(props: Props) {
 
   return (
     <>
-      <section
-        className="nav-banner"
-        data-state={nav.arrived ? 'arrived' : rerouting ? 'rerouting' : 'go'}
-      >
-        <TurnIcon turn={turn} size={40} />
-        <div>
-          {guiding && toNext != null && <strong>{formatDistance(toNext, lang, units)}</strong>}
-          {/* Only the instruction is announced: the distance changes with every fix. */}
-          <p aria-live="polite">
-            {shown === title ? (
-              title
-            ) : (
-              <>
-                <span aria-hidden="true">{shown}</span>
-                <span className="sr-only">{title}</span>
-              </>
-            )}
-          </p>
-          {note && <small>{note}</small>}
-          {then && (
-            <p className="nav-then">
-              <span className="nav-then-word">{t.then}</span>
-              <TurnIcon turn={turnOf(then.type)} size={18} />
-              <span className="nav-then-text">{short(then)}</span>
-            </p>
+      <div className="ride-top">
+        <section
+          className="nav-banner"
+          data-state={nav.arrived ? 'arrived' : rerouting ? 'rerouting' : 'go'}
+        >
+          {/* The whole banner opens the steps ahead; the button inside says so to a screen reader. */}
+          {guiding && (
+            <button
+              type="button"
+              className="ride-toggle"
+              aria-expanded={open}
+              aria-label={t.showSteps}
+              onClick={() => on.onOpen(!open)}
+            />
           )}
-        </div>
-        {lanes && size !== 'none' && (
-          <div className="nav-lanes" data-size={size} role="img" aria-label={t.lanes}>
-            {laneViews(lanes).map((lane, i) => (
-              <span key={i} data-use={lane.use}>
-                <LaneIcon lane={lane} size={size === 'big' ? 40 : 24} />
-              </span>
-            ))}
+          <TurnIcon turn={turn} size={40} />
+          <div>
+            {guiding && toNext != null && <strong>{formatDistance(toNext, lang, units)}</strong>}
+            {/* Only the instruction is announced: the distance changes with every fix. */}
+            <p aria-live="polite">
+              {shown === title ? (
+                title
+              ) : (
+                <>
+                  <span aria-hidden="true">{shown}</span>
+                  <span className="sr-only">{title}</span>
+                </>
+              )}
+            </p>
+            {note && <small>{note}</small>}
+            {then && (
+              <p className="nav-then">
+                <span className="nav-then-word">{t.then}</span>
+                <TurnIcon turn={turnOf(then.type)} size={18} />
+                <span className="nav-then-text">{thenLast ? destination : short(then)}</span>
+                {thenFar && <small className="nav-then-far">{thenFar}</small>}
+              </p>
+            )}
           </div>
+          {lanes && size !== 'none' && (
+            <div className="nav-lanes" data-size={size} role="img" aria-label={t.lanes}>
+              {laneViews(lanes).map((lane, i) => (
+                <span key={i} data-use={lane.use}>
+                  <LaneIcon lane={lane} size={size === 'big' ? 40 : 24} />
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+        {open && guiding && (
+          <TripDetails onClose={() => on.onOpen(false)}>
+            <Steps
+              route={route}
+              from={started ? nav.next + 1 : 1}
+              toNext={toNext ?? 0}
+              lang={lang}
+              destination={destination}
+            />
+          </TripDetails>
         )}
-      </section>
+      </div>
 
       <ViewToggle
         following={following}

@@ -68,3 +68,17 @@ export function boundsOf(points: Pt[]): [Pt, Pt] | null {
     [e, n],
   ];
 }
+
+/**
+ * How far each step from `from` on is from here: the way to the step in the banner (`toNext`,
+ * the one before `from`), then each step's own length on to the next.
+ */
+export function stepsAhead(lengths: number[], from: number, toNext: number): number[] {
+  const out: number[] = [];
+  let at = toNext;
+  for (let i = from; i < lengths.length; i++) {
+    at += lengths[i - 1] ?? 0;
+    out.push(at);
+  }
+  return out;
+}

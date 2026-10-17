@@ -27,6 +27,20 @@ test.describe('search', () => {
     const c = await page.evaluate(() => window.kosmos!.getZoom());
     expect(c).toBeGreaterThanOrEqual(16);
     await expect(page.locator('.pin')).toHaveCount(1);
+    // The pin's tip on the place itself, not floating above it.
+    await page
+      .locator('.pin-dot')
+      .evaluate((e) => Promise.all(e.getAnimations().map((a) => a.finished)));
+    const tip = await page.evaluate(
+      ([lng, lat]) => {
+        const p = window.kosmos!.project([lng, lat]);
+        const dot = document.querySelector('.pin-dot')!.getBoundingClientRect();
+        return { dx: dot.left + dot.width / 2 - p.x, dy: dot.bottom - p.y };
+      },
+      [SEARCH_HIT.lng, SEARCH_HIT.lat],
+    );
+    expect(Math.abs(tip.dx)).toBeLessThan(2);
+    expect(Math.abs(tip.dy)).toBeLessThan(5);
     await shot(page, info, 'selected');
     await card.getByRole('button', { name: /close|schließen/i }).click();
     await expect(card).toHaveCount(0);
