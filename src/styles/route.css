@@ -201,6 +201,32 @@
   color: var(--accent);
 }
 
+/* A choice for the route, as a chip: by car, around toll roads. */
+.route-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.route-option[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+/* The state is the button's own; the mark is decoration. */
+.route-option[aria-pressed='true']::before {
+  content: '✓' / '';
+}
+
 /* ---------- Public transport ---------- */
 
 .depart {

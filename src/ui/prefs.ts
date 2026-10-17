@@ -7,6 +7,8 @@ export const MODE_KEY = 'kosmos.mode.v1';
 export const HINTED_KEY = 'kosmos.hinted.v1';
 /** The last searches taken (`core/recent.ts`); never leaves the device. */
 export const RECENT_KEY = 'kosmos.recent.v1';
+/** Car routes around toll roads, as chosen last on the route card. */
+export const TOLLS_KEY = 'kosmos.tolls.v1';
 
 export const stored = (key: string) => {
   try {
@@ -25,6 +27,7 @@ export const store = (key: string, value: string) => {
 };
 
 export const storedMuted = () => stored(MUTED_KEY) === '1';
+export const storedAvoidTolls = () => stored(TOLLS_KEY) === 'avoid';
 
 /** Routes open in the travel mode used last: walkers and riders should not switch every time. */
 export const storedMode = (): TravelMode => {

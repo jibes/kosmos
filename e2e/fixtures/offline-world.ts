@@ -201,7 +201,7 @@ export const tileset = { build: '20261001_001001_pt' };
 /** Every departures request, by its query. */
 export const stopTimesRequests: URLSearchParams[] = [];
 
-export const routeRequests: { costing: string; from: Pt; to: Pt }[] = [];
+export const routeRequests: { costing: string; from: Pt; to: Pt; tolls?: number }[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
 export async function offlineWorld(context: BrowserContext) {
@@ -310,12 +310,16 @@ export async function offlineWorld(context: BrowserContext) {
   await context.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {
     const body = JSON.parse(new URL(route.request().url()).searchParams.get('json') ?? '{}');
     const [s, e] = body.locations.map((l: { lat: number; lon: number }) => [l.lon, l.lat] as Pt);
-    routeRequests.push({ costing: body.costing, from: s, to: e });
+    const tolls: number | undefined = body.costing_options?.auto?.use_tolls;
+    routeRequests.push({ costing: body.costing, from: s, to: e, tolls });
     const speed = { auto: 30, bicycle: 15, pedestrian: 5 }[body.costing as string] ?? 30;
+    const main = fakeTrip(s, [s[0], e[1]], e, speed);
+    // By car the quickest way has a toll road, unless asked to go around them.
+    if (body.costing === 'auto' && tolls !== 0) Object.assign(main.summary, { has_toll: true });
     return route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
-        trip: fakeTrip(s, [s[0], e[1]], e, speed),
+        trip: main,
         alternates: [{ trip: fakeTrip(s, [e[0], s[1]], e, speed * 0.8) }],
       }),
     });

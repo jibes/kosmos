@@ -97,6 +97,34 @@ test.describe('routes', () => {
     await expect(card.getByRole('button', { name: 'Use my location' })).toHaveCount(0);
   });
 
+  test('drives around toll roads when asked, and remembers it', async ({ page, context }) => {
+    const card = await openRoute(page, context);
+    await card.getByRole('radio', { name: 'Car' }).click();
+    const summary = card.locator('.summary span');
+    await expect(summary).toContainText('Tolls');
+    const avoid = card.getByRole('button', { name: 'Avoid tolls' });
+    await expect(avoid).toHaveAttribute('aria-pressed', 'false');
+    const asked = routeRequests.length;
+    await avoid.click();
+    await expect(avoid).toHaveAttribute('aria-pressed', 'true');
+    // One new request, around toll roads; the route found has none.
+    await expect.poll(() => routeRequests.length).toBe(asked + 1);
+    expect(routeRequests.at(-1)!.tolls).toBe(0);
+    await expect(summary).not.toContainText('Tolls');
+    // Not offered on foot or by bike.
+    await card.getByRole('radio', { name: 'Walk' }).click();
+    await expect(card.getByRole('button', { name: 'Avoid tolls' })).toHaveCount(0);
+    // The next drive remembers the choice.
+    await page.reload();
+    const again = await openRoute(page, context);
+    await again.getByRole('radio', { name: 'Car' }).click();
+    await expect(again.getByRole('button', { name: 'Avoid tolls' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect.poll(() => routeRequests.at(-1)!.tolls).toBe(0);
+  });
+
   test('does not plan public transport again while the user moves', async ({ page, context }) => {
     await context.grantPermissions(['geolocation']);
     const go = (lng: number, lat: number) =>

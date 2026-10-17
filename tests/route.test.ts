@@ -69,6 +69,18 @@ describe('routeUrl', () => {
     expect(body('car').costing_options).toBeUndefined();
   });
 
+  it('drives around toll roads when asked, by car only', () => {
+    const body = (mode: 'car' | 'bike', avoid: boolean) =>
+      JSON.parse(
+        new URL(
+          routeUrl({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, mode, 'de', 2, 'metric', avoid),
+        ).searchParams.get('json')!,
+      );
+    expect(body('car', true).costing_options).toEqual({ auto: { use_tolls: 0 } });
+    expect(body('car', false).costing_options).toBeUndefined();
+    expect(body('bike', true).costing_options.auto).toBeUndefined();
+  });
+
   it('falls back to English instructions', () => {
     const url = new URL(routeUrl({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, 'foot', 'xx', 0));
     const body = JSON.parse(url.searchParams.get('json')!);
@@ -157,6 +169,20 @@ describe('parseValhalla', () => {
     expect(r.maneuvers[1].distance).toBeCloseTo(900);
     expect(r.maneuvers[1].lanes).toEqual([{ directions: 2 }, { directions: 66, active: 64 }]);
     expect(r.maneuvers[0].lanes).toBeUndefined();
+  });
+
+  it('says when a route uses a toll road', () => {
+    const t = trip(
+      [
+        [13.4, 52.5],
+        [13.4, 52.51],
+      ],
+      1,
+      60,
+    );
+    expect(parseValhalla({ trip: t })[0].toll).toBeUndefined();
+    const tolled = { ...t, summary: { ...t.summary, has_toll: true } };
+    expect(parseValhalla({ trip: tolled })[0].toll).toBe(true);
   });
 
   it('returns [] for errors and garbage', () => {

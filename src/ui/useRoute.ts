@@ -61,6 +61,8 @@ export function useRoute(
   lang: string,
   /** While navigating, only an explicit reroute may ask again, never mere movement. */
   pinned = false,
+  /** By car, around toll roads; a change asks again, like a travel mode. */
+  avoidTolls = false,
 ) {
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -72,7 +74,8 @@ export function useRoute(
   }
   const last = useRef<{ key: string; from: LngLat; attempt: number; at: number } | null>(null);
   const inflight = useRef<AbortController | null>(null);
-  const key = trip ? tripKey(trip) : '';
+  const tollFree = avoidTolls && trip?.mode === 'car';
+  const key = trip ? tripKey(trip) + (tollFree ? '|no-toll' : '') : '';
 
   useEffect(() => {
     if (!trip) {
@@ -112,6 +115,7 @@ export function useRoute(
               lang,
               pinned ? 0 : 2,
               units,
+              tollFree,
             ),
             ctrl.signal,
           ).then((r) => ({
@@ -130,7 +134,7 @@ export function useRoute(
           keepWhileNavigating(prev, { key, routes: [], error: 'failed' }, pinned),
         );
       });
-  }, [trip, here, key, lang, attempt, pinned]);
+  }, [trip, here, key, lang, attempt, pinned, tollFree]);
 
   let status: RouteStatus = 'loading';
   if (trip && result?.key === key) {

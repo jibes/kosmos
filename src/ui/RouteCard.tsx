@@ -45,6 +45,9 @@ interface Props {
   /** Public transport departure; `null` is now. */
   at: number | null;
   onDepart: (at: number | null) => void;
+  /** By car: around toll roads (remembered); the toggle asks for the route anew. */
+  avoidTolls: boolean;
+  onAvoidTolls: (avoid: boolean) => void;
 }
 
 const MESSAGE: Partial<Record<RouteStatus, string>> = {
@@ -165,6 +168,16 @@ export function RouteCard(props: Props) {
       </dl>
 
       {mode === 'transit' && <DepartTime at={props.at} now={now} onDepart={props.onDepart} />}
+      {mode === 'car' && (
+        <button
+          type="button"
+          className="route-option"
+          aria-pressed={props.avoidTolls}
+          onClick={() => props.onAvoidTolls(!props.avoidTolls)}
+        >
+          {t.avoidTolls}
+        </button>
+      )}
 
       {route ? (
         <div className="summary">
@@ -172,7 +185,7 @@ export function RouteCard(props: Props) {
           <span>
             {transit
               ? `${span(route)} · ${changesText(transit)}`
-              : `${formatDistance(route.distance, lang, units)} · ${fill(t.arriveAt, { time: arrival ?? '' })}`}
+              : `${formatDistance(route.distance, lang, units)}${route.toll ? ` · ${t.tolls}` : ''} · ${fill(t.arriveAt, { time: arrival ?? '' })}`}
           </span>
         </div>
       ) : (

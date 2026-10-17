@@ -31,7 +31,7 @@ import { FRESH_MS } from './ui/useNav';
 import { useRouteLayer } from './ui/useRouteLayer';
 import { motion } from './ui/motion';
 import { NO_PADDING, followNav, offCentre, padding, routePadding, startBearing } from './ui/layout';
-import { MODE_KEY, store, storedMode } from './ui/prefs';
+import { MODE_KEY, TOLLS_KEY, store, storedAvoidTolls, storedMode } from './ui/prefs';
 import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
 import { useNavTheme, useStatusBar } from './ui/useNavTheme';
@@ -95,7 +95,8 @@ export function App() {
   const { followingRef: navFollowRef } = view;
   /** The router answer count when a new connection was asked for. */
   const [connAt, setConnAt] = useState<number | null>(null);
-  const route = useRoute(trip, fix, lang, navigating);
+  const [avoidTolls, setAvoidTolls] = useState(storedAvoidTolls);
+  const route = useRoute(trip, fix, lang, navigating, avoidTolls);
   // The voice speaks the language of the words it is given: the UI's (and the router's).
   const voice = useMemo(() => systemVoice(locale), []);
   const { muted, begin: beginVoice, toggle: toggleMute } = useMuted(voice);
@@ -673,6 +674,12 @@ export function App() {
                   onDepart={(at) => {
                     setActive(0);
                     setTrip({ ...trip, at });
+                  }}
+                  avoidTolls={avoidTolls}
+                  onAvoidTolls={(avoid) => {
+                    setActive(0);
+                    setAvoidTolls(avoid);
+                    store(TOLLS_KEY, avoid ? 'avoid' : 'use');
                   }}
                 />
               )}

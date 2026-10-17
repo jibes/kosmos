@@ -67,6 +67,8 @@ export interface Route {
   bbox: [number, number, number, number];
   /** Set for public transport: legs and timetable. Such routes have no maneuvers. */
   transit?: Transit;
+  /** Part of it is a toll road (Valhalla's summary says so). */
+  toll?: boolean;
 }
 
 export function routeUrl(
@@ -77,7 +79,11 @@ export function routeUrl(
   lang: string,
   alternates = 2,
   units: Units = 'metric',
+  /** By car: around toll roads where there is a way (`use_tolls` 0; Valhalla's default 0.5). */
+  avoidTolls = false,
 ) {
+  const options =
+    mode === 'car' && avoidTolls ? { auto: { use_tolls: 0 } } : (OPTIONS[mode] ?? null);
   const body = {
     locations: [
       {
@@ -91,7 +97,7 @@ export function routeUrl(
       { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
     ],
     costing: COSTING[mode],
-    ...(OPTIONS[mode] ? { costing_options: OPTIONS[mode] } : {}),
+    ...(options ? { costing_options: options } : {}),
     directions_options: {
       // The router's own words ("Continue for 2 miles") in the units the app shows.
       units: units === 'metric' ? 'kilometers' : 'miles',
@@ -173,7 +179,7 @@ interface VTrip {
   /** What `length` is counted in: the unit asked for in `directions_options`. */
   units?: string;
   legs?: { shape?: string; maneuvers?: VManeuver[] }[];
-  summary?: { length?: number; time?: number };
+  summary?: { length?: number; time?: number; has_toll?: boolean };
 }
 
 function toRoute(trip: VTrip | undefined): Route | null {
@@ -217,6 +223,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
     duration: trip.summary?.time ?? 0,
     maneuvers,
     bbox: [w, s, e, n],
+    ...(trip.summary?.has_toll ? { toll: true } : {}),
   };
 }
 

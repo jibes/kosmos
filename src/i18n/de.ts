@@ -206,6 +206,8 @@ export const de = {
   mute: 'Ansagen aus',
   map: 'Karte',
   overview: 'Übersicht',
+  avoidTolls: 'Ohne Maut',
+  tolls: 'Maut',
   recenter: 'Zentrieren',
   arrived: 'Du bist angekommen',
   rerouting: 'Neue Route wird gesucht…',
