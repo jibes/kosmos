@@ -86,8 +86,9 @@ const overviewPadding = () => {
   return {
     top: Math.round(top + ENDS_PX),
     bottom: Math.round(bottom + ENDS_PX),
-    left: ENDS_PX,
-    right: 72,
+    // A phone is narrow: the pin's centre a fifth in, not a thumb's width from the edge.
+    left: Math.max(ENDS_PX, Math.round(innerWidth * 0.18)),
+    right: Math.max(72, Math.round(innerWidth * 0.18)),
   };
 };
 
@@ -124,23 +125,39 @@ export function overviewNav(
  * What is left of the way, all of it on screen, north up and from above: the overview while
  * guiding, and on board a vehicle the rest of its line. Linear, as the follow camera.
  */
+/** The latest overview asked for per map, so a flattening left behind does not fit after it. */
+const fits = new WeakMap<maplibregl.Map, number>();
+
 export function fitNav(map: maplibregl.Map, points: [number, number][], duration: number) {
   const b = boundsOf(points);
   if (!b) return;
-  map.fitBounds(b, {
-    padding: overviewPadding(),
-    absolutePadding: true,
-    bearing: 0,
-    pitch: 0,
-    maxZoom: 17,
-    linear: true,
-    duration,
-    easing: (x) => x,
+  const fit = (ms: number) =>
+    map.fitBounds(b, {
+      padding: overviewPadding(),
+      absolutePadding: true,
+      bearing: 0,
+      pitch: 0,
+      maxZoom: 17,
+      linear: true,
+      duration: ms,
+      easing: (x) => x,
+    });
+  const id = (fits.get(map) ?? 0) + 1;
+  fits.set(map, id);
+  // Tilted, zooming out shows far past the route until the tilt is gone: it seems to zoom out
+  // and then back in. Flat first, then the fit.
+  if (map.getPitch() < 1 || duration === 0) return fit(duration);
+  const flat = Math.min(300, duration / 2);
+  map.easeTo({ pitch: 0, bearing: 0, duration: flat });
+  map.once('moveend', () => {
+    // Not when something else moved the camera since: Re-centre, a fix's follow, a finger.
+    if (fits.get(map) === id && !map.isMoving()) fit(duration - flat);
   });
 }
 
 /** Behind the user, looking ahead; linear, so one fix's move runs into the next. */
 export function followNav(map: maplibregl.Map, v: NavCamera, duration: number) {
+  fits.set(map, (fits.get(map) ?? 0) + 1);
   map.easeTo({
     center: v.center,
     bearing: v.bearing ?? map.getBearing(),

@@ -419,8 +419,19 @@ test.describe('guidance', () => {
     expect(await inView(to)).toBe(false);
 
     // One button: the rest of the way, north up from above, the destination in it.
+    await page.evaluate(() => {
+      const m = window.kosmos!;
+      const w = window as unknown as { frames: number[][] };
+      w.frames = [];
+      m.on('move', () => w.frames.push([m.getZoom(), m.getPitch()]));
+    });
+    const before = await page.evaluate(() => window.kosmos!.getZoom());
     await page.getByRole('button', { name: 'Overview' }).click();
     await idle(page);
+    // Flat before zooming out: tilted, it would show far past the route and seem to zoom back in.
+    const frames = await page.evaluate(() => (window as unknown as { frames: number[][] }).frames);
+    expect(frames.length).toBeGreaterThan(2);
+    expect(frames.filter(([z, p]) => z < before - 0.5 && p > 1)).toEqual([]);
     expect(await pitch()).toBe(0);
     expect(await page.evaluate(() => Math.round(window.kosmos!.getBearing()))).toBe(0);
     expect(await inView(to)).toBe(true);
@@ -434,8 +445,8 @@ test.describe('guidance', () => {
           const bar = document.querySelector('.nav-bar')!.getBoundingClientRect();
           const wideLayout = bar.right < innerWidth / 2 + 1 || bar.width < innerWidth / 2;
           return (
-            q.x > 40 &&
-            q.x < innerWidth - 40 &&
+            q.x > Math.min(70, innerWidth * 0.15) &&
+            q.x < innerWidth - Math.min(70, innerWidth * 0.15) &&
             (wideLayout || (q.y > top + 40 && q.y < bar.top - 40))
           );
         },
