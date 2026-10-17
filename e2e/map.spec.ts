@@ -261,23 +261,31 @@ test.describe('map', () => {
       .toBeGreaterThan(40);
 
     // The dot sits on the location and the beam starts at the dot, however large the
-    // accuracy ring (a grid layout once pushed the dot off by the ring's radius).
-    const geometry = await page.evaluate(
-      ([lng, lat]) => {
-        const p = window.kosmos!.project([lng, lat]);
-        const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
-        const dot = r('.me-dot');
-        const beam = r('.me-beam');
-        return {
-          dot: [dot.left + dot.width / 2 - p.x, dot.top + dot.height / 2 - p.y],
-          apex: [beam.left + beam.width / 2 - p.x, beam.bottom - p.y],
-          ring: r('.me-ring').width,
-        };
-      },
-      [CENTER.lng, CENTER.lat],
-    );
-    expect(geometry.ring).toBeGreaterThan(40);
-    for (const v of [...geometry.dot, ...geometry.apex]) expect(Math.abs(v)).toBeLessThan(2);
+    // accuracy ring (a grid layout once pushed the dot off by the ring's radius). Measured
+    // facing true north (the beam upright) while readings keep coming, as a phone sends them.
+    const geometry = () =>
+      page.evaluate(
+        ([lng, lat]) => {
+          const p = window.kosmos!.project([lng, lat]);
+          const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+          const dot = r('.me-dot');
+          const beam = r('.me-beam');
+          return {
+            dot: [dot.left + dot.width / 2 - p.x, dot.top + dot.height / 2 - p.y],
+            apex: [beam.left + beam.width / 2 - p.x, beam.bottom - p.y],
+            ring: r('.me-ring').width,
+          };
+        },
+        [CENTER.lng, CENTER.lat],
+      );
+    expect((await geometry()).ring).toBeGreaterThan(40);
+    await expect
+      .poll(async () => {
+        await face(-decl);
+        const g = await geometry();
+        return Math.max(...[...g.dot, ...g.apex].map(Math.abs));
+      })
+      .toBeLessThan(2);
 
     await face(90);
 

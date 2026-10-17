@@ -20,6 +20,14 @@ const COSTING: Record<Mode, string> = { car: 'auto', bike: 'bicycle', foot: 'ped
  */
 const FOOT_OPTIONS = { pedestrian: { walkway_factor: 0.6, sidewalk_factor: 0.8 } };
 
+/**
+ * By bike, `use_roads` below Valhalla's 0.5 favours cycleways and quiet streets over busy
+ * roads, at the cost of a somewhat longer ride.
+ */
+const BIKE_OPTIONS = { bicycle: { use_roads: 0.25 } };
+
+const OPTIONS: Partial<Record<Mode, object>> = { foot: FOOT_OPTIONS, bike: BIKE_OPTIONS };
+
 /** Languages Valhalla writes instructions in; anything else falls back to English. */
 const LANGS = new Set(
   'bg ca cs da de el en es et fi fr hi hu it ja nb nl pl pt ro ru sk sl sv tr uk'.split(' '),
@@ -83,7 +91,7 @@ export function routeUrl(
       { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
     ],
     costing: COSTING[mode],
-    ...(mode === 'foot' ? { costing_options: FOOT_OPTIONS } : {}),
+    ...(OPTIONS[mode] ? { costing_options: OPTIONS[mode] } : {}),
     directions_options: {
       // The router's own words ("Continue for 2 miles") in the units the app shows.
       units: units === 'metric' ? 'kilometers' : 'miles',

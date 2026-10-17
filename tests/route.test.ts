@@ -46,6 +46,8 @@ describe('routeUrl', () => {
         { lat: 52.6, lon: 13.5 },
       ],
       costing: 'bicycle',
+      // Cycleways and quiet streets over busy roads.
+      costing_options: { bicycle: { use_roads: 0.25 } },
       directions_options: { units: 'kilometers', language: 'de' },
       alternates: 2,
       turn_lanes: true,
@@ -53,7 +55,7 @@ describe('routeUrl', () => {
   });
 
   it('keeps a walk to footways and sidewalks, off roads without them', () => {
-    const body = (mode: 'foot' | 'car') =>
+    const body = (mode: 'foot' | 'bike' | 'car') =>
       JSON.parse(
         new URL(routeUrl({ lng: 0, lat: 0 }, { lng: 1, lat: 1 }, mode, 'de')).searchParams.get(
           'json',
@@ -63,6 +65,7 @@ describe('routeUrl', () => {
     expect(foot.walkway_factor).toBeLessThan(1);
     expect(foot.sidewalk_factor).toBeLessThan(1);
     expect(foot.walkway_factor).toBeLessThan(foot.sidewalk_factor);
+    expect(body('bike').costing_options.bicycle.use_roads).toBeLessThan(0.5);
     expect(body('car').costing_options).toBeUndefined();
   });
 
