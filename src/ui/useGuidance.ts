@@ -11,6 +11,9 @@ import { motion } from './motion';
 import type { Fix } from './useLocation';
 import { useNav } from './useNav';
 import type { Voice } from './voice';
+import type { Follow } from './Controls';
+import type { Adjust } from './useNavView';
+import { navZoomFor } from '../core/navView';
 
 /** Off the route by more than this, the way back is shown with the user. */
 const OVERVIEW_M = 60;
@@ -21,10 +24,13 @@ interface Options {
   compass: { current: () => number | null };
   /** Pointers on the map: the app's own camera moves wait while a finger is down. */
   touchingRef: RefObject<Set<number>>;
-  /** The camera follows (the user has not looked around since). */
-  followingRef: RefObject<boolean>;
+  /** What the location button set: free, following with the map's own rotation, or heading-up. */
+  followRef: RefObject<Follow>;
   /** The camera shows the rest of the route instead of following close behind. */
   overviewRef: RefObject<boolean>;
+  /** The user's own zoom and tilt, and whether a pinch or tilt is still to be read. */
+  adjustRef: RefObject<Adjust>;
+  lookedRef: RefObject<boolean>;
   /** Set on every fix: moving fast enough for the route's direction to be the heading. */
   movingRef: RefObject<boolean>;
   updateTheme: (map: maplibregl.Map, s: Snap, time: number) => void;
@@ -44,7 +50,8 @@ interface Options {
 
 /** Road guidance on the map: the arrow, the camera behind the user, and rerouting. */
 export function useGuidance(o: Options) {
-  const { map, meRef, compass, touchingRef, followingRef, overviewRef, movingRef, updateTheme } = o;
+  const { map, meRef, compass, touchingRef, followRef, overviewRef, movingRef, updateTheme } = o;
+  const { adjustRef, lookedRef } = o;
   const { settled, retry } = o;
   const lastView = useRef<NavCamera | null>(null);
   /** What is left of the route from the user on, for the overview. */
@@ -61,6 +68,22 @@ export function useGuidance(o: Options) {
     setWasActive(o.active);
     if (!o.active) setRerouteAt(null);
   }
+
+  /** Heading-up turns the map with the way; else it keeps the rotation the user gave it. */
+  const cameraBearing = useCallback(
+    (m: maplibregl.Map, heading: number | null) =>
+      followRef.current === 'compass' ? heading : m.getBearing(),
+    [followRef],
+  );
+  const follow = useCallback(
+    (m: maplibregl.Map, duration: number, bearing?: number) => {
+      const v = lastView.current;
+      if (!v) return;
+      const b = bearing ?? cameraBearing(m, v.bearing);
+      followNav(m, { ...v, ...adjustRef.current, bearing: b }, duration);
+    },
+    [adjustRef, cameraBearing],
+  );
 
   const onStep = useCallback(
     (nav: NavState, f: Fix) => {
@@ -80,19 +103,42 @@ export function useGuidance(o: Options) {
       lastView.current = { center, bearing, speed: nav.speed, mode: ways.current.mode };
       const coords = ways.current.route?.coords;
       rest.current = s && coords ? routeRest(coords, s.segment, center) : [center];
-      if (!map || !followingRef.current || touchingRef.current.size) return;
+      if (!map || touchingRef.current.size) return;
       if (overviewRef.current) {
         fitNav(map, rest.current, motion(1000));
         return;
       }
+      if (followRef.current === 'off') return;
+      // A pinch or tilt by hand: kept from now on, once the map has come to rest.
+      if (lookedRef.current) {
+        if (map.isMoving()) return;
+        lookedRef.current = false;
+        adjustRef.current = {
+          zoomBy: map.getZoom() - navZoomFor(lastView.current.mode, nav.speed),
+          pitch: map.getPitch(),
+        };
+      }
       const away = s && !onLine && !nav.arrived ? s.point : null;
       if (away && distance(f, { lng: away[0], lat: away[1] }) > OVERVIEW_M) {
-        overviewNav(map, center, away, bearing, motion(1000));
+        overviewNav(map, center, away, cameraBearing(map, bearing), motion(1000));
       } else {
-        followNav(map, lastView.current, motion(1000));
+        follow(map, motion(1000));
       }
     },
-    [map, compass, meRef, movingRef, touchingRef, followingRef, overviewRef, updateTheme],
+    [
+      map,
+      compass,
+      meRef,
+      movingRef,
+      touchingRef,
+      followRef,
+      overviewRef,
+      adjustRef,
+      lookedRef,
+      updateTheme,
+      cameraBearing,
+      follow,
+    ],
   );
 
   // The route being followed stays until a new one comes, and a failed request keeps it.
@@ -120,14 +166,14 @@ export function useGuidance(o: Options) {
         ? 'asking'
         : 'failed';
 
-  /** Back to following, or to the overview, at once rather than on the next fix. */
+  /** The camera as the controls now say, at once rather than on the next fix. */
   const recenter = useCallback(
-    (overview: boolean) => {
+    (bearing?: number) => {
       if (!map) return;
-      if (overview) fitNav(map, rest.current, motion(600));
-      else if (lastView.current) followNav(map, lastView.current, motion(600));
+      if (overviewRef.current) fitNav(map, rest.current, motion(600));
+      else if (followRef.current !== 'off') follow(map, motion(600), bearing);
     },
-    [map],
+    [map, overviewRef, followRef, follow],
   );
 
   return { nav, tracking: !!tr, rerouteState, recenter } as const;

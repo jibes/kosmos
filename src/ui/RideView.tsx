@@ -4,7 +4,7 @@ import { formatClock, formatDistance, formatDuration } from '../core/route';
 import type { Transit, TransitLeg } from '../core/transit';
 import { capital, fill, t, units } from '../i18n';
 import { ModeIcon, TurnIcon } from './icons';
-import { NavBar, ViewToggle } from './NavBar';
+import { NavBar } from './NavBar';
 import { TripDetails } from './TripDetails';
 import { LineChip, TransitLegs, lineName, platformWord, sayPlatformOf } from './TransitParts';
 
@@ -15,12 +15,7 @@ interface Props {
   destination: string;
   lang: string;
   muted: boolean;
-  following: boolean;
-  /** The rest of the way on screen instead of the view close by. */
-  overview: boolean;
-  onOverview: () => void;
   onMute: () => void;
-  onRecenter: () => void;
   onNewConnection: () => void;
   /** Asking for a new connection, or none came and the old one stands. */
   connecting: 'idle' | 'asking' | 'failed';
@@ -75,8 +70,7 @@ export function rideWords(transit: Transit, p: RidePrompt, destination: string, 
 
 /** On the way by public transport: one line saying what to do now, the arrival at the bottom. */
 export function RideView(props: Props) {
-  const { transit, st, destination, lang, muted, following, overview, connecting, open, ...on } =
-    props;
+  const { transit, st, destination, lang, muted, connecting, open, ...on } = props;
   const clock = (ms: number) => formatClock(new Date(ms), lang);
   const leg = transit.legs[st.leg] as TransitLeg | undefined;
   const next = transit.legs[st.leg + 1];
@@ -202,13 +196,6 @@ export function RideView(props: Props) {
           </TripDetails>
         )}
       </div>
-
-      <ViewToggle
-        following={following}
-        overview={overview}
-        onFollow={on.onRecenter}
-        onOverview={on.onOverview}
-      />
 
       <NavBar muted={muted} arrived={st.phase === 'arrived'} onMute={on.onMute} onEnd={on.onEnd}>
         {/* Time left leads, as on the road; due or late, the arrival time itself. */}

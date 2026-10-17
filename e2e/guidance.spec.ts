@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { TUNNEL_HOLD_MS } from '../src/core/daylight';
 import { CENTER } from './fixtures/scene';
-import { SEARCH_HIT, routeRequests } from './fixtures/offline-world';
+import { SEARCH_HIT, limitRequests, routeRequests } from './fixtures/offline-world';
 import { shot, idle, inWorld, watchPages } from './helpers';
 
 watchPages();
@@ -378,14 +378,13 @@ test.describe('guidance', () => {
       )
       .toBe(true);
 
-    // Looking around: Re-centre under the middle of the map, not across the column.
+    // Looking around: the map's own location button brings it back, at the map's edge.
     await page.mouse.move(700, 150);
     await page.mouse.down();
     await page.mouse.move(640, 220, { steps: 6 });
     await page.mouse.up();
-    const recenter = (await page.getByRole('button', { name: 'Re-centre' }).boundingBox())!;
-    const middle = (column.x + column.width + width) / 2;
-    expect(Math.abs(recenter.x + recenter.width / 2 - middle)).toBeLessThan(12);
+    const locate = (await page.getByRole('button', { name: 'Show my location' }).boundingBox())!;
+    expect(locate.x).toBeGreaterThan(width - 80);
   });
 
   test('drives seen from behind; the overview shows the rest of the way', async ({
@@ -461,10 +460,124 @@ test.describe('guidance', () => {
     await context.setGeolocation({ latitude: from.lat - 0.001, longitude: from.lng, accuracy: 5 });
     await page.waitForTimeout(1500);
     expect(await inView(to)).toBe(true);
-    // And back to following close behind.
-    await page.getByRole('button', { name: 'Re-centre' }).click();
+    // And back to following close behind, by the location button as on the map.
+    await expect(page.getByRole('button', { name: 'Overview' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await page.getByRole('button', { name: 'Show my location' }).click();
     await expect.poll(pitch).toBe(55);
-    await expect(page.getByRole('button', { name: 'Overview' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Overview' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  test('shows the speed limit, the speed red when well over it', async ({
+    page,
+    context,
+  }, info) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Car' }).click();
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    // Not asked for the route card's ways: only for the one driven.
+    const asked = limitRequests.length;
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    // South along the route, about 22 m a second: some 80 km/h where 30 is the limit.
+    const speed = page.locator('.speed');
+    for (let i = 1; i <= 15; i++) {
+      await go(from.lng, from.lat - 0.0002 * i);
+      await page.waitForTimeout(1000);
+      if ((await speed.count()) && (await speed.getAttribute('data-over')) === 'true') break;
+    }
+    await expect(speed.locator('.limit')).toHaveText('30');
+    await expect(speed).toHaveAttribute('data-over', 'true');
+    await expect(speed).toHaveAttribute('aria-label', /km\/h, limit 30$/);
+    // Once for the route, not for every fix.
+    expect(limitRequests.length - asked).toBe(1);
+    await shot(page, info, 'speed-limit');
+  });
+
+  test('follows in any zoom, tilt and rotation; the location button turns it', async ({
+    page,
+    context,
+  }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('radio', { name: 'Car' }).click();
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await card.getByRole('button', { name: 'Start', exact: true }).click();
+    const cam = () =>
+      page.evaluate(() => {
+        const m = window.kosmos!;
+        return { zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() };
+      });
+    await expect.poll(async () => Math.round((await cam()).pitch)).toBe(55);
+    // Heading-up from the start: the button's next step is north up.
+    const locate = page.locator('.controls .ctl[data-follow]');
+    await expect(locate).toHaveAttribute('aria-label', 'North up');
+    await expect(locate).toHaveAttribute('data-following', 'true');
+    // Zooming out by hand does not stop following: the next fix keeps the zoom and moves on.
+    const before = (await cam()).zoom;
+    const box = (await page.locator('.map').boundingBox())!;
+    // As a pinch reports itself: the zoom carries the user's own event.
+    await page.evaluate(() =>
+      window.kosmos!.zoomTo(
+        window.kosmos!.getZoom() - 1.5,
+        { duration: 300 },
+        {
+          originalEvent: new Event('wheel'),
+        },
+      ),
+    );
+    await idle(page);
+    const zoomed = (await cam()).zoom;
+    expect(zoomed).toBeLessThan(before - 0.5);
+    // A few metres on, slowly: the speed's own zoom stays as it was.
+    await go(from.lng, from.lat - 0.00004);
+    await page.waitForTimeout(1600);
+    await expect(locate).toHaveAttribute('data-following', 'true');
+    expect(Math.abs((await cam()).zoom - zoomed)).toBeLessThan(0.3);
+    // Next: north up, still following.
+    await locate.click();
+    await expect.poll(async () => Math.round((await cam()).bearing)).toBe(0);
+    await expect(locate).toHaveAttribute('aria-label', 'Turn map with your way');
+    // The needle levels the map; following goes on.
+    await page.getByRole('button', { name: 'Reset to north' }).click();
+    await expect.poll(async () => Math.round((await cam()).pitch)).toBe(0);
+    await go(from.lng, from.lat - 0.003);
+    await page.waitForTimeout(1600);
+    expect(Math.round((await cam()).pitch)).toBe(0);
+    await expect(locate).toHaveAttribute('data-following', 'true');
+    // A drag lets go; the button resumes heading-up.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2 + 60, { steps: 6 });
+    await page.mouse.up();
+    await expect(locate).not.toHaveAttribute('data-following', 'true');
+    await locate.click();
+    await expect(locate).toHaveAttribute('aria-label', 'North up');
   });
 
   test('shows a signed turn by where it leads, the road below', async ({ page, context }, info) => {

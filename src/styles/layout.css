@@ -210,14 +210,8 @@
     text-align: center;
   }
 
-  /* While guiding, the map beside the column is the road: Re-center under its middle, the
-     speed in the corner above the credit. */
-  .recenter {
-    left: calc(50% + var(--side-end) / 2);
-    bottom: calc(var(--gutter) + var(--safe-bottom) + 44px);
-  }
-
-  /* The bar is below it in the column; Re-centre is beside it on the map. */
+  /* While guiding, the speed in the corner above the credit. */
+  /* The bar is below it in the column. */
   .ride-top {
     max-height: calc(100% - 120px - var(--safe-top) - var(--safe-bottom));
   }
@@ -228,7 +222,7 @@
     bottom: calc(var(--gutter) + var(--safe-bottom) + 40px);
   }
 
-  .overview {
+  .ui[data-nav] .controls {
     bottom: calc(var(--gutter) + var(--safe-bottom) + 116px);
   }
 }

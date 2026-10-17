@@ -63,6 +63,9 @@ export interface NavCamera {
   bearing: number | null;
   speed: number;
   mode: Mode;
+  /** The user's own zoom on top of the automatic one, and tilt (`useNavView`'s `Adjust`). */
+  zoomBy?: number;
+  pitch?: number | null;
 }
 
 const RAD = Math.PI / 180;
@@ -128,14 +131,19 @@ export function overviewNav(
 /** The latest overview asked for per map, so a flattening left behind does not fit after it. */
 const fits = new WeakMap<maplibregl.Map, number>();
 
-export function fitNav(map: maplibregl.Map, points: [number, number][], duration: number) {
+export function fitNav(
+  map: maplibregl.Map,
+  points: [number, number][],
+  duration: number,
+  bearing = 0,
+) {
   const b = boundsOf(points);
   if (!b) return;
   const fit = (ms: number) =>
     map.fitBounds(b, {
       padding: overviewPadding(),
       absolutePadding: true,
-      bearing: 0,
+      bearing,
       pitch: 0,
       maxZoom: 17,
       linear: true,
@@ -148,7 +156,7 @@ export function fitNav(map: maplibregl.Map, points: [number, number][], duration
   // and then back in. Flat first, then the fit.
   if (map.getPitch() < 1 || duration === 0) return fit(duration);
   const flat = Math.min(300, duration / 2);
-  map.easeTo({ pitch: 0, bearing: 0, duration: flat });
+  map.easeTo({ pitch: 0, bearing, duration: flat });
   map.once('moveend', () => {
     // Not when something else moved the camera since: Re-centre, a fix's follow, a finger.
     if (fits.get(map) === id && !map.isMoving()) fit(duration - flat);
@@ -161,8 +169,8 @@ export function followNav(map: maplibregl.Map, v: NavCamera, duration: number) {
   map.easeTo({
     center: v.center,
     bearing: v.bearing ?? map.getBearing(),
-    pitch: navPitch(v.mode),
-    zoom: navZoomFor(v.mode, v.speed),
+    pitch: v.pitch ?? navPitch(v.mode),
+    zoom: Math.min(19, Math.max(3, navZoomFor(v.mode, v.speed) + (v.zoomBy ?? 0))),
     padding: navPadding(),
     duration,
     easing: (x) => x,

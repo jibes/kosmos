@@ -53,7 +53,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* Clear of Re-centre below it. */
+  /* Clear of the map's buttons below it. */
   max-height: calc(100% - 196px - var(--safe-top) - var(--safe-bottom));
 }
 
@@ -543,6 +543,36 @@ button.via[aria-expanded='true']::after {
   animation: rise 0.3s var(--ease);
 }
 
+/* Too fast for the limit: the speed itself turns red. */
+.speed[data-over] {
+  background: var(--danger);
+  color: #fff;
+}
+
+.speed[data-over] small {
+  color: #fff;
+}
+
+/* The limit as the sign at the roadside: red ring, black on white, in both themes. */
+.speed .limit {
+  position: absolute;
+  top: -14px;
+  right: -12px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 4px solid #d61f26;
+  border-radius: 50%;
+  background: #fff;
+  color: #111;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+}
+
 .speed strong {
   font-size: 22px;
   font-weight: 600;
@@ -556,35 +586,14 @@ button.via[aria-expanded='true']::after {
   color: var(--muted);
 }
 
-/* The rest of the way: a round button on the right, above the credit. */
-.overview {
-  position: absolute;
-  right: calc(var(--gutter) + var(--safe-right));
+/* While guiding the map's own buttons sit above the bar, clear of the credit and the speed. */
+.ui[data-nav] .controls {
   bottom: calc(var(--gutter) + var(--safe-bottom) + 128px);
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  color: var(--accent);
-  animation: rise 0.28s var(--ease);
 }
 
-/* Above the credit and the speed, not beside them: a 360 px phone has no room for both. */
-.recenter {
-  position: absolute;
-  left: 50%;
-  bottom: calc(var(--gutter) + var(--safe-bottom) + 128px);
-  translate: -50% 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 18px;
-  border-radius: 22px;
+/* The overview on: the route is what the camera tracks, shown as following is. */
+.ctl.overview[aria-pressed='true'] {
   color: var(--accent);
-  font-weight: 600;
-  animation: rise 0.28s var(--ease);
 }
 
 .ui[data-nav] .credit {

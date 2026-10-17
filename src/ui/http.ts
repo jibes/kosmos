@@ -19,13 +19,21 @@ const aborted = (signal: AbortSignal) =>
     else signal.addEventListener('abort', stop, { once: true });
   });
 
-/** GET as JSON; `ok` false on an HTTP error, a throw only when there is no answer at all. */
-export async function getJson(url: string, signal: AbortSignal) {
+/**
+ * GET as JSON, or POST `body` (a route's whole line is too long for a URL); `ok` false on an
+ * HTTP error, a throw only when there is no answer at all.
+ */
+export async function getJson(url: string, signal: AbortSignal, body?: string) {
   if (isNative && [TRANSIT_URL, NOMINATIM_URL, ROUTER_URL].some((s) => url.startsWith(s))) {
     const res = await Promise.race([
-      CapacitorHttp.get({
+      CapacitorHttp.request({
         url,
-        headers: { 'User-Agent': USER_AGENT },
+        method: body ? 'POST' : 'GET',
+        ...(body ? { data: body } : {}),
+        headers: {
+          'User-Agent': USER_AGENT,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
         connectTimeout: NATIVE_TIMEOUT_MS,
         readTimeout: NATIVE_TIMEOUT_MS,
       }),
@@ -33,7 +41,8 @@ export async function getJson(url: string, signal: AbortSignal) {
     ]);
     return { ok: res.status >= 200 && res.status < 300, status: res.status, json: res.data };
   }
-  const res = await fetch(url, { signal });
+  // Sent as plain text, the POST stays a "simple" request for CORS: no preflight.
+  const res = await fetch(url, body ? { signal, method: 'POST', body } : { signal });
   return { ok: res.ok, status: res.status, json: res.ok ? await res.json() : null };
 }
 

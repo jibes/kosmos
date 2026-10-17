@@ -212,6 +212,8 @@ export const tileset = { build: '20261001_001001_pt' };
 /** Every departures request, by its query. */
 export const stopTimesRequests: URLSearchParams[] = [];
 
+/** The speed-limit requests made, by costing. */
+export const limitRequests: string[] = [];
 export const routeRequests: { costing: string; from: Pt; to: Pt; noTolls?: boolean }[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
@@ -317,6 +319,15 @@ export async function offlineWorld(context: BrowserContext) {
               : [];
     photonSearches.push(q);
     return route.fulfill({ contentType: 'application/json', body: photon(hits) });
+  });
+  // Speed limits along a followed route: 30 km/h all the way.
+  await context.route(/valhalla1\.openstreetmap\.de\/trace_attributes/, (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}');
+    limitRequests.push(body.costing);
+    return route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ edges: [{ length: 5, speed_limit: 30 }] }),
+    });
   });
   await context.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {
     const body = JSON.parse(new URL(route.request().url()).searchParams.get('json') ?? '{}');

@@ -13,13 +13,15 @@ import {
   type Route,
 } from '../core/route';
 import { stepsAhead } from '../core/navView';
+import { limitAt, limitIn, overLimit } from '../core/speedLimit';
 import { capital, fill, ordinal, t, units } from '../i18n';
 import { LaneIcon, TurnIcon } from './icons';
-import { NavBar, ViewToggle } from './NavBar';
+import { NavBar } from './NavBar';
 import { TripDetails } from './TripDetails';
 import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
 import { useNow } from './useNow';
+import { useSpeedLimits } from './useSpeedLimits';
 
 interface Props {
   route: Route;
@@ -27,15 +29,10 @@ interface Props {
   nav: NavState;
   lang: string;
   muted: boolean;
-  following: boolean;
-  /** The rest of the way on screen instead of the view close by. */
-  overview: boolean;
-  onOverview: () => void;
   /** Asking the router for a new route, or it failed and the old one is followed. */
   reroute: 'idle' | 'asking' | 'failed';
   destination: string;
   onMute: () => void;
-  onRecenter: () => void;
   onEnd: () => void;
   /** The steps ahead, open under the banner (a tap on it; Back closes them). */
   open: boolean;
@@ -107,8 +104,7 @@ const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
 export function NavView(props: Props) {
-  const { route, mode, nav, lang, muted, following, overview, reroute, destination, open, ...on } =
-    props;
+  const { route, mode, nav, lang, muted, reroute, destination, open, ...on } = props;
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
@@ -117,6 +113,11 @@ export function NavView(props: Props) {
   const eta = started ? nav.eta : route.duration;
   const remaining = started ? nav.remaining : route.distance;
   const speed = speedIn(nav.speed, units);
+  const limits = useSpeedLimits(mode === 'car' ? route : undefined);
+  // The limit where the car is on the route; off it, the road is another one.
+  const limit = nav.snap && !nav.offRoute ? limitAt(limits, nav.snap.along) : null;
+  const shownLimit = limit != null && Number.isFinite(limit) ? limitIn(limit, units) : null;
+  const over = overLimit(nav.speed, limit);
 
   // Only while off the route: back on it, guidance carries on whatever the router said.
   const rerouting = nav.offRoute;
@@ -222,17 +223,21 @@ export function NavView(props: Props) {
         )}
       </div>
 
-      <ViewToggle
-        following={following}
-        overview={overview}
-        onFollow={on.onRecenter}
-        onOverview={on.onOverview}
-      />
-
       {started && !nav.arrived && mode === 'car' && nav.speed <= MAX_MS && (
-        <div className="speed surface" role="img" aria-label={`${speed} ${speedLabel(units)}`}>
+        <div
+          className="speed surface"
+          role="img"
+          data-over={over || undefined}
+          aria-label={[
+            `${speed} ${speedLabel(units)}`,
+            shownLimit != null ? fill(t.speedLimit, { n: shownLimit }) : '',
+          ]
+            .filter(Boolean)
+            .join(', ')}
+        >
           <strong>{speed}</strong>
           <small>{speedLabel(units)}</small>
+          {shownLimit != null && <span className="limit">{shownLimit}</span>}
         </div>
       )}
 

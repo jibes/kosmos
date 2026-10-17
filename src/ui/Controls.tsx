@@ -1,7 +1,7 @@
 import type * as maplibregl from 'maplibre-gl';
 import { useEffect, useState } from 'react';
 import { t } from '../i18n';
-import { CompassModeIcon, LocateIcon, NeedleIcon, NoLocationIcon } from './icons';
+import { CompassModeIcon, LocateIcon, NeedleIcon, NoLocationIcon, RouteIcon } from './icons';
 import type { LocationStatus } from './useLocation';
 
 /** Off; follow the position north-up; follow and turn the map with the compass. */
@@ -13,9 +13,20 @@ interface Props {
   follow: Follow;
   onLocate: () => void;
   onNorth: () => void;
+  /** Guiding: heading-up turns the map with the way, not the phone. */
+  guiding?: boolean;
+  /** Guiding: the rest of the way on screen, a toggle beside the location button. */
+  overview?: boolean;
+  onOverview?: () => void;
 }
 
-export function Controls({ map, status, follow, onLocate, onNorth }: Props) {
+/**
+ * The map's buttons, the same on the map and while guiding: the location button follows (north
+ * up, or as turned by hand), then turns the map heading-up, and back; the needle shows north and
+ * resets it. Guiding adds the overview. Zoom and tilt never stop following; a drag does.
+ */
+export function Controls(props: Props) {
+  const { map, status, follow, onLocate, onNorth, guiding, overview, onOverview } = props;
   const [camera, setCamera] = useState({ bearing: 0, pitch: 0 });
 
   useEffect(() => {
@@ -42,7 +53,9 @@ export function Controls({ map, status, follow, onLocate, onNorth }: Props) {
       : status === 'unavailable'
         ? t.locationUnavailable
         : follow === 'position'
-          ? t.followCompass
+          ? guiding
+            ? t.followHeading
+            : t.followCompass
           : follow === 'compass'
             ? t.northUp
             : t.locate;
@@ -68,6 +81,18 @@ export function Controls({ map, status, follow, onLocate, onNorth }: Props) {
           <LocateIcon filled={following} />
         )}
       </button>
+      {overview !== undefined && (
+        <button
+          type="button"
+          className="ctl surface overview"
+          aria-label={t.overview}
+          title={t.overview}
+          aria-pressed={overview}
+          onClick={onOverview}
+        >
+          <RouteIcon />
+        </button>
+      )}
       <button
         type="button"
         className="ctl surface compass"

@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { t } from '../i18n';
-import { LocateIcon, RouteIcon } from './icons';
 import { touch } from './layout';
 
 export const SoundIcon = ({ off }: { off: boolean }) => (
@@ -72,38 +71,5 @@ export function NavBar({ children, muted, arrived, onMute, onEnd }: Props) {
         {arrived ? t.done : armed ? t.endConfirm : t.end}
       </button>
     </section>
-  );
-}
-
-interface ToggleProps {
-  following: boolean;
-  overview: boolean;
-  onFollow: () => void;
-  onOverview: () => void;
-}
-
-/**
- * The one control for the view while guiding: the rest of the way while the camera follows
- * close, and back to following from the overview or after looking around.
- */
-export function ViewToggle({ following, overview, onFollow, onOverview }: ToggleProps) {
-  if (following && !overview) {
-    return (
-      <button
-        type="button"
-        className="overview surface"
-        aria-label={t.overview}
-        title={t.overview}
-        onClick={onOverview}
-      >
-        <RouteIcon />
-      </button>
-    );
-  }
-  return (
-    <button type="button" className="recenter surface" onClick={onFollow}>
-      <LocateIcon filled />
-      {t.recenter}
-    </button>
   );
 }

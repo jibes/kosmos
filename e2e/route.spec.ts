@@ -308,12 +308,13 @@ test.describe('routes', () => {
       );
     await expect.poll(() => inView(to.lng, stopLat)).toBe(true);
     expect(await page.evaluate(() => window.kosmos!.getPitch())).toBe(0);
-    // The overview takes in the rest of the trip, the destination too; Re-centre comes back.
-    await page.getByRole('button', { name: 'Overview' }).click();
-    await expect(page.getByRole('button', { name: 'Re-centre' })).toBeVisible();
+    // The overview takes in the rest of the trip, the destination too; a second tap leaves it.
+    const overview = page.getByRole('button', { name: 'Overview' });
+    await overview.click();
+    await expect(overview).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(() => inView(to.lng, to.lat)).toBe(true);
-    await page.getByRole('button', { name: 'Re-centre' }).click();
-    await expect(page.getByRole('button', { name: 'Overview' })).toBeVisible();
+    await overview.click();
+    await expect(overview).toHaveAttribute('aria-pressed', 'false');
     // Tapping the banner shows the whole trip: this ride open, the stop behind dimmed.
     await banner.click();
     const trip = page.locator('.ride-details');
