@@ -57,6 +57,8 @@ export interface Maneuver {
   exit?: number;
   /** Where the signs at this maneuver point ("Tullamore / Dublin"), from OSM destinations. */
   toward?: string;
+  /** Route numbers on the signs ("N52"), from OSM `destination:ref`: what to look out for. */
+  refs?: string;
   /** Where it leads in words ("towards Tullamore"; a roundabout also "heading north"). */
   wayOut?: string;
   /** Lanes approaching this maneuver, left to right, when the router knows them. */
@@ -187,7 +189,11 @@ interface VManeuver {
   begin_shape_index?: number;
   roundabout_exit_count?: number;
   lanes?: unknown;
-  sign?: { exit_toward_elements?: { text?: string }[] };
+  sign?: { exit_toward_elements?: VSign[]; exit_branch_elements?: VSign[] };
+}
+interface VSign {
+  text?: string;
+  is_route_number?: boolean;
 }
 interface VTrip {
   /** What `length` is counted in: the unit asked for in `directions_options`. */
@@ -196,12 +202,41 @@ interface VTrip {
   summary?: { length?: number; time?: number; has_toll?: boolean };
 }
 
+const texts = (es: VSign[] | undefined, numbers: boolean) => [
+  ...new Set(
+    (es ?? [])
+      .filter((e) => !!e.is_route_number === numbers)
+      .map((e) => e.text?.trim())
+      .filter((x): x is string => !!x),
+  ),
+];
+const joined = (xs: string[]) => xs.join(' / ') || undefined;
+
 /** The places a maneuver's signs point to, as they read: "Tullamore / Dublin". */
-const towardOf = (m: VManeuver) =>
-  (m.sign?.exit_toward_elements ?? [])
-    .map((e) => e.text?.trim())
-    .filter(Boolean)
-    .join(' / ') || undefined;
+const towardOf = (m: VManeuver) => joined(texts(m.sign?.exit_toward_elements, false));
+
+/** The route numbers on its signs, the branch's before those further on: "N52 / M6". */
+const refsOf = (m: VManeuver) =>
+  joined([
+    ...new Set([
+      ...texts(m.sign?.exit_branch_elements, true),
+      ...texts(m.sign?.exit_toward_elements, true),
+    ]),
+  ]);
+
+/** A road number rather than a name: "R148", "A 5", "N52a". */
+const REF = /^[A-Z]{1,3}[ -]?\d{1,4}[A-Za-z]?$/;
+
+/**
+ * The road as the signs show it. A number on the sign wins over the road's own, which may
+ * be one the signs never carried (Ireland's old national roads are regional now, the signs
+ * often not); a name keeps the sign's number after it.
+ */
+export function roadOf(m: Pick<Maneuver, 'street' | 'refs'>): string | undefined {
+  if (!m.refs) return m.street;
+  if (!m.street || REF.test(m.street) || m.refs.split(' / ').includes(m.street)) return m.refs;
+  return `${m.street} · ${m.refs}`;
+}
 
 function toRoute(trip: VTrip | undefined): Route | null {
   if (!trip?.legs?.length) return null;
@@ -227,6 +262,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
         begin: offset + (m.begin_shape_index ?? 0),
         exit: m.roundabout_exit_count,
         toward: towardOf(m),
+        refs: refsOf(m),
         lanes: parseLanes(m.lanes),
       });
     }
@@ -384,8 +420,9 @@ const PLAIN_TURNS = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 37, 38]);
  * shows which way, and the street is what the signs say), else the router's sentence without
  * its full stop. Speech and screen readers keep the whole sentence.
  */
-export function bannerText(m: Pick<Maneuver, 'type' | 'instruction' | 'street'>): string {
-  if (m.street && PLAIN_TURNS.has(m.type)) return m.street;
+export function bannerText(m: Pick<Maneuver, 'type' | 'instruction' | 'street' | 'refs'>): string {
+  const road = roadOf(m);
+  if (road && PLAIN_TURNS.has(m.type)) return road;
   return m.instruction.replace(/\.$/, '');
 }
 

@@ -61,6 +61,14 @@ describe('roundabouts', () => {
     expect(fromExit.maneuvers[1].instruction).toContain('towards Birr / Dublin');
   });
 
+  it('shows the numbers signed at its exit', () => {
+    const r = narrateWays(route({}, { refs: 'N52' }), words).maneuvers[1];
+    expect(r.refs).toBe('N52');
+    expect(narrateWays(route({ refs: 'R420' }, { refs: 'N52' }), words).maneuvers[1].refs).toBe(
+      'R420',
+    );
+  });
+
   it('says which way the exit leads when no sign does', () => {
     const r = narrateWays(route({}), words).maneuvers[1];
     expect(r.instruction).toBe('Enter the roundabout and take the 2nd exit onto N52, heading e.');

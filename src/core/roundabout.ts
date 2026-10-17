@@ -66,6 +66,8 @@ export function narrateWays(route: Route, words: ExitWords): Route {
       m.type === ENTER ? (ms.slice(i + 1).find((x) => x.type === EXIT) ?? ms[i + 1]) : undefined;
     const toward = m.toward ?? out?.toward;
     const deg = !toward && out ? headingFrom(route.coords, out.begin) : null;
+    // A roundabout shows the numbers signed at its exit, as it does the places.
+    if (out && !m.refs && out.refs) m = { ...m, refs: out.refs };
     if (!toward && deg === null) return m;
     const more = toward ? words.toward(toward) : words.heading(compassOf(deg!));
     // Said already ("… toward Tullamore"): shown the same way, not said twice.

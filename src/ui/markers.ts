@@ -20,7 +20,10 @@ export function userMarker(map: maplibregl.Map) {
   const el = document.createElement('div');
   el.className = 'me';
   el.innerHTML =
-    '<span class="me-ring"></span><span class="me-beam"></span><span class="me-dot"></span>';
+    '<span class="me-ring"></span><span class="me-beam"></span><span class="me-dot"></span>' +
+    // While navigating: an arrow outlined in white, so it stands out on the route's own blue.
+    '<svg class="me-arrow" viewBox="0 0 44 48" aria-hidden="true">' +
+    '<path d="M22 4 40 43 22 34 4 43Z"/></svg>';
   const ring = el.firstElementChild as HTMLElement;
   const marker = new maplibregl.Marker({
     element: el,
@@ -52,6 +55,8 @@ export function userMarker(map: maplibregl.Map) {
     heading(deg: number | null) {
       navigating = deg !== null;
       el.classList.toggle('nav', navigating);
+      // Lying on a tilted map it shrinks to a wedge; the arrow faces the screen instead.
+      marker.setPitchAlignment(navigating ? 'viewport' : 'map');
       marker.setRotation(deg ?? facingDeg ?? 0);
     },
     /** The compass beam: where the phone points, like a torch; `null` hides it. */

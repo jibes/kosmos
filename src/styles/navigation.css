@@ -594,23 +594,35 @@ button.via[aria-expanded='true']::after {
   bottom: calc(var(--gutter) + var(--safe-bottom) + 92px);
 }
 
-/* The user's dot becomes an arrow along the route. */
+/* The user's dot becomes an arrow along the route: big enough to read lying tilted on the road,
+   outlined in white and darker inside, so it never melts into the route's own blue. */
 .me.nav .me-ring,
-.me.nav .me-dot::after {
+.me.nav .me-dot {
   display: none;
 }
 
-.me.nav .me-dot {
-  width: 30px;
-  height: 34px;
-  border-radius: 0;
-  box-shadow: none;
-  clip-path: polygon(50% 0, 100% 100%, 50% 76%, 0 100%);
+.me-arrow {
+  display: none;
+  width: 44px;
+  height: 48px;
+  overflow: visible;
 }
 
-/* clip-path would cut a shadow on the arrow itself, so the marker casts it. */
+.me.nav .me-arrow {
+  display: block;
+}
+
+.me-arrow path {
+  fill: color-mix(in srgb, var(--accent) 78%, #000);
+  stroke: #fff;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  paint-order: stroke;
+}
+
+/* The marker casts the shadow, so it follows the outline. */
 .me.nav {
-  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.35));
+  filter: drop-shadow(0 2px 5px rgb(0 0 0 / 0.45));
 }
 
 .quiet-link {

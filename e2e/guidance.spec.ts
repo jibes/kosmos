@@ -408,6 +408,9 @@ test.describe('guidance', () => {
     await card.getByRole('button', { name: 'Start', exact: true }).click();
     const pitch = () => page.evaluate(() => Math.round(window.kosmos!.getPitch()));
     await expect.poll(pitch).toBe(55);
+    // The arrow faces the screen: the tilt does not squash it to a wedge.
+    const arrow = (await page.locator('.me.nav .me-arrow').boundingBox())!;
+    expect(arrow.height).toBeGreaterThan(44);
     const inView = (p: { lng: number; lat: number }) =>
       page.evaluate(
         ([lng, lat]) => {
@@ -485,7 +488,8 @@ test.describe('guidance', () => {
     await expect(banner.locator('p[aria-live] > [aria-hidden]')).toHaveText(
       'Towards Pariser Platz',
     );
-    await expect(banner.locator('div > small')).toHaveText('Unter den Linden');
+    // The road as signed: its name, and the number on the sign.
+    await expect(banner.locator('div > small')).toHaveText('Unter den Linden · B2');
     // Said in full, with the sign's destination.
     await expect(banner.locator('p[aria-live] > .sr-only')).toHaveText(
       'Turn right onto Unter den Linden, towards Pariser Platz.',

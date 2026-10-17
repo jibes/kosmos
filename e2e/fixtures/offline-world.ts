@@ -73,7 +73,16 @@ function fakeTrip(a: Pt, corner: Pt, b: Pt, speed: number, signed = false) {
             // Two lanes straight on, the right one turns right.
             lanes: [{ directions: 2 }, { directions: 2 }, { directions: 64, active: 64 }],
             // A signpost at the turn, as cycle routes have.
-            ...(signed ? { sign: { exit_toward_elements: [{ text: 'Pariser Platz' }] } } : {}),
+            ...(signed
+              ? {
+                  sign: {
+                    exit_toward_elements: [
+                      { text: 'Pariser Platz' },
+                      { text: 'B2', is_route_number: true },
+                    ],
+                  },
+                }
+              : {}),
             length: k2,
             time: (k2 / speed) * 3600,
             begin_shape_index: 1,

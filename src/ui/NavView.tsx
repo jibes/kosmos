@@ -2,6 +2,7 @@ import { laneSize, lanesNeeded, laneViews } from '../core/lanes';
 import type { NavState } from '../core/nav';
 import {
   bannerText,
+  roadOf,
   formatClock,
   formatDistance,
   formatDuration,
@@ -50,7 +51,7 @@ type Step = Route['maneuvers'][number];
  */
 const short = (m: Step) => {
   if (m.type === ROUNDABOUT && m.exit) {
-    return [fill(t.exitNth, { n: ordinal(m.exit) }), m.wayOut ?? m.street]
+    return [fill(t.exitNth, { n: ordinal(m.exit) }), m.wayOut ?? roadOf(m)]
       .filter(Boolean)
       .join(' · ');
   }
@@ -58,7 +59,7 @@ const short = (m: Step) => {
 };
 
 /** The road itself, under a way shown by where it leads. */
-const road = (m: Step) => (m.wayOut && m.street ? m.street : null);
+const road = (m: Step) => (m.wayOut ? (roadOf(m) ?? null) : null);
 
 interface StepsProps {
   route: Route;

@@ -9,6 +9,7 @@ import {
   formatDuration,
   parseValhalla,
   roadModeOf,
+  roadOf,
   routeUrl,
   speedIn,
   spokenDistance,
@@ -255,6 +256,55 @@ describe('formatting', () => {
     expect(bannerText({ type: 1, instruction: 'Drive south.', street: 'Friedrichstraße' })).toBe(
       'Drive south',
     );
+  });
+
+  it('reads route numbers off the signs, apart from the places', () => {
+    const t = trip(
+      [
+        [13.4, 52.5],
+        [13.4, 52.51],
+      ],
+      1,
+      60,
+    );
+    Object.assign(t.legs[0].maneuvers[1], {
+      street_names: ['R148'],
+      sign: {
+        exit_branch_elements: [{ text: 'N52', is_route_number: true }, { text: 'Main St' }],
+        exit_toward_elements: [
+          { text: 'Tullamore' },
+          { text: 'M6', is_route_number: true },
+          { text: 'N52', is_route_number: true },
+        ],
+      },
+    });
+    const m = parseValhalla({ trip: t })[0].maneuvers[1];
+    expect(m.toward).toBe('Tullamore');
+    expect(m.refs).toBe('N52 / M6');
+    // The sign's number wins over the road's own, which the signs may never have carried.
+    expect(bannerText(m)).toBe('N52 / M6');
+    expect(
+      parseValhalla({
+        trip: trip(
+          [
+            [13.4, 52.5],
+            [13.4, 52.51],
+          ],
+          1,
+          60,
+        ),
+      })[0].maneuvers[1].refs,
+    ).toBeUndefined();
+  });
+
+  it('shows the road as signed: the number on the sign, a name with it', () => {
+    expect(roadOf({ street: 'R148' })).toBe('R148');
+    expect(roadOf({ street: 'R148', refs: 'N52' })).toBe('N52');
+    expect(roadOf({ street: 'A 5', refs: 'E35' })).toBe('E35');
+    expect(roadOf({ refs: 'N52' })).toBe('N52');
+    expect(roadOf({ street: 'N52', refs: 'N52 / M6' })).toBe('N52 / M6');
+    expect(roadOf({ street: 'Clara Road', refs: 'N52' })).toBe('Clara Road · N52');
+    expect(roadOf({})).toBeUndefined();
   });
 
   it('maps errors and turns', () => {
