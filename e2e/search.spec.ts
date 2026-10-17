@@ -6,7 +6,7 @@ import {
   photonSearches,
   routeRequests,
 } from './fixtures/offline-world';
-import { shot, idle, jump, centreBeside, inWorld, resultRows, watchPages } from './helpers';
+import { shot, idle, jump, centreBeside, inWorld, resultRows, swipe, watchPages } from './helpers';
 
 watchPages();
 
@@ -31,6 +31,33 @@ test.describe('search', () => {
     await card.getByRole('button', { name: /close|schließen/i }).click();
     await expect(card).toHaveCount(0);
     await expect(page.locator('.pin')).toHaveCount(0);
+  });
+
+  test('a pull down puts the list away, text kept; the field brings it back', async ({
+    page,
+  }, info) => {
+    test.skip(!info.project.use.hasTouch, 'touch only');
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    const list = page.locator('.results');
+    const row = page.getByRole('option').first();
+    await expect(row).toContainText(SEARCH_HIT.name);
+    await list.evaluate((e) => Promise.all(e.getAnimations().map((a) => a.finished)));
+    const box = (await row.boundingBox())!;
+    const at = { x: box.x + 40, y: box.y + box.height / 2 };
+    // A small pull springs back.
+    await swipe(page, at, { x: at.x, y: at.y + 30 });
+    await expect(list).toBeVisible();
+    await expect(input).toBeFocused();
+    // A real one puts it away with the keyboard, and keeps what was typed.
+    await swipe(page, at, { x: at.x, y: at.y + 160 });
+    await expect(list).toHaveCount(0);
+    await expect(input).not.toBeFocused();
+    await expect(input).toHaveValue('brandenburger');
+    await expect(page.locator('.card')).toHaveCount(0);
+    // Back into the field: the same names again.
+    await input.click();
+    await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name);
   });
 
   test('finds airports by the word, and more names than fit, scrolling', async ({ page }) => {

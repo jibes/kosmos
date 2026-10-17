@@ -21,6 +21,7 @@ import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/sea
 import { getJson, nominatimSlot } from './http';
 import { fill, t, units } from '../i18n';
 import { touch } from './layout';
+import { useSwipe } from './useSwipe';
 import { ClockIcon, CloseIcon, KindIcon, SearchIcon } from './icons';
 import { forgetRecent, rememberRecent, useRecent } from './useRecent';
 
@@ -91,6 +92,9 @@ interface Props {
 const label = (k: Kind) => nameOf(k) ?? foundOf(k) ?? t[`cat_${k as Category}`];
 
 const DEBOUNCE_MS = 200;
+/** A pull down the list this far, or a quick flick, puts it away. */
+const PUT_AWAY_PX = 64;
+const FLICK_PX_PER_MS = 0.5;
 /** A search server that has not answered by now is not going to; say so instead of spinning. */
 const TIMEOUT_MS = 5000;
 /** Nominatim is only asked for text left alone this long (OSMF policy: never as-you-type). */
@@ -154,6 +158,22 @@ export function SearchBar({
   /** Bumped by Enter after a failed or unanswered search, to ask again. */
   const [retry, setRetry] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  /**
+   * A pull down on the list puts it away with the keyboard, the text kept: the map back in
+   * view. Focusing the field brings it back. The list scrolls first, as sheets do.
+   */
+  const box = useRef<HTMLDivElement>(null);
+  const listShown = useRef(false);
+  const [pull, setPull] = useState(0);
+  useSwipe(
+    box,
+    () => (listShown.current ? { dir: 1, scrollFirst: true } : null),
+    (dy) => setPull(Math.max(0, dy)),
+    (dy, v) => {
+      setPull(0);
+      if (dy > PUT_AWAY_PX || v > FLICK_PX_PER_MS) input.current?.blur();
+    },
+  );
   const listId = useId();
   /** Enter pressed before results arrived: jump to the first one when they do. */
   const jumpFor = useRef<string | null>(null);
@@ -462,11 +482,21 @@ export function SearchBar({
   const open = !collapsed && focused;
   const showList =
     open && (status !== 'idle' || suggestions.length > 0 || (blank && items.length > 0));
+  useEffect(() => {
+    listShown.current = showList;
+  });
 
   return (
-    <div className="search" data-open={showList || undefined} hidden={hidden}>
+    <div ref={box} className="search" data-open={showList || undefined} hidden={hidden}>
       {showList && (
-        <ul className="results surface" id={listId} role="listbox">
+        <ul
+          className="results surface"
+          id={listId}
+          role="listbox"
+          style={
+            pull ? { translate: `0 ${pull}px`, opacity: Math.max(0.3, 1 - pull / 240) } : undefined
+          }
+        >
           {beyond && (
             <li className="r-empty" role="presentation">
               {t.beyondView}
