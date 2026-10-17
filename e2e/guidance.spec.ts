@@ -433,6 +433,27 @@ test.describe('guidance', () => {
     await expect(page.getByRole('button', { name: 'Overview' })).toBeVisible();
   });
 
+  test('keeps "then" whole beside a long next instruction', async ({ page }) => {
+    // The banner breaks long street names anywhere; the word before the arrow must not.
+    const lines = await page.evaluate(() => {
+      const banner = document.createElement('section');
+      banner.className = 'nav-banner';
+      banner.style.width = '320px';
+      banner.innerHTML =
+        '<div><p class="nav-then"><span class="nav-then-word">Dann</span>' +
+        '<svg width="18" height="18"></svg>' +
+        '<span class="nav-then-text">Aus dem Kreisverkehr auf N52 abfahren und weiter</span></p></div>';
+      document.querySelector('.ui')!.append(banner);
+      const word = banner.querySelector('.nav-then-word')!.getBoundingClientRect();
+      const text = banner.querySelector('.nav-then-text')!.getBoundingClientRect();
+      const line = parseFloat(getComputedStyle(banner.querySelector('.nav-then')!).lineHeight);
+      banner.remove();
+      return { word: word.height, text: text.height, line: line || 20 };
+    });
+    expect(lines.word).toBeLessThan(lines.line * 1.5);
+    expect(lines.text).toBeLessThan(lines.line * 1.5);
+  });
+
   test('buzzes the turns on a silent walk', async ({ page, context }) => {
     // A phone's vibrator, as the browser offers it.
     await page.evaluate(() => {

@@ -106,9 +106,9 @@ export function NavView(props: Props) {
           {note && <small>{note}</small>}
           {then && (
             <p className="nav-then">
-              {t.then}
+              <span className="nav-then-word">{t.then}</span>
               <TurnIcon turn={turnOf(then.type)} size={18} />
-              <span>{bannerText(then)}</span>
+              <span className="nav-then-text">{bannerText(then)}</span>
             </p>
           )}
         </div>
