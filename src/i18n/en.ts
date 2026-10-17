@@ -204,7 +204,6 @@ export const en = {
   mute: 'Mute voice',
   map: 'Map',
   overview: 'Overview',
-  avoidTolls: 'Avoid tolls',
   tolls: 'Tolls',
   recenter: 'Re-centre',
   arrived: 'You have arrived',

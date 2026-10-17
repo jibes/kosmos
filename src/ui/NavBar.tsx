@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { t } from '../i18n';
-import { LocateIcon, RouteIcon, TollIcon } from './icons';
+import { LocateIcon, RouteIcon } from './icons';
 import { touch } from './layout';
 
 export const SoundIcon = ({ off }: { off: boolean }) => (
@@ -34,15 +34,13 @@ interface Props {
   arrived: boolean;
   onMute: () => void;
   onEnd: () => void;
-  /** Driving a route with toll roads (or around them): the choice, while on the way. */
-  tolls?: { avoid: boolean; onToggle: () => void };
 }
 
 /**
  * The bottom bar of guidance: time left, mute, and End. End next to Mute must not end a trip by
  * a slip of the thumb, so it asks for a second tap; once arrived it is a plain "Done".
  */
-export function NavBar({ children, muted, arrived, onMute, onEnd, tolls }: Props) {
+export function NavBar({ children, muted, arrived, onMute, onEnd }: Props) {
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return;
@@ -53,18 +51,6 @@ export function NavBar({ children, muted, arrived, onMute, onEnd, tolls }: Props
   return (
     <section className="nav-bar surface">
       <div className="nav-eta">{children}</div>
-      {tolls && !arrived && (
-        <button
-          type="button"
-          className="icon-btn round big"
-          aria-label={t.avoidTolls}
-          title={t.avoidTolls}
-          aria-pressed={tolls.avoid}
-          onClick={tolls.onToggle}
-        >
-          <TollIcon avoid={tolls.avoid} />
-        </button>
-      )}
       <button
         type="button"
         className="icon-btn round big"

@@ -31,7 +31,7 @@ import { FRESH_MS } from './ui/useNav';
 import { useRouteLayer } from './ui/useRouteLayer';
 import { motion } from './ui/motion';
 import { NO_PADDING, followNav, offCentre, padding, routePadding, startBearing } from './ui/layout';
-import { MODE_KEY, TOLLS_KEY, store, storedAvoidTolls, storedMode } from './ui/prefs';
+import { MODE_KEY, store, storedMode } from './ui/prefs';
 import { useAutoLocate, usePanel } from './ui/usePanel';
 import { useBack } from './ui/useBack';
 import { useNavTheme, useStatusBar } from './ui/useNavTheme';
@@ -91,14 +91,9 @@ export function App() {
   const { followingRef: navFollowRef } = view;
   /** The router answer count when a new connection was asked for. */
   const [connAt, setConnAt] = useState<number | null>(null);
-  const [avoidTolls, setAvoidTolls] = useState(storedAvoidTolls);
-  const route = useRoute(trip, fix, lang, navigating, avoidTolls);
-  /** Around toll roads or not, from the route card or while driving; asks for the route anew. */
-  const chooseTolls = (avoid: boolean) => {
-    setActive(0);
-    setAvoidTolls(avoid);
-    store(TOLLS_KEY, avoid ? 'avoid' : 'use');
-  };
+  /** The drive set off on a toll-free route chosen over toll ones: its reroutes stay so. */
+  const [tollFree, setTollFree] = useState(false);
+  const route = useRoute(trip, fix, lang, navigating, tollFree);
   // The voice speaks the language of the words it is given: the UI's (and the router's).
   const voice = useMemo(() => systemVoice(locale), []);
   const { muted, begin: beginVoice, toggle: toggleMute } = useMuted(voice);
@@ -441,8 +436,9 @@ export function App() {
     setNavigating(true);
     view.close();
     if (!isNative) showToast(t.keepOpen);
-    // With a fix, guidance places the camera on the user at once; without one, the route's start.
     const first = shown[chosen];
+    setTollFree(!!first && !first.toll && shown.some((r) => r.toll));
+    // With a fix, guidance places the camera on the user at once; without one, the route's start.
     if (map && first && !(fix && Date.now() - fix.time < FRESH_MS)) {
       followNav(
         map,
@@ -602,11 +598,6 @@ export function App() {
             lang={locale}
             muted={muted}
             following={view.following}
-            tolls={
-              roadMode === 'car'
-                ? { avoid: avoidTolls, onToggle: () => chooseTolls(!avoidTolls) }
-                : undefined
-            }
             overview={overview}
             reroute={rerouteState}
             onMute={toggleMute}
@@ -682,8 +673,6 @@ export function App() {
                     setActive(0);
                     setTrip({ ...trip, at });
                   }}
-                  avoidTolls={avoidTolls}
-                  onAvoidTolls={chooseTolls}
                 />
               )}
               {selection && !trip && (

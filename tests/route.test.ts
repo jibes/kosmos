@@ -12,7 +12,8 @@ import {
   routeUrl,
   speedIn,
   spokenDistance,
-  tollFreeFirst,
+  needsTollFree,
+  withTollFree,
   turnOf,
   unitsFor,
   type Route,
@@ -185,11 +186,16 @@ describe('parseValhalla', () => {
     expect(r.maneuvers[0].lanes).toBeUndefined();
   });
 
-  it('puts toll-free routes first, in their order', () => {
+  it('asks for a toll-free way only when every way found has tolls, and adds it', () => {
     const r = (toll: boolean, duration: number) => ({ toll, duration }) as unknown as Route;
-    expect(tollFreeFirst([r(true, 1), r(false, 2), r(false, 3)]).map((x) => x.duration)).toEqual([
-      2, 3, 1,
-    ]);
+    expect(needsTollFree([r(true, 1), r(true, 2)])).toBe(true);
+    expect(needsTollFree([r(true, 1), r(false, 2)])).toBe(false);
+    expect(needsTollFree([])).toBe(false);
+    const both = withTollFree([r(true, 1)], [r(false, 3)]);
+    expect(both.map((x) => x.duration)).toEqual([1, 3]);
+    // A router that ignored the exclusion gives nothing new.
+    expect(withTollFree([r(true, 1)], [r(true, 3)])).toHaveLength(1);
+    expect(withTollFree([r(true, 1)], [])).toHaveLength(1);
   });
 
   it('says when a route uses a toll road', () => {

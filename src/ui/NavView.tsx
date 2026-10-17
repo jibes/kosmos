@@ -34,8 +34,6 @@ interface Props {
   onMute: () => void;
   onRecenter: () => void;
   onEnd: () => void;
-  /** By car: around toll roads, offered while the route has them or they are avoided. */
-  tolls?: { avoid: boolean; onToggle: () => void };
 }
 
 /** A turn this close after the next one is shown with it. */
@@ -139,13 +137,7 @@ export function NavView(props: Props) {
         </div>
       )}
 
-      <NavBar
-        muted={muted}
-        arrived={nav.arrived}
-        onMute={on.onMute}
-        onEnd={on.onEnd}
-        tolls={props.tolls && (route.toll || props.tolls.avoid) ? props.tolls : undefined}
-      >
+      <NavBar muted={muted} arrived={nav.arrived} onMute={on.onMute} onEnd={on.onEnd}>
         {/* Time left leads; a bare clock time would read as the time now. */}
         {nav.arrived ? (
           <strong>{destination}</strong>

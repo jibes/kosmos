@@ -85,7 +85,7 @@ export function routeUrl(
   units: Units = 'metric',
   /**
    * By car: no toll roads. `use_tolls` 0 alone is only a preference (a toll motorway can still
-   * win), so `exclude_tolls` forbids them; with no way around, there is no route by car.
+   * win), so `exclude_tolls` forbids them; with no way around, there is none.
    */
   avoidTolls = false,
 ) {
@@ -236,14 +236,12 @@ function toRoute(trip: VTrip | undefined): Route | null {
   };
 }
 
-/**
- * Toll-free routes first, in their order: should the router answer with a toll road anyway
- * (an older one ignoring `exclude_tolls`), the route chosen is still one without.
- */
-export const tollFreeFirst = (routes: Route[]) => [
-  ...routes.filter((r) => !r.toll),
-  ...routes.filter((r) => r.toll),
-];
+/** Every way found has toll roads: a toll-free one is worth asking for. */
+export const needsTollFree = (routes: Route[]) => routes.length > 0 && routes.every((r) => r.toll);
+
+/** The routes found, then the toll-free one, unless the router gave one with tolls anyway. */
+export const withTollFree = (routes: Route[], free: Route[]) =>
+  free[0] && !free[0].toll ? [...routes, free[0]] : routes;
 
 /** The main route first, then any alternates. */
 export function parseValhalla(json: unknown): Route[] {

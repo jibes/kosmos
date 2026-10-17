@@ -19,7 +19,8 @@ test.describe('routes', () => {
     const card = await openRoute(page, context);
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     await expect(card.getByRole('radio', { name: 'Car' })).toHaveAttribute('aria-checked', 'true');
-    await expect(card.locator('.alts [role=radio]')).toHaveCount(2);
+    // Two ways, both with toll roads, and one without.
+    await expect(card.locator('.alts [role=radio]')).toHaveCount(3);
     await expect(card).toContainText('My location');
     const drawn = await page.evaluate(() => {
       const src = window.kosmos!.getSource('route') as unknown as { _data: { geojson?: unknown } };
@@ -97,32 +98,26 @@ test.describe('routes', () => {
     await expect(card.getByRole('button', { name: 'Use my location' })).toHaveCount(0);
   });
 
-  test('drives around toll roads when asked, and remembers it', async ({ page, context }) => {
+  test('offers a way without toll roads when every other has them, coins marking tolls', async ({
+    page,
+    context,
+  }) => {
     const card = await openRoute(page, context);
-    await card.getByRole('radio', { name: 'Car' }).click();
+    await expect(card.getByRole('radio', { name: 'Car' })).toHaveAttribute('aria-checked', 'true');
+    const ways = card.locator('.alts [role="radio"]');
+    await expect(ways).toHaveCount(3);
+    // Both ways found have tolls: one more request, for a way without.
+    expect(routeRequests.at(-2)!.noTolls).toBe(false);
+    expect(routeRequests.at(-1)!.noTolls).toBe(true);
+    for (const i of [0, 1]) await expect(ways.nth(i).locator('svg')).toHaveCount(1);
+    await expect(ways.nth(2).locator('svg')).toHaveCount(0);
+    await expect(ways.nth(0)).toContainText('Tolls');
     const summary = card.locator('.summary span');
     await expect(summary).toContainText('Tolls');
-    const avoid = card.getByRole('button', { name: 'Avoid tolls' });
-    await expect(avoid).toHaveAttribute('aria-pressed', 'false');
-    const asked = routeRequests.length;
-    await avoid.click();
-    await expect(avoid).toHaveAttribute('aria-pressed', 'true');
-    // One new request, around toll roads; the route found has none.
-    await expect.poll(() => routeRequests.length).toBe(asked + 1);
-    expect(routeRequests.at(-1)!.tolls).toBe(0);
+    await ways.nth(2).click();
     await expect(summary).not.toContainText('Tolls');
-    // Not offered on foot or by bike.
-    await card.getByRole('radio', { name: 'Walk' }).click();
-    await expect(card.getByRole('button', { name: 'Avoid tolls' })).toHaveCount(0);
-    // The next drive remembers the choice.
-    await page.reload();
-    const again = await openRoute(page, context);
-    await again.getByRole('radio', { name: 'Car' }).click();
-    await expect(again.getByRole('button', { name: 'Avoid tolls' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect.poll(() => routeRequests.at(-1)!.tolls).toBe(0);
+    // No toggle any more: the way is chosen like any other.
+    await expect(card.getByRole('button', { name: /tolls/i })).toHaveCount(0);
   });
 
   test('does not plan public transport again while the user moves', async ({ page, context }) => {

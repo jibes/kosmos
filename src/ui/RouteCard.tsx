@@ -12,7 +12,7 @@ import { directionsUrl, geoUri } from '../core/geo';
 import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
 import { arrowRadios, focusSearch, useFocusOnMount } from './a11y';
-import { CloseIcon, LocateIcon, ModeIcon, SwapIcon, TurnIcon } from './icons';
+import { CloseIcon, CoinsIcon, LocateIcon, ModeIcon, SwapIcon, TurnIcon } from './icons';
 import { isNative } from './native';
 import { Sheet } from './Sheet';
 import type { LocationStatus } from './useLocation';
@@ -45,9 +45,6 @@ interface Props {
   /** Public transport departure; `null` is now. */
   at: number | null;
   onDepart: (at: number | null) => void;
-  /** By car: around toll roads (remembered); the toggle asks for the route anew. */
-  avoidTolls: boolean;
-  onAvoidTolls: (avoid: boolean) => void;
 }
 
 const MESSAGE: Partial<Record<RouteStatus, string>> = {
@@ -168,24 +165,25 @@ export function RouteCard(props: Props) {
       </dl>
 
       {mode === 'transit' && <DepartTime at={props.at} now={now} onDepart={props.onDepart} />}
-      {mode === 'car' && (
-        <button
-          type="button"
-          className="route-option"
-          aria-pressed={props.avoidTolls}
-          onClick={() => props.onAvoidTolls(!props.avoidTolls)}
-        >
-          {t.avoidTolls}
-        </button>
-      )}
 
       {route ? (
         <div className="summary">
           <strong>{formatDuration(route.duration)}</strong>
           <span>
-            {transit
-              ? `${span(route)} · ${changesText(transit)}`
-              : `${formatDistance(route.distance, lang, units)}${route.toll ? ` · ${t.tolls}` : ''} · ${fill(t.arriveAt, { time: arrival ?? '' })}`}
+            {transit ? (
+              `${span(route)} · ${changesText(transit)}`
+            ) : (
+              <>
+                {formatDistance(route.distance, lang, units)}
+                {route.toll && (
+                  <>
+                    {' · '}
+                    <CoinsIcon /> {t.tolls}
+                  </>
+                )}
+                {` · ${fill(t.arriveAt, { time: arrival ?? '' })}`}
+              </>
+            )}
           </span>
         </div>
       ) : (
@@ -231,6 +229,13 @@ export function RouteCard(props: Props) {
               {r.transit && <LineChips transit={r.transit} />}
               <small>
                 {r.transit ? formatDuration(r.duration) : formatDistance(r.distance, lang, units)}
+                {/* Toll roads on the way: coins, and said for screen readers. */}
+                {r.toll && (
+                  <>
+                    <CoinsIcon />
+                    <span className="sr-only">{t.tolls}</span>
+                  </>
+                )}
               </small>
             </button>
           ))}

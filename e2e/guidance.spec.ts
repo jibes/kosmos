@@ -427,17 +427,6 @@ test.describe('guidance', () => {
     await context.setGeolocation({ latitude: from.lat - 0.001, longitude: from.lng, accuracy: 5 });
     await page.waitForTimeout(1500);
     expect(await inView(to)).toBe(true);
-    // The route has toll roads: around them from the bar, while driving. The route followed
-    // stays until the new one comes; guidance goes on.
-    const asked = routeRequests.length;
-    const tolls = page.getByRole('button', { name: 'Avoid tolls' });
-    await expect(tolls).toHaveAttribute('aria-pressed', 'false');
-    await tolls.click();
-    await expect(tolls).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(() => routeRequests.length).toBe(asked + 1);
-    expect(routeRequests.at(-1)!.tolls).toBe(0);
-    await expect(page.locator('.nav-banner')).toBeVisible();
-    await expect(page.getByRole('button', { name: /^End$/ })).toBeVisible();
     // And back to following close behind.
     await page.getByRole('button', { name: 'Re-centre' }).click();
     await expect.poll(pitch).toBe(55);

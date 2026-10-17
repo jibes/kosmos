@@ -107,14 +107,13 @@ export const ShareIcon = () => (
   </Svg>
 );
 
-/** A toll barrier: a post with its striped arm; struck through while avoided. */
-export const TollIcon = ({ avoid }: { avoid: boolean }) => (
-  <Svg>
-    <path d="M5 20V7" />
-    <rect x="5" y="8" width="15" height="4" rx="1" />
-    <path d="M10 8l-2 4M15 8l-2 4M20 8.5l-1.5 3.5" />
-    <path d="M3 20h4" />
-    {avoid && <path d="M3 4l18 17" />}
+/** Coins: a route with toll roads. */
+export const CoinsIcon = ({ size = 14 }: { size?: number }) => (
+  <Svg size={size}>
+    <ellipse cx="9" cy="6.5" rx="6" ry="2.5" />
+    <path d="M3 6.5v4c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-4" />
+    <ellipse cx="15" cy="13.5" rx="6" ry="2.5" />
+    <path d="M9 13.5v4c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-4" />
   </Svg>
 );
 

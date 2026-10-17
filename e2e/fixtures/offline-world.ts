@@ -201,7 +201,7 @@ export const tileset = { build: '20261001_001001_pt' };
 /** Every departures request, by its query. */
 export const stopTimesRequests: URLSearchParams[] = [];
 
-export const routeRequests: { costing: string; from: Pt; to: Pt; tolls?: number }[] = [];
+export const routeRequests: { costing: string; from: Pt; to: Pt; noTolls?: boolean }[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
 export async function offlineWorld(context: BrowserContext) {
@@ -310,18 +310,22 @@ export async function offlineWorld(context: BrowserContext) {
   await context.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {
     const body = JSON.parse(new URL(route.request().url()).searchParams.get('json') ?? '{}');
     const [s, e] = body.locations.map((l: { lat: number; lon: number }) => [l.lon, l.lat] as Pt);
-    const tolls: number | undefined = body.costing_options?.auto?.use_tolls;
-    routeRequests.push({ costing: body.costing, from: s, to: e, tolls });
+    const noTolls = !!body.costing_options?.auto?.exclude_tolls;
+    routeRequests.push({ costing: body.costing, from: s, to: e, noTolls });
     const speed = { auto: 30, bicycle: 15, pedestrian: 5 }[body.costing as string] ?? 30;
     const main = fakeTrip(s, [s[0], e[1]], e, speed);
-    // By car the quickest way has a toll road, unless asked to go around them.
-    if (body.costing === 'auto' && tolls !== 0) Object.assign(main.summary, { has_toll: true });
+    const other = fakeTrip(s, [e[0], s[1]], e, speed * 0.8);
+    // By car both ways have toll roads; asked to leave them out, a slower way without.
+    if (body.costing === 'auto' && !noTolls) {
+      for (const t of [main, other]) Object.assign(t.summary, { has_toll: true });
+    }
     return route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({
-        trip: main,
-        alternates: [{ trip: fakeTrip(s, [e[0], s[1]], e, speed * 0.8) }],
-      }),
+      body: JSON.stringify(
+        noTolls
+          ? { trip: fakeTrip(s, [s[0], (s[1] + e[1]) / 2], e, speed * 0.6) }
+          : { trip: main, alternates: [{ trip: other }] },
+      ),
     });
   });
   await context.route(/api\.transitous\.org\/api\/v5\/stoptimes/, (route) => {

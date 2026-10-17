@@ -4,7 +4,9 @@ import {
   classifyError,
   parseValhalla,
   routeUrl,
-  tollFreeFirst,
+  needsTollFree,
+  withTollFree,
+  type Mode,
   type Route,
   type RouteError,
   type TravelMode,
@@ -26,8 +28,6 @@ export interface Trip {
 
 interface Result {
   key: string;
-  /** The trip without route choices (tolls): while driving, its route stays until a new one. */
-  base: string;
   routes: Route[];
   error: RouteError;
   /** The last answer failed and the route being driven was kept. */
@@ -52,7 +52,7 @@ const keepWhileNavigating = (
   pinned: boolean,
 ): Result => {
   const n = (prev?.n ?? 0) + 1;
-  return pinned && !next.routes.length && prev?.base === next.base && prev.routes.length
+  return pinned && !next.routes.length && prev?.key === next.key && prev.routes.length
     ? { ...prev, kept: true, n }
     : { ...next, n };
 };
@@ -64,9 +64,16 @@ export function useRoute(
   lang: string,
   /** While navigating, only an explicit reroute may ask again, never mere movement. */
   pinned = false,
-  /** By car, around toll roads; a change asks again, like a travel mode. */
+  /**
+   * Driving a toll-free route that was chosen over toll ones: reroutes stay toll-free. Read
+   * when a request is made, never a reason to ask.
+   */
   avoidTolls = false,
 ) {
+  const tollFreeRef = useRef(avoidTolls);
+  useEffect(() => {
+    tollFreeRef.current = avoidTolls;
+  });
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
   // A route closed and opened again asks afresh: the last answer (a timetable especially) is old.
@@ -77,9 +84,7 @@ export function useRoute(
   }
   const last = useRef<{ key: string; from: LngLat; attempt: number; at: number } | null>(null);
   const inflight = useRef<AbortController | null>(null);
-  const tollFree = avoidTolls && trip?.mode === 'car';
-  const base = trip ? tripKey(trip) : '';
-  const key = base + (tollFree ? '|no-toll' : '');
+  const key = trip ? tripKey(trip) : '';
 
   useEffect(() => {
     if (!trip) {
@@ -102,48 +107,52 @@ export function useRoute(
     inflight.current?.abort();
     const ctrl = new AbortController();
     inflight.current = ctrl;
+    const road = (alternates: number, noTolls: boolean) =>
+      getJson(
+        // A reroute while guiding: one route, leaving in the direction of travel.
+        routeUrl(
+          pinned && !trip.from && here?.heading != null && (here.speed ?? 0) > 2
+            ? { ...from, heading: here.heading }
+            : from,
+          trip.to,
+          trip.mode as Mode,
+          lang,
+          alternates,
+          units,
+          noTolls,
+        ),
+        ctrl.signal,
+      ).then((r) => ({ ...r, routes: r.ok ? parseValhalla(r.json) : [] }));
     const ask =
       trip.mode === 'transit'
         ? getJson(transitUrl(from, trip.to, lang, trip.at ?? null), ctrl.signal).then((r) => ({
             ...r,
             routes: r.ok ? parseMotis(r.json) : [],
           }))
-        : getJson(
-            // A reroute while guiding: one route, leaving in the direction of travel.
-            routeUrl(
-              pinned && !trip.from && here?.heading != null && (here.speed ?? 0) > 2
-                ? { ...from, heading: here.heading }
-                : from,
-              trip.to,
-              trip.mode,
-              lang,
-              pinned ? 0 : 2,
-              units,
-              tollFree,
-            ),
-            ctrl.signal,
-          ).then((r) => ({
-            ...r,
-            routes: r.ok
-              ? (tollFree ? tollFreeFirst : (x: Route[]) => x)(parseValhalla(r.json))
-              : [],
-          }));
+        : pinned
+          ? road(0, trip.mode === 'car' && tollFreeRef.current)
+          : road(2, false).then(async (r) => {
+              // Every way found by car has toll roads: one more request for a way without, so
+              // there is always one to choose (marked by its absence of coins).
+              if (trip.mode !== 'car' || !needsTollFree(r.routes)) return r;
+              const free = await road(0, true).catch(() => null);
+              return { ...r, routes: withTollFree(r.routes, free?.routes ?? []) };
+            });
     ask
       .then(({ ok, status, routes }) => {
         if (ctrl.signal.aborted) return;
         const error = ok ? 'none' : classifyError(status);
-        setResult((prev) => keepWhileNavigating(prev, { key, base, routes, error }, pinned));
+        setResult((prev) => keepWhileNavigating(prev, { key, routes, error }, pinned));
       })
       .catch(() => {
         if (ctrl.signal.aborted) return;
         setResult((prev) =>
-          keepWhileNavigating(prev, { key, base, routes: [], error: 'failed' }, pinned),
+          keepWhileNavigating(prev, { key, routes: [], error: 'failed' }, pinned),
         );
       });
-  }, [trip, here, key, base, lang, attempt, pinned, tollFree]);
+  }, [trip, here, key, lang, attempt, pinned]);
 
-  // While driving, a changed choice (tolls) keeps the route being followed until its new one.
-  const current = !!trip && (result?.key === key || (pinned && result?.base === base));
+  const current = !!trip && result?.key === key;
   let status: RouteStatus = 'loading';
   if (current && result) {
     status = result.routes.length ? 'ready' : result.error === 'none' ? 'none' : result.error;
