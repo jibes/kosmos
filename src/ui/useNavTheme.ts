@@ -2,11 +2,10 @@ import { SystemBars, SystemBarsStyle } from '@capacitor/core';
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Theme } from '../core/palette';
-import { AMBIENT_START, feedLux, type Ambient } from '../core/ambient';
 import { inTunnel, isNight, TUNNEL_HOLD_MS } from '../core/daylight';
 import type { Snap } from '../core/nav';
 import { MAP_SOURCE } from '../core/style';
-import { isNative, watchLight } from './native';
+import { isNative } from './native';
 import { logEvent } from './usageLog';
 
 type Pt = [number, number];
@@ -35,21 +34,16 @@ function tunnelLines(map: maplibregl.Map): Pt[][] {
 /**
  * While navigating the theme follows the sun, whatever the system says: light by day, dark
  * after sunset and inside tunnels, so it neither glares at night nor hides the road by day.
- * Fed by the guidance on every fix; `null` until the first fix, when the system decides. In
- * the Android app, while driving or cycling (`ambient`), the light sensor adds dark where the
- * map cannot know it (`core/ambient.ts`); on foot the phone spends too long in pockets.
+ * Fed by the guidance on every fix; `null` until the first fix, when the system decides.
  */
-export function useNavTheme(active: boolean, ambient: boolean) {
+export function useNavTheme(active: boolean) {
   const [dark, setDark] = useState<boolean | null>(null);
   /** Night or a tunnel at the last fix; `null` before the first. */
   const sun = useRef<boolean | null>(null);
-  const around = useRef<Ambient>(AMBIENT_START);
   const shown = useRef<boolean | null>(null);
   const decide = useCallback(() => {
-    const dim = around.current.dark === true;
-    const next = sun.current === null ? (dim ? true : null) : sun.current || dim;
-    // The usage log: what turned it, night or tunnel (`sun`) or the light sensor alone.
-    if (next !== shown.current) logEvent('theme', { dark: next, sun: sun.current, light: dim });
+    const next = sun.current;
+    if (next !== shown.current) logEvent('theme', { dark: next });
     shown.current = next;
     setDark(next);
   }, []);
@@ -73,18 +67,6 @@ export function useNavTheme(active: boolean, ambient: boolean) {
     tunnels.current = { at: -Infinity, lines: [] };
     sun.current = null;
   }, [active]);
-
-  useEffect(() => {
-    if (!active || !ambient) return;
-    const stop = watchLight((lux) => {
-      around.current = feedLux(around.current, lux, Date.now());
-      decide();
-    });
-    return () => {
-      stop?.();
-      around.current = AMBIENT_START;
-    };
-  }, [active, ambient, decide]);
 
   const update = useCallback(
     (map: maplibregl.Map, s: Snap, time: number) => {

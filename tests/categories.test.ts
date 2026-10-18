@@ -1,20 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  byName,
   foundFor,
   foundOf,
   nearBest,
   categoriesFor,
-  edits,
   isCategoryWord,
   isOf,
-  misspeltFor,
-  nameOf,
   nearest,
   SHOWN_MAX,
-  sharedName,
-  squeeze,
-  without,
 } from '../src/core/categories';
 import { TABLE } from '../src/core/categoryTable';
 import { PLACE_WORDS } from '../src/core/placeWords';
@@ -120,25 +113,6 @@ describe('categories', () => {
     }
   });
 
-  it('guesses a misspelt kind, only when nothing is named as typed', () => {
-    expect(misspeltFor('kindergaten')).toEqual(['kindergarten']);
-    expect(misspeltFor('kindergat')).toEqual(['kindergarten']);
-    expect(misspeltFor('Supermrakt')).toEqual(['groceries']);
-    expect(misspeltFor('apoteke')).toEqual(['pharmacy']);
-    expect(misspeltFor('tankstele')).toEqual(['fuel']);
-    // Short words have too many neighbours to guess at.
-    expect(misspeltFor('kino')).toEqual([]);
-    expect(misspeltFor('kinx')).toEqual([]);
-    expect(misspeltFor('Kindergarten')).toEqual([]);
-  });
-
-  it('counts edits, swaps as one', () => {
-    expect(edits('kindergaten', 'kindergarten', 2)).toBe(1);
-    expect(edits('supermrakt', 'supermarkt', 2)).toBe(1);
-    expect(edits('abc', 'abc', 1)).toBe(0);
-    expect(edits('abcdef', 'uvwxyz', 1)).toBe(2);
-  });
-
   it('knows the words of each kind', () => {
     expect(isCategoryWord('Apotheke')).toBe(true);
     expect(isCategoryWord('Apotheke am Markt')).toBe(false);
@@ -185,49 +159,10 @@ describe('categories', () => {
   });
 });
 
-describe('names in view', () => {
-  it('compares names without spaces, case or accents', () => {
-    expect(squeeze('Media Markt')).toBe(squeeze('MediaMarkt'));
-    expect(squeeze('Café Einstein')).toBe('cafeeinstein');
-  });
-
-  it('finds a name several places share, from its beginning', () => {
-    const names = ['MediaMarkt', 'Media Markt', 'MediaMarkt', 'Mediathek', 'Saturn'];
-    expect(sharedName('mediam', names)).toEqual({ name: 'MediaMarkt', n: 3 });
-    expect(sharedName('media markt', names)).toEqual({ name: 'MediaMarkt', n: 3 });
-    // Different names that begin alike: what they all begin with, else the text as typed.
-    expect(sharedName('ede', ['EDEKA Müller', 'EDEKA Schmidt'])).toEqual({ name: 'EDEKA', n: 2 });
-    expect(sharedName('media', names)).toEqual({ name: 'media', n: 4 });
-    expect(sharedName('Lidl', ['Lidl', 'Lidl Express'])).toEqual({ name: 'Lidl', n: 2 });
-  });
-
-  it('leaves single places and short text to the name search', () => {
-    expect(sharedName('sat', ['Saturn'])).toBeNull();
-    expect(sharedName('me', ['MediaMarkt', 'MediaMarkt'])).toBeNull();
-  });
-
-  it('round-trips a name as a kind', () => {
-    expect(nameOf(byName('MediaMarkt'))).toBe('MediaMarkt');
-    expect(nameOf('restaurant')).toBeNull();
-  });
-
-  it('drops names already counted among the places in view, keeps branches elsewhere', () => {
-    const at = (name: string, dx: number) => ({
-      name,
-      detail: '',
-      lng: 13.4 + dx / 67800,
-      lat: 52.5,
-    });
-    const shown = [at('MediaMarkt', 0), at('Media Markt', 2000)];
-    const photon = [at('MediaMarkt Alexa', 60), at('MediaMarkt', 900), at('Saturn', 2000)];
-    expect(without(photon, shown).map((p) => p.lng)).toEqual([photon[1].lng, photon[2].lng]);
-    expect(without(photon, [])).toEqual(photon);
-  });
-
+describe('places found by name', () => {
   it('shows names found by the text, fitting the best and those near it', () => {
     expect(foundOf(foundFor('brandenburger'))).toBe('brandenburger');
     expect(foundOf('restaurant')).toBeNull();
-    expect(nameOf(foundFor('x'))).toBeNull();
     const at = (dx: number) => ({ lng: 13.4 + dx / 67800, lat: 52.5 });
     const places = [at(0), at(20_000), at(60_000), at(-29_000)];
     expect(nearBest(places)).toEqual([places[0], places[1], places[3]]);

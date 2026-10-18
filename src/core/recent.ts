@@ -3,7 +3,7 @@ import type { PlaceKind } from './placeKind';
 import { CATEGORY_IDS } from './categories';
 
 const knownKind = (k: unknown) =>
-  typeof k === 'string' && (/^(name|found):./.test(k) || (CATEGORY_IDS as string[]).includes(k));
+  typeof k === 'string' && (/^found:./.test(k) || (CATEGORY_IDS as string[]).includes(k));
 
 /**
  * What the user searched for and took, newest first, kept on the device only: a place found by

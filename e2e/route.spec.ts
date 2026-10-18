@@ -261,13 +261,10 @@ test.describe('routes', () => {
     await expect(banner).toContainText('U6 leaves');
     // The walk's next turn leads, with the metres to it.
     await expect(banner.locator('p')).toHaveText('Dorotheenstraße');
-    // Among people, public transport guidance starts silent; a tap lets it speak.
+    // The voice as last left (on at first): it speaks.
     const mute = page.getByRole('button', { name: 'Mute voice' });
-    await expect(mute).toHaveAttribute('aria-pressed', 'true');
-    await page.waitForTimeout(500);
-    expect(await spoken()).toEqual([]);
-    await mute.click();
     await expect(mute).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(spoken).not.toEqual([]);
     // After sunset the map goes dark on public transport too.
     const night = await page
       .evaluate(() => Date.now())

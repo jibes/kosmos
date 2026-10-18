@@ -76,36 +76,6 @@ export const isCategoryWord = (text: string) => {
 const PREFIX_MIN = 3;
 const BESIDE_EXACT_MIN = 4;
 
-/** Typing slips forgiven: one from 6 letters ("kindergaten"), two from 10. */
-const slips = (n: number) => (n >= 10 ? 2 : n >= 6 ? 1 : 0);
-
-/**
- * Edits between two words (a letter added, dropped, changed, or two swapped), or more than
- * `max` once it is clear there are more.
- */
-export function edits(a: string, b: string, max: number): number {
-  if (Math.abs(a.length - b.length) > max) return max + 1;
-  let prev2: number[] = [];
-  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const row = [i];
-    let least = i;
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      let d = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + cost);
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        d = Math.min(d, prev2[j - 2] + 1);
-      }
-      row.push(d);
-      least = Math.min(least, d);
-    }
-    if (least > max) return max + 1;
-    prev2 = prev;
-    prev = row;
-  }
-  return prev[b.length];
-}
-
 /**
  * The categories a query may mean, best first: a word named exactly, else as its plural; then
  * words it begins. At most `limit`, so a short prefix does not crowd out places by name.
@@ -121,31 +91,6 @@ export function categoriesFor(query: string, limit = 2): Category[] {
       ? []
       : CATEGORY_IDS.filter((c) => !exact.includes(c) && WORDS[c].some((w) => w.startsWith(q)));
   return [...exact, ...begun].slice(0, limit);
-}
-
-/**
- * The categories a query may mean misspelt ("kindergaten"), closest first, when it names none
- * as typed: a guess, so it comes after the places found by name ("Charité" is no charity).
- */
-export function misspeltFor(query: string, limit = 1): Category[] {
-  const q = fold(query);
-  const max = slips(q.length);
-  if (!max || categoriesFor(q).length) return [];
-  const score = (c: Category) =>
-    Math.min(
-      ...WORDS[c].map((w) =>
-        Math.min(
-          edits(q, w, max),
-          // A beginning misspelt ("kindergat") counts a little less than a whole word.
-          w.length > q.length ? edits(q, w.slice(0, q.length), max) + 0.5 : Infinity,
-        ),
-      ),
-    );
-  return CATEGORY_IDS.map((c) => ({ c, d: score(c) }))
-    .filter(({ d }) => d <= max + 0.5)
-    .sort((a, b) => a.d - b.d)
-    .slice(0, limit)
-    .map(({ c }) => c);
 }
 
 /**
@@ -205,13 +150,8 @@ export function nearest<T extends Poi>(
     .slice(0, limit);
 }
 
-/**
- * What the map is searched for: a kind of place, or the places whose name begins so
- * ("name:MediaMarkt"), a chain or a name several places share.
- */
-export type Kind = Category | `name:${string}` | `found:${string}`;
-export const byName = (name: string): Kind => `name:${name}`;
-export const nameOf = (k: Kind): string | null => (k.startsWith('name:') ? k.slice(5) : null);
+/** What the map is searched for: a kind of place, or the places Photon found by name. */
+export type Kind = Category | `found:${string}`;
 /**
  * Places found by name, all shown at once (Enter without picking one of several): Photon's
  * answer to the text, not a search of the map.
@@ -225,50 +165,3 @@ export const FOUND_NEAR_M = 30_000;
 /** The places to fit when showing them all: the best one and those near it. */
 export const nearBest = <T extends LngLat>(places: T[]): T[] =>
   places.filter((p) => distance(places[0], p) <= FOUND_NEAR_M);
-
-/** A name to compare by: "Media Markt", "MediaMarkt" and "mediamarkt" are one. */
-export const squeeze = (s: string) => fold(s).replace(/[^\p{L}\p{N}]/gu, '');
-
-/** A name typed counts from 3 letters, as a kind's beginning does. */
-export const NAME_MIN = 3;
-
-/**
- * The name several places in view share that the query begins, and how many there are:
- * "media" → "MediaMarkt", 3. The name is the one most of them have, cut back to what all of
- * them begin with ("EDEKA Müller", "EDEKA Schmidt" → "EDEKA"). Under two places, Photon's names
- * are enough.
- */
-export function sharedName(query: string, names: string[]): { name: string; n: number } | null {
-  const q = squeeze(query);
-  if (q.length < NAME_MIN) return null;
-  const hits = names.filter((n) => squeeze(n).startsWith(q));
-  if (hits.length < 2) return null;
-  const count = new Map<string, number>();
-  for (const n of hits) count.set(n, (count.get(n) ?? 0) + 1);
-  const [top] = [...count].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length);
-  let words = top[0].split(/\s+/);
-  const allBegin = (name: string) => hits.every((n) => squeeze(n).startsWith(squeeze(name)));
-  while (words.length > 1 && !allBegin(words.join(' '))) words = words.slice(0, -1);
-  const name = words.join(' ');
-  return { name: allBegin(name) ? name : query.trim(), n: hits.length };
-}
-
-/** A place counted among a chain's branches in view stands this close to one of them. */
-const SAME_PLACE_M = 150;
-
-/**
- * Places found by name, without those that are one of the places already offered (the same
- * name, give or take a branch's suffix, within 150 m): each place is in the list once.
- */
-export function without<T extends LngLat & { name: string }>(
-  places: T[],
-  shown: (LngLat & { name: string })[],
-): T[] {
-  return places.filter((p) => {
-    const a = squeeze(p.name);
-    return !shown.some((s) => {
-      const b = squeeze(s.name);
-      return (a.startsWith(b) || b.startsWith(a)) && distance(p, s) <= SAME_PLACE_M;
-    });
-  });
-}

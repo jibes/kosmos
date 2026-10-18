@@ -46,14 +46,9 @@ const Kosmos = isNative
       openSettings(): Promise<void>;
       duck(o: { on: boolean }): Promise<void>;
       log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
-      light(o: { on: boolean }): Promise<{ available: boolean }>;
       vibrate(o: { pattern: number[] }): Promise<void>;
       takeShared(): Promise<{ text?: string }>;
       shareFile(o: { name: string; text: string }): Promise<void>;
-      addListener(
-        event: 'light',
-        listener: (e: { lux: number }) => void,
-      ): Promise<PluginListenerHandle>;
       addListener(
         event: 'shared',
         listener: (e: { text: string }) => void,
@@ -105,25 +100,6 @@ export function watchShared(onText: (text: string) => void): (() => void) | null
   return () => {
     stopped = true;
     void handle.then((h) => h.remove());
-  };
-}
-
-/**
- * Android: the ambient light around the phone, about once a second, until the returned stop is
- * called; `null` on the web (browsers do not offer the sensor) and on phones without one.
- */
-export function watchLight(onLux: (lux: number) => void): (() => void) | null {
-  const kosmos = Kosmos;
-  if (!kosmos) return null;
-  let stopped = false;
-  const handle = kosmos.addListener('light', (e) => {
-    if (!stopped) onLux(e.lux);
-  });
-  void kosmos.light({ on: true }).catch(() => undefined);
-  return () => {
-    stopped = true;
-    void handle.then((h) => h.remove());
-    void kosmos.light({ on: false }).catch(() => undefined);
   };
 }
 

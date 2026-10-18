@@ -166,7 +166,6 @@ export const de = {
   poi_recycling: 'Wertstoffcontainer',
   poi_charging_station: 'Ladestation',
   poi_taxi: 'Taxistand',
-  inView: '{n} im Ausschnitt',
   beyondView: 'Keine im Ausschnitt. Die nächsten in der Nähe:',
   resultsPeek: '{n} · ab {d} entfernt',
   resultsList: 'Suchergebnisse',

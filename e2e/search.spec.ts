@@ -254,38 +254,6 @@ test.describe('search', () => {
     await expect(suggestion).toBeVisible();
   });
 
-  test('finds a chain by its name among the places in view', async ({ page }) => {
-    await jump(page, { ...CENTER, zoom: 14 });
-    await idle(page);
-    const input = page.getByRole('combobox');
-    await input.fill('mediam');
-    const options = page.getByRole('option');
-    // The branches in view first, written either way; then Photon's names, the far one too.
-    await expect(options.first()).toContainText('MediaMarkt');
-    await expect(options.first()).toContainText('2 in view');
-    await expect(options.nth(1)).toContainText('Berlin');
-    // The branch in view is in the chain's row already, not again by name.
-    await expect(options).toHaveCount(2);
-    await expect(options.filter({ hasText: 'Mitte' })).toHaveCount(0);
-    // A space typed after it changes nothing, and is not left waiting.
-    await input.press('End');
-    await input.pressSequentially(' ');
-    await expect(options.first()).toContainText('2 in view');
-    await expect(options.nth(1)).toContainText('Berlin');
-    await options.first().click();
-    await expect(input).toHaveValue('MediaMarkt');
-    const rows = await resultRows(page);
-    await expect(rows).toHaveCount(2);
-    await expect(rows.first()).toContainText(/\d+ m/);
-    const dots = () =>
-      page.evaluate(async () => {
-        const src = window.kosmos!.getSource('search') as import('maplibre-gl').GeoJSONSource;
-        const data = (await src.getData()) as GeoJSON.FeatureCollection;
-        return data.features.length;
-      });
-    await expect.poll(dots).toBe(2);
-  });
-
   test('with none in view, shows the nearest around it', async ({ page }) => {
     // The kindergarten lies 700 m south of the middle, off screen this close in.
     await jump(page, { ...CENTER, zoom: 17 });
@@ -310,19 +278,6 @@ test.describe('search', () => {
         }),
       )
       .toBe(true);
-  });
-
-  test('finds a kind of place typed with a slip', async ({ page }) => {
-    await jump(page, { ...CENTER, zoom: 14 });
-    await idle(page);
-    const input = page.getByRole('combobox');
-    await input.fill('kindergaten');
-    const options = page.getByRole('option');
-    // A guess comes after the names; with none, it is the row Enter takes.
-    await expect(options).toHaveText([/Nurseries and kindergartens/]);
-    await input.press('Enter');
-    await expect(input).toHaveValue('Nurseries and kindergartens');
-    await expect(await resultRows(page)).toHaveText([/Kita Sonnenschein/]);
   });
 
   test('offers to search a new area only after the user moves the map', async ({

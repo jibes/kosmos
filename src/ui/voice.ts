@@ -69,23 +69,22 @@ export function nativeVoice(lang: string): Voice {
 export const systemVoice = (lang: string): Voice => (isNative ? nativeVoice(lang) : webVoice(lang));
 
 /**
- * Voice on or off while guiding. Driving keeps the choice for the next drive; on foot, by bike
- * and on public transport, among other people, every trip starts silent and a tap speaks for
- * that trip only.
+ * Voice on or off while guiding: one choice, kept for the next trip however it goes (on at
+ * first). Muted on foot or by bike, prompts buzz instead (`core/haptics.ts`).
  */
 export function useMuted(voice: Voice) {
-  const [muted, setMuted] = useState(true);
-  const driving = useRef(false);
-  /** Guidance starts in `mode`. */
-  const begin = useCallback((mode: TravelMode) => {
-    driving.current = mode === 'car';
-    setMuted(driving.current ? storedMuted() : true);
+  const [muted, setMuted] = useState(storedMuted);
+  const mode = useRef<TravelMode>('car');
+  /** Guidance starts in `mode`: as the voice was left. */
+  const begin = useCallback((m: TravelMode) => {
+    mode.current = m;
+    setMuted(storedMuted());
   }, []);
   const toggle = useCallback(() => {
     const now = !muted;
-    logEvent('voice.mute', { muted: now, driving: driving.current });
+    logEvent('voice.mute', { muted: now, mode: mode.current });
     setMuted(now);
-    if (driving.current) store(MUTED_KEY, now ? '1' : '0');
+    store(MUTED_KEY, now ? '1' : '0');
     if (now) voice.stop();
   }, [muted, voice]);
   return { muted, begin, toggle };

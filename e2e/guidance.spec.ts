@@ -791,11 +791,10 @@ test.describe('guidance', () => {
     await card.getByRole('button', { name: 'Start', exact: true }).click();
     // On foot the map is seen from straight above, closest in.
     await expect.poll(() => page.evaluate(() => window.kosmos!.getPitch())).toBe(0);
-    // On foot the voice starts silent: the turns are felt instead.
-    await expect(page.getByRole('button', { name: 'Mute voice' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    // Muted on foot, the turns are felt instead.
+    const mute = page.getByRole('button', { name: 'Mute voice' });
+    await mute.click();
+    await expect(mute).toHaveAttribute('aria-pressed', 'true');
     const buzzes = () => page.evaluate(() => (window as unknown as { buzzes: number[][] }).buzzes);
     for (const f of [0.2, 0.5, 0.8, 0.97, 0.995]) {
       await go({ lng: from.lng, lat: from.lat + (corner.lat - from.lat) * f });
@@ -817,10 +816,7 @@ test.describe('guidance', () => {
       .toContainEqual([250]);
   });
 
-  test('remembers the voice for the next drive; on foot and by bike it starts silent', async ({
-    page,
-    context,
-  }) => {
+  test('remembers the voice for the next trip, however it goes', async ({ page, context }) => {
     test.slow(); // Six trips.
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
@@ -849,14 +845,13 @@ test.describe('guidance', () => {
       await expect(card).toBeVisible();
     };
     await openRoute();
+    // On at first; muted for one trip, muted for the next, whatever the way of travel.
     await trip('Car', false, true);
-    await trip('Car', true);
-    // A walk starts silent and its tap is for that walk only.
-    await trip('Walk', true, true);
-    await trip('Car', true, true);
-    await trip('Bike', true);
+    await trip('Walk', true);
+    await trip('Bike', true, true);
+    await trip('Car', false);
     await page.reload();
     await openRoute();
-    await trip('Car', false);
+    await trip('Walk', false);
   });
 });

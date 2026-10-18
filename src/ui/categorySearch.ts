@@ -2,17 +2,7 @@ import { motion } from './motion';
 import { VectorTile } from '@mapbox/vector-tile';
 import type * as maplibregl from 'maplibre-gl';
 import { PbfReader } from 'pbf';
-import {
-  isOf,
-  NAME_MIN,
-  nameOf,
-  nearest,
-  sharedName,
-  squeeze,
-  unnamedKind,
-  type Category,
-  type Kind,
-} from '../core/categories';
+import { isOf, nearest, unnamedKind, type Category, type Kind } from '../core/categories';
 import { isStopPoi } from '../core/departures';
 import { kindOfPoi } from '../core/placeKind';
 import type { LngLat } from '../core/geo';
@@ -29,11 +19,7 @@ interface Spot {
   props: Record<string, unknown>;
   lng: number;
   lat: number;
-  /** Its name to compare by (`squeeze`), worked out once. */
-  key?: string;
 }
-
-const keyOf = (s: Spot) => (s.key ??= s.props.name ? squeeze(String(s.props.name)) : '');
 
 /** A tile that has not come by now is not coming; the search goes on with those that did. */
 const TILE_MS = 8000;
@@ -143,34 +129,6 @@ async function spotsBeyond(
   return [];
 }
 
-/** Names are read as they are typed only from this close in: a few tiles, not a city's worth. */
-const NAMES_ZOOM = 13;
-
-/**
- * The name several places in view share that the text begins ("media" → MediaMarkt, 3), from
- * the zoom-14 tiles of the view; nothing from a wide view or without tiles.
- */
-export async function sharedNameInView(map: maplibregl.Map, text: string) {
-  const q = squeeze(text);
-  if (map.getZoom() < NAMES_ZOOM || q.length < NAME_MIN) return null;
-  const got = await spotsInView(map).catch(() => null);
-  const names = (got?.spots ?? []).filter((s) => keyOf(s).startsWith(q));
-  // The same place from two neighbouring tiles counts once.
-  const once = nearest(
-    names.map((s) => ({ name: String(s.props.name), lng: s.lng, lat: s.lat })),
-    got?.middle ?? { lng: 0, lat: 0 },
-    Infinity,
-  );
-  const shared = sharedName(
-    text,
-    once.map((p) => p.name),
-  );
-  if (!shared) return null;
-  // Where they are: Photon's rows for the same branches would only repeat them.
-  const key = squeeze(shared.name);
-  return { ...shared, at: once.filter((p) => squeeze(p.name).startsWith(key)) };
-}
-
 /**
  * Places of a kind in view, nearest first: to the user when they are in view, else to the
  * middle of the map they see. The tiles on screen only hold the important places below zoom
@@ -207,10 +165,7 @@ export async function findCategory(
   if (!got) return [];
   const { spots, inView, middle } = got;
   const from = me && inView(me) ? me : middle;
-  const name = nameOf(kind);
-  const key = name === null ? undefined : squeeze(name);
-  const wanted = (s: Spot) =>
-    key === undefined ? isOf(kind as Category, s.props) : !!key && keyOf(s).startsWith(key);
+  const wanted = (s: Spot) => isOf(kind as Category, s.props);
   let found = spots.filter(wanted);
   // None in view: the nearest around it instead. (A wide view reads only its middle, so what
   // the next tiles hold may still be in view.)

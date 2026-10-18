@@ -70,7 +70,7 @@ export function App() {
     theme: navTheme,
     update: updateNavTheme,
     updateNight: updateRideTheme,
-  } = useNavTheme(navigating, trip?.mode === 'car' || trip?.mode === 'bike');
+  } = useNavTheme(navigating);
   const theme = navTheme ?? systemTheme;
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -250,13 +250,11 @@ export function App() {
   if (tripList && !navigating) setTripList(false);
   /** What is searched for, kept while a route covers the search bar, dots and all. */
   const search = useSearch();
-  /** "Nearby" on a place card: distances count from that place while it is in view. */
-  const [near, setNear] = useState<Place | null>(null);
   const lookAway = useCallback(() => {
     flyOnFix.current = false;
     setFollow('off');
   }, [setFollow]);
-  const category = useCategory(map, LABEL_LANG, routePadding, !!trip, near ?? fix, lookAway);
+  const category = useCategory(map, LABEL_LANG, routePadding, !!trip, fix, lookAway);
 
   const bias = useCallback(() => {
     if (!map) return undefined;
@@ -478,8 +476,6 @@ export function App() {
     }
     start();
     void compass.start();
-    // The user's own place again: distances count from there, not from a "nearby" place.
-    setNear(null);
     if (navigating) return navControls.locate();
     // Following already: only back to the user when the map shows somewhere else (a fit to
     // results); which way is up is the needle's.
@@ -662,7 +658,6 @@ export function App() {
                   onNearby={() => {
                     const p = selection.place;
                     logEvent('place.nearby');
-                    setNear(p);
                     search.clear();
                     map?.easeTo({
                       center: [p.lng, p.lat],
@@ -698,7 +693,6 @@ export function App() {
                 bias={bias}
                 onPick={pick}
                 onCategory={category.onCategory}
-                onNames={category.names}
                 categoryRun={category.run}
                 onShowAll={category.showAll}
                 collapsed={!!selection}

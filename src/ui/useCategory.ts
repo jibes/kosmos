@@ -4,7 +4,7 @@ import { foundOf, nearBest, nearest, type Kind } from '../core/categories';
 import { distance, type LngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { SEARCH_SOURCE } from '../core/style';
-import { findCategory, seen, sharedNameInView } from './categorySearch';
+import { findCategory, seen } from './categorySearch';
 import { motion } from './motion';
 import { logEvent } from './usageLog';
 
@@ -241,12 +241,6 @@ export function useCategory(
     [map],
   );
 
-  /** The name several places in view share that a text begins: a chain to search for. */
-  const names = useCallback(
-    (text: string) => (map ? sharedNameInView(map, text) : Promise.resolve(null)),
-    [map],
-  );
-
   /** Search the category again where the map is now. */
   const searchHere = useCallback(() => {
     logEvent('search.here.tap');
@@ -259,5 +253,5 @@ export function useCategory(
   useEffect(() => {
     if (offerHere) logEvent('search.here.offer');
   }, [offerHere]);
-  return { onCategory, names, showAll, searchHere, run, offerHere, results, highlight };
+  return { onCategory, showAll, searchHere, run, offerHere, results, highlight };
 }

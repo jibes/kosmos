@@ -164,7 +164,6 @@ export const en = {
   poi_recycling: 'Recycling',
   poi_charging_station: 'Charging station',
   poi_taxi: 'Taxi rank',
-  inView: '{n} in view',
   beyondView: 'None in view. The nearest around it:',
   resultsPeek: '{n} · nearest {d}',
   resultsList: 'Search results',
