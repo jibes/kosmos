@@ -13,7 +13,9 @@ import { isStopPoi } from '../core/departures';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER } from '../core/style';
 import { lang, t } from '../i18n';
 import { onLongPress } from './gestures';
+import { motion } from './motion';
 import type { Trip } from './useRoute';
+import { MAX_STOPS } from '../core/stops';
 import { favouriteAt, placeOf } from './useFavourites';
 import { contactAt, placeOfContact } from './useContacts';
 
@@ -76,6 +78,19 @@ interface Options {
   navRef: RefObject<boolean>;
   setActive: (index: number) => void;
   setTrip: Dispatch<SetStateAction<Trip | null>>;
+  /** A place as a stop on the way of the open route (`useStops`). */
+  addStopRef: RefObject<(p: Place) => void>;
+}
+
+/** Zooms to where a group of marks comes apart, centred on it. */
+function zoomIntoGroup(map: maplibregl.Map, f: maplibregl.MapGeoJSONFeature) {
+  const src = map.getSource(f.source) as maplibregl.GeoJSONSource | undefined;
+  const id = Number(f.properties.cluster_id);
+  const center = (f.geometry as GeoJSON.Point).coordinates as [number, number];
+  void src
+    ?.getClusterExpansionZoom(id)
+    .then((zoom) => map.easeTo({ center, zoom: zoom + 0.2, duration: motion(500) }))
+    .catch(() => undefined);
 }
 
 /**
@@ -93,6 +108,39 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
     if (!map) return;
     const { tripRef, navRef } = opts.current;
     let lastHold = 0;
+    /** With a road route open, also while guiding: a label tapped can be a stop on the way. */
+    const offerStop = (x: number, y: number) => {
+      const { showToast, addStopRef, labelLang } = opts.current;
+      const tr = tripRef.current;
+      if (!tr || tr.mode === 'transit' || (tr.via?.length ?? 0) >= MAX_STOPS) return;
+      const layers = LABEL_LAYERS.filter((id) => map.getLayer(id));
+      const [f] = map.queryRenderedFeatures(
+        [
+          [x - 10, y - 10],
+          [x + 10, y + 10],
+        ],
+        { layers },
+      );
+      if (f?.layer.id.endsWith('-groups')) return zoomIntoGroup(map, f);
+      const p = f?.properties ?? {};
+      const fav = f?.layer.id.startsWith('fav-') ? favouriteAt(Number(p.fav)) : undefined;
+      const contact = f?.layer.id.startsWith('contact-') ? contactAt(Number(p.contact)) : undefined;
+      const name = (p[`name:${labelLang}`] ?? p.name) as string | undefined;
+      const place: Place | null = fav
+        ? placeOf(fav)
+        : contact
+          ? placeOfContact(contact)
+          : f && name && f.geometry.type === 'Point'
+            ? {
+                name,
+                detail: '',
+                lng: f.geometry.coordinates[0],
+                lat: f.geometry.coordinates[1],
+              }
+            : null;
+      if (place)
+        showToast(place.name, [{ label: t.addStop, run: () => addStopRef.current(place) }]);
+    };
     const onClick = (e: maplibregl.MapMouseEvent) => {
       const { select, clear, setActive, labelLang } = opts.current;
       if (Date.now() - lastHold < 700) return;
@@ -106,6 +154,7 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
           { layers: [ROUTE_ALT_LAYER] },
         );
         if (alt) setActive(Number(alt.properties.index));
+        else offerStop(x, y);
         return;
       }
       const layers = LABEL_LAYERS.filter((id) => map.getLayer(id));
@@ -117,6 +166,11 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
         { layers },
       );
       const props = f?.properties ?? {};
+      // A group of marks too close to tell apart: in until they part.
+      if (f?.layer.id.endsWith('-groups') && f.geometry.type === 'Point') {
+        zoomIntoGroup(map, f);
+        return;
+      }
       // A star: the place as it was kept, its card at once (details by its OSM id).
       const fav = f?.layer.id.startsWith('fav-') ? favouriteAt(Number(props.fav)) : undefined;
       if (fav) {
@@ -166,8 +220,15 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
             setTrip((tr) => (tr && tr[end] === pin ? { ...tr, [end]: { ...pin, ...extra } } : tr)),
           );
         };
+        const { addStopRef } = opts.current;
+        const tr = tripRef.current;
+        const stop =
+          tr.mode !== 'transit' && (tr.via?.length ?? 0) < MAX_STOPS
+            ? [{ label: t.addStop, run: () => addStopRef.current(pin) }]
+            : [];
         showToast(t.droppedPin, [
           { label: t.startHere, run: () => set('from') },
+          ...stop,
           { label: t.goHere, run: () => set('to') },
         ]);
         return;

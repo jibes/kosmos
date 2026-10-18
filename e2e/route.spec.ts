@@ -45,6 +45,15 @@ test.describe('routes', () => {
     );
     await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
     await expect.poll(() => routeRequests.at(-1)?.costing).toBe('pedestrian');
+
+    // Looked elsewhere: the whole route on screen again, at a tap.
+    await page.evaluate(() => window.kosmos!.jumpTo({ center: [0, 0], zoom: 5 }));
+    await page.getByRole('button', { name: 'Show the whole route' }).click();
+    await routeInView(
+      page,
+      [CENTER.lng + 0.01, CENTER.lat + 0.01],
+      [SEARCH_HIT.lng, SEARCH_HIT.lat],
+    );
   });
 
   test('changes the start and the destination of a route', async ({ page, context }) => {
@@ -542,6 +551,105 @@ test.describe('routes', () => {
     const pin = (await page.locator('.pin').boundingBox())!;
     expect(Math.abs(pin.x + pin.width / 2 - end.x)).toBeLessThan(4);
     expect(Math.abs(pin.y + pin.height - end.y)).toBeLessThan(16);
+  });
+
+  test('goes by way of stops: added from the card or the map, taken off again', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    // From the card: a stop found by name.
+    await card.getByRole('button', { name: /Add stop/ }).click();
+    await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+    await page.getByRole('option').filter({ hasText: 'Havel' }).click();
+    await expect(card.locator('.via')).toHaveCount(1);
+    await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(1);
+    await expect(card.locator('.summary strong')).toHaveText(/min|h/);
+    await expect(page.locator('.stop-dot')).toHaveText(['1']);
+    // From the map: a point held there.
+    await idle(page);
+    const at = await screenAt(page, CENTER.lng, CENTER.lat);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
+    await expect(card.locator('.via')).toHaveCount(2);
+    await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(2);
+    // Where it was held, give or take the map settling under the pointer.
+    expect(routeRequests.at(-1)!.via[1][0]).toBeCloseTo(CENTER.lng, 2);
+    await expect(page.locator('.stop-dot')).toHaveText(['1', '2']);
+    // Public transport goes straight there: no stops asked, none offered.
+    await card.getByRole('radio', { name: 'Public transport' }).click();
+    await expect(card.getByRole('radio', { name: 'Public transport' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await expect(card.locator('.via')).toHaveCount(0);
+    await expect(card.getByRole('button', { name: /Add stop/ })).toHaveCount(0);
+    await card.getByRole('radio', { name: 'Car' }).click();
+    await expect(card.locator('.via')).toHaveCount(2);
+    // Taken off again: straight there.
+    await card
+      .getByRole('button', { name: /^Remove stop/ })
+      .first()
+      .click();
+    await card.getByRole('button', { name: /^Remove stop/ }).click();
+    await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(0);
+    await expect(page.locator('.stop-dot')).toHaveCount(0);
+  });
+
+  test('adds a stop while guiding: a label tapped, a new route by way of it', async ({
+    page,
+    context,
+  }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: from.lat, longitude: from.lng, accuracy: 5 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    const banner = page.locator('.nav-banner');
+    await expect(banner).toBeVisible();
+    // Looking around the map: the café on the way.
+    const cafe = { lng: CENTER.lng + 140 / 67800, lat: CENTER.lat - 170 / 111200 };
+    await jump(page, { ...cafe, zoom: 17 });
+    const at = await screenAt(page, cafe.lng, cafe.lat);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          ({ x, y }) =>
+            window
+              .kosmos!.queryRenderedFeatures([
+                [x - 10, y - 10],
+                [x + 10, y + 10],
+              ])
+              .some((f) => f.properties.name === 'Café Einstein'),
+          at,
+        ),
+      )
+      .toBe(true);
+    const asked = routeRequests.length;
+    await page.mouse.click(at.x, at.y);
+    await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
+    await expect.poll(() => routeRequests.length).toBe(asked + 1);
+    const again = routeRequests.at(-1)!;
+    // From here, by way of the café, one route.
+    expect(again.from[0]).toBeCloseTo(from.lng, 4);
+    expect(again.via[0][0]).toBeCloseTo(cafe.lng, 4);
+    await expect(banner).toBeVisible();
+    await expect(page.locator('.stop-dot')).toHaveText(['1']);
   });
 
   test('offers another way when there is no route', async ({ page, context }) => {

@@ -217,7 +217,13 @@ export const stopTimesRequests: URLSearchParams[] = [];
 
 /** The speed-limit requests made, by costing. */
 export const limitRequests: string[] = [];
-export const routeRequests: { costing: string; from: Pt; to: Pt; noTolls?: boolean }[] = [];
+export const routeRequests: {
+  costing: string;
+  from: Pt;
+  to: Pt;
+  via: Pt[];
+  noTolls?: boolean;
+}[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
 export async function offlineWorld(context: BrowserContext) {
@@ -334,10 +340,30 @@ export async function offlineWorld(context: BrowserContext) {
   });
   await context.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {
     const body = JSON.parse(new URL(route.request().url()).searchParams.get('json') ?? '{}');
-    const [s, e] = body.locations.map((l: { lat: number; lon: number }) => [l.lon, l.lat] as Pt);
+    const points = body.locations.map((l: { lat: number; lon: number }) => [l.lon, l.lat] as Pt);
+    const [s, e] = [points[0], points.at(-1)];
+    const via: Pt[] = points.slice(1, -1);
     const noTolls = !!body.costing_options?.auto?.exclude_tolls;
-    routeRequests.push({ costing: body.costing, from: s, to: e, noTolls });
+    routeRequests.push({ costing: body.costing, from: s, to: e, via, noTolls });
     const speed = { auto: 30, bicycle: 15, pedestrian: 5 }[body.costing as string] ?? 30;
+    // By way of stops: one leg to each, as the router arrives at each and sets off again.
+    if (via.length) {
+      const legs = points.slice(1).map((q: Pt, i: number) => {
+        const p = points[i];
+        return fakeTrip(p, [p[0], q[1]], q, speed);
+      });
+      const trip = {
+        legs: legs.flatMap((l: ReturnType<typeof fakeTrip>) => l.legs),
+        summary: {
+          length: legs.reduce(
+            (n: number, l: ReturnType<typeof fakeTrip>) => n + l.summary.length,
+            0,
+          ),
+          time: legs.reduce((n: number, l: ReturnType<typeof fakeTrip>) => n + l.summary.time, 0),
+        },
+      };
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ trip }) });
+    }
     const main = fakeTrip(s, [s[0], e[1]], e, speed, body.costing === 'bicycle');
     const other = fakeTrip(s, [e[0], s[1]], e, speed * 0.8);
     // By car both ways have toll roads; asked to leave them out, a slower way without.

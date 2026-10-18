@@ -82,6 +82,22 @@
   opacity: 0.35;
 }
 
+/* A stop is not changed, only taken off. */
+.ends .via .end-btn {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: 1px dashed var(--line);
+}
+
+.ends .add-stop .quiet-link {
+  padding: 0 12px;
+  min-height: 44px;
+  text-align: left;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* From and To look like fields: a tap changes them. */
 .end-btn {
   flex: 1;

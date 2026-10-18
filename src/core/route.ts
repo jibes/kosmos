@@ -63,6 +63,10 @@ export interface Maneuver {
   wayOut?: string;
   /** Lanes approaching this maneuver, left to right, when the router knows them. */
   lanes?: Lane[];
+  /** Arriving at a stop on the way, not the end: which of the request's stops, from 0. */
+  stop?: number;
+  /** That stop among the trip's own (`Trip.via`), once named for it. */
+  via?: number;
 }
 
 export interface Route {
@@ -94,6 +98,8 @@ export function routeUrl(
    * win), so `exclude_tolls` forbids them; with no way around, there is none.
    */
   avoidTolls = false,
+  /** Stops on the way, in order: the route arrives at each and sets off again. */
+  via: readonly LngLat[] = [],
 ) {
   const options =
     mode === 'car' && avoidTolls
@@ -109,6 +115,7 @@ export function routeUrl(
           ? { heading: Math.round(((from.heading % 360) + 360) % 360), heading_tolerance: 45 }
           : {}),
       },
+      ...via.map((v) => ({ lat: +v.lat.toFixed(6), lon: +v.lng.toFixed(6) })),
       { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
     ],
     costing: COSTING[mode],
@@ -118,7 +125,8 @@ export function routeUrl(
       units: units === 'metric' ? 'kilometers' : 'miles',
       language: LANGS.has(lang) ? lang : 'en',
     },
-    alternates,
+    // Other ways only between two ends: the router finds none past stops.
+    alternates: via.length ? 0 : alternates,
     turn_lanes: true,
   };
   // GET keeps the request "simple" for CORS: no preflight.
@@ -244,12 +252,16 @@ function toRoute(trip: VTrip | undefined): Route | null {
   const metres = trip.units === 'miles' ? 1609.344 : 1000;
   const coords: [number, number][] = [];
   const maneuvers: Maneuver[] = [];
-  for (const leg of trip.legs) {
+  const legs = trip.legs;
+  for (const [li, leg] of legs.entries()) {
     // Legs share their joining point; drop the duplicate.
     const offset = coords.length ? coords.length - 1 : 0;
     const shape = decodePolyline(leg.shape ?? '');
     coords.push(...(coords.length ? shape.slice(1) : shape));
-    for (const m of leg.maneuvers ?? []) {
+    const ms = leg.maneuvers ?? [];
+    for (const [mi, m] of ms.entries()) {
+      // A leg that ends before the last ends at a stop on the way.
+      const stop = li < legs.length - 1 && mi === ms.length - 1 ? li : undefined;
       maneuvers.push({
         type: m.type ?? 0,
         instruction: m.instruction ?? '',
@@ -264,6 +276,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
         toward: towardOf(m),
         refs: refsOf(m),
         lanes: parseLanes(m.lanes),
+        ...(stop !== undefined ? { stop } : {}),
       });
     }
   }

@@ -69,5 +69,23 @@ export function useNavControls({ map, follow, setFollow, view, canTurn, recenter
     recenter();
   }, [map, follow, setFollow, level, unlevel, canTurn, overviewRef, setOverview, recenter]);
 
-  return { locate, toggleOverview, turn };
+  /**
+   * The needle on the map, not guiding: north up (and flat) from heading-up or a hand's turn;
+   * else heading-up, following, once `headingUp` has started location and the compass.
+   */
+  const turnMap = useCallback(
+    (headingUp: () => void) => {
+      const turned = !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5);
+      if (follow === 'compass' || turned) {
+        if (follow === 'compass') setFollow('position');
+        map?.easeTo({ bearing: 0, pitch: 0, duration: motion(500) });
+        return;
+      }
+      headingUp();
+      setFollow('compass');
+    },
+    [map, follow, setFollow],
+  );
+
+  return { locate, toggleOverview, turn, turnMap };
 }

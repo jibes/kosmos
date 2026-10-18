@@ -31,7 +31,8 @@ import { useFavouriteLayer } from './ui/useFavourites';
 import { useContactLayer, useContactsRow } from './ui/useContacts';
 import { logEvent } from './ui/usageLog';
 import { useMapGestures } from './ui/useMapGestures';
-import { useRoute, type Trip } from './ui/useRoute';
+import { swapEnds, useRoute, viaOf, type Trip } from './ui/useRoute';
+import { useStops } from './ui/useStops';
 import { useGuidance } from './ui/useGuidance';
 import { FRESH_MS } from './ui/useNav';
 import { useRouteLayer } from './ui/useRouteLayer';
@@ -93,7 +94,7 @@ export function App() {
   const { toast, showToast, dismiss, dismissText } = useToast();
   const [active, setActive] = useState(0);
   /** Which end of the route the search bar is choosing, if any. */
-  const [picking, setPicking] = useState<'start' | 'end' | null>(null);
+  const [picking, setPicking] = useState<'start' | 'end' | 'stop' | null>(null);
   const pickingRef = useRef(picking);
   useEffect(() => {
     pickingRef.current = picking;
@@ -103,7 +104,11 @@ export function App() {
   const [connAt, setConnAt] = useState<number | null>(null);
   /** The drive set off on a toll-free route chosen over toll ones: its reroutes stay so. */
   const [tollFree, setTollFree] = useState(false);
-  const route = useRoute(trip, fix, lang, navigating, tollFree);
+  /** Stops on the way already reached while guiding (`useStops`). */
+  const [stopsBehind, setStopsBehind] = useState(0);
+  /** `useStops().addStop`, for the pickers and taps set up before it. */
+  const addStopRef = useRef<(p: Place) => void>(() => undefined);
+  const route = useRoute(trip, fix, lang, navigating, tollFree, stopsBehind);
   // The voice speaks the language of the words it is given: the UI's (and the router's).
   const voice = useMemo(() => systemVoice(locale), []);
   const { muted, begin: beginVoice, toggle: toggleMute } = useMuted(voice);
@@ -196,6 +201,7 @@ export function App() {
     navRef,
     setActive,
     setTrip,
+    addStopRef,
   });
 
   const pick = useCallback(
@@ -208,6 +214,8 @@ export function App() {
         if (end === 'end') {
           setTrip({ ...tripRef.current, to: place });
           select(place);
+        } else if (end === 'stop') {
+          addStopRef.current(place);
         } else {
           setTrip({ ...tripRef.current, from: place });
         }
@@ -244,7 +252,6 @@ export function App() {
     [map, select, setFollow],
   );
 
-  /** Places of a category, from the map's tiles; their dots stay until the search ends. */
   /** The ride's whole trip, open under its banner: a step of its own for Back. */
   const [tripList, setTripList] = useState(false);
   if (tripList && !navigating) setTripList(false);
@@ -314,13 +321,14 @@ export function App() {
   // Route: alternatives under the chosen one; refit only when the trip itself changes.
   const shown = route.routes;
   const chosen = Math.min(active, Math.max(0, shown.length - 1));
-  useRouteLayer(map, {
+  const routeLayer = useRouteLayer(map, {
     routes: shown,
     chosen,
     navigating,
     ready: route.status === 'ready',
     tripKey: route.key,
     from: trip?.from ?? null,
+    via: viaOf(trip),
     hasTrip: !!trip,
     padding: routePadding,
   });
@@ -352,6 +360,18 @@ export function App() {
     retry: route.retry,
   });
   const { nav, rerouteState } = guidance;
+  const stops = useStops({
+    trip,
+    setTrip,
+    guided,
+    nav,
+    navigating,
+    setBehind: setStopsBehind,
+    showToast,
+  });
+  useEffect(() => {
+    addStopRef.current = stops.addStop;
+  });
   const navControls = useNavControls({
     map,
     follow,
@@ -611,6 +631,9 @@ export function App() {
                 <RouteCard
                   to={trip.to}
                   from={trip.from}
+                  via={viaOf(trip)}
+                  onAddStop={stops.canAdd ? () => setPicking('stop') : undefined}
+                  onRemoveStop={stops.removeStop}
                   mode={trip.mode}
                   routes={shown}
                   active={chosen}
@@ -628,19 +651,10 @@ export function App() {
                   onSwap={
                     trip.from || fix
                       ? () => {
-                          // "My location" as the destination is the position now; swapped
-                          // back, it is the live position again.
-                          const here = fix && {
-                            name: t.myLocation,
-                            detail: '',
-                            lng: fix.lng,
-                            lat: fix.lat,
-                            here: true,
-                          };
-                          const from = trip.from ?? here;
-                          if (!from) return;
+                          const next = swapEnds(trip, fix);
+                          if (!next) return;
                           setActive(0);
-                          setTrip({ ...trip, from: trip.to.here ? null : trip.to, to: from });
+                          setTrip(next);
                         }
                       : undefined
                   }
@@ -716,7 +730,13 @@ export function App() {
                   onPick={pick}
                   collapsed={false}
                   onFocus={() => undefined}
-                  placeholder={picking === 'start' ? t.searchStart : t.searchEnd}
+                  placeholder={
+                    picking === 'start'
+                      ? t.searchStart
+                      : picking === 'stop'
+                        ? t.searchStop
+                        : t.searchEnd
+                  }
                   autoFocus
                   onCancel={() => setPicking(null)}
                 />
@@ -731,22 +751,25 @@ export function App() {
           guiding={navigating}
           canTurn={navigating && !riding ? true : compass.available}
           onLocate={locate}
-          onTurn={() => {
-            if (navigating) return navControls.turn();
-            // North up (and flat) from heading-up or a hand's turn; else heading-up, following.
-            const turned = !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5);
-            if (follow === 'compass' || turned) {
-              if (follow === 'compass') setFollow('position');
-              map?.easeTo({ bearing: 0, pitch: 0, duration: motion(500) });
-              return;
-            }
-            start();
-            void compass.start();
-            setFollow('compass');
-            if (follow === 'off') flyToMe();
-          }}
+          onTurn={() =>
+            navigating
+              ? navControls.turn()
+              : navControls.turnMap(() => {
+                  start();
+                  void compass.start();
+                  if (follow === 'off') flyToMe();
+                })
+          }
           overview={navigating ? overview : undefined}
           onOverview={navControls.toggleOverview}
+          onWholeRoute={
+            trip && !navigating && route.status === 'ready'
+              ? () => {
+                  setFollow('off');
+                  routeLayer.fit();
+                }
+              : undefined
+          }
         />
         <button
           type="button"

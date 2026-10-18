@@ -1,10 +1,10 @@
 import { motion } from './motion';
 import type * as maplibregl from 'maplibre-gl';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Route } from '../core/route';
 import type { Place } from '../core/search';
 import { ROUTE_SOURCE } from '../core/style';
-import { startMarker } from './markers';
+import { startMarker, stopMarker } from './markers';
 
 const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
 
@@ -49,6 +49,8 @@ interface Options {
   tripKey: string;
   /** A chosen start gets its own marker; "my location" already has the dot. */
   from: Place | null;
+  /** Stops on the way, numbered in order. */
+  via: Place[];
   hasTrip: boolean;
   /** The map area the route card leaves free, measured when fitting. */
   padding: () => maplibregl.PaddingOptions;
@@ -57,7 +59,7 @@ interface Options {
 /** Draws the routes (alternatives under the chosen one), fits them once per trip, and marks a
  * start that is not the user's location. */
 export function useRouteLayer(map: maplibregl.Map | null, o: Options) {
-  const { routes, chosen, navigating, ready, tripKey, from, hasTrip, padding } = o;
+  const { routes, chosen, navigating, ready, tripKey, from, via, hasTrip, padding } = o;
 
   useEffect(() => {
     const src = map?.getSource(ROUTE_SOURCE) as maplibregl.GeoJSONSource | undefined;
@@ -75,9 +77,9 @@ export function useRouteLayer(map: maplibregl.Map | null, o: Options) {
   }, [map, routes, chosen, navigating]);
 
   const fitted = useRef('');
-  useEffect(() => {
-    if (!map || navigating || !ready || fitted.current === tripKey) return;
-    fitted.current = tripKey;
+  /** Every way found on screen, flat and north up, in the area the card leaves free. */
+  const fit = useCallback(() => {
+    if (!map || !routes.length) return;
     const [w, s, e, n] = routes.reduce(
       (b, r) => [
         Math.min(b[0], r.bbox[0]),
@@ -99,7 +101,12 @@ export function useRouteLayer(map: maplibregl.Map | null, o: Options) {
       maxZoom: 17,
       duration: motion(1200),
     });
-  }, [map, navigating, ready, tripKey, routes, padding]);
+  }, [map, routes, padding]);
+  useEffect(() => {
+    if (!map || navigating || !ready || fitted.current === tripKey) return;
+    fitted.current = tripKey;
+    fit();
+  }, [map, navigating, ready, tripKey, fit]);
   useEffect(() => {
     if (!hasTrip) fitted.current = '';
   }, [hasTrip]);
@@ -113,4 +120,16 @@ export function useRouteLayer(map: maplibregl.Map | null, o: Options) {
     startPin.current ??= startMarker();
     startPin.current.setLngLat([from.lng, from.lat]).addTo(map);
   }, [map, from]);
+
+  const stopPins = useRef<maplibregl.Marker[]>([]);
+  useEffect(() => {
+    for (const m of stopPins.current) m.remove();
+    if (!map) return;
+    stopPins.current = via.map((v, i) =>
+      stopMarker(i + 1)
+        .setLngLat([v.lng, v.lat])
+        .addTo(map),
+    );
+  }, [map, via]);
+  return { fit };
 }

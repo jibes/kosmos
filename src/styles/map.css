@@ -306,6 +306,22 @@
 
 /* Anchored at its bottom: the tip of the rotated dot (about 26 px down) on the place, its
    shadow round it, at any zoom; a taller box left the pin floating above the spot. */
+/* A stop on the way: its number, ringed like the start. */
+.stop-dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--surface-solid);
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
+  pointer-events: none;
+}
+
 .pin {
   width: 30px;
   height: 30px;

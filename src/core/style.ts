@@ -6,7 +6,7 @@ import type {
   StyleSpecification,
 } from '@maplibre/maplibre-gl-style-spec';
 import { palettes, type Palette, type Theme } from './palette';
-import { contacts, favourites } from './styleMarks';
+import { contacts, favourites, MARK_CLUSTER } from './styleMarks';
 
 /** OpenMapTiles-schema vector tiles, free and keyless. */
 export const TILES_URL = 'https://tiles.openfreemap.org/planet';
@@ -29,8 +29,10 @@ export const LABEL_LAYERS = [
   'search-dots',
   'fav-names',
   'fav-stars',
+  'fav-groups',
   'contact-names',
   'contact-icons',
+  'contact-groups',
   'label-poi',
   'label-village',
   'label-town',
@@ -686,8 +688,16 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
       },
       [ROUTE_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       [SEARCH_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
-      [FAV_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
-      [CONTACT_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      [FAV_SOURCE]: {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        ...MARK_CLUSTER,
+      },
+      [CONTACT_SOURCE]: {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        ...MARK_CLUSTER,
+      },
     },
     glyphs: GLYPHS_URL,
     ...(fontFaces ? { 'font-faces': fontFaces } : {}),

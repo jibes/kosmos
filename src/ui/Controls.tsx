@@ -22,6 +22,8 @@ interface Props {
   /** Guiding: the rest of the way on screen, a toggle beside the location button. */
   overview?: boolean;
   onOverview?: () => void;
+  /** A route open, not yet guiding: the whole of it on screen again, once. */
+  onWholeRoute?: () => void;
 }
 
 /**
@@ -31,7 +33,18 @@ interface Props {
  * does.
  */
 export function Controls(props: Props) {
-  const { map, status, follow, onLocate, onTurn, canTurn, guiding, overview, onOverview } = props;
+  const {
+    map,
+    status,
+    follow,
+    onLocate,
+    onTurn,
+    canTurn,
+    guiding,
+    overview,
+    onOverview,
+    onWholeRoute,
+  } = props;
   const [camera, setCamera] = useState({ bearing: 0, pitch: 0 });
 
   useEffect(() => {
@@ -88,6 +101,18 @@ export function Controls(props: Props) {
           title={t.overview}
           aria-pressed={overview}
           onClick={onOverview}
+        >
+          <WholeRouteIcon />
+        </button>
+      )}
+      {/* An action, not a toggle: the map is the user's again after it. */}
+      {onWholeRoute && (
+        <button
+          type="button"
+          className="ctl surface overview"
+          aria-label={t.wholeRoute}
+          title={t.wholeRoute}
+          onClick={onWholeRoute}
         >
           <WholeRouteIcon />
         </button>

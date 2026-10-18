@@ -15,6 +15,14 @@ export function startMarker(): maplibregl.Marker {
   return new maplibregl.Marker({ element: el });
 }
 
+/** A stop on the way, by its number in the trip. */
+export function stopMarker(n: number): maplibregl.Marker {
+  const el = document.createElement('div');
+  el.className = 'stop-dot';
+  el.textContent = String(n);
+  return new maplibregl.Marker({ element: el });
+}
+
 /** The user's dot with an accuracy ring sized in ground metres. */
 export function userMarker(map: maplibregl.Map) {
   const el = document.createElement('div');

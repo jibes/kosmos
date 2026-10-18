@@ -536,6 +536,63 @@ test.describe('map', () => {
     await expect.poll(onMap).toBe(0);
   });
 
+  test('groups marks too close to tell apart; a tap zooms in until they part', async ({ page }) => {
+    // Three favourites a few hundred metres apart, seen from far away.
+    await page.evaluate((c) => {
+      const fav = (name: string, dx: number) => ({
+        name,
+        detail: '',
+        lng: c.lng + dx,
+        lat: c.lat,
+        at: 1,
+      });
+      localStorage.setItem(
+        'kosmos.favourites.v1',
+        JSON.stringify([fav('A', 0), fav('B', 0.004), fav('C', 0.008)]),
+      );
+    }, CENTER);
+    await page.reload();
+    await jump(page, { ...CENTER, zoom: 10 });
+    const at = await screenAt(page, CENTER.lng + 0.004, CENTER.lat);
+    const groups = () =>
+      page.evaluate(
+        ({ x, y }) =>
+          window
+            .kosmos!.queryRenderedFeatures(
+              [
+                [x - 20, y - 20],
+                [x + 20, y + 20],
+              ],
+              { layers: ['fav-groups', 'fav-stars'] },
+            )
+            .map((f) => `${f.layer.id}:${f.properties.point_count ?? f.properties.name}`),
+        at,
+      );
+    await expect.poll(groups).toEqual(['fav-groups:3']);
+    const group = await page.evaluate(() => {
+      const [f] = window.kosmos!.queryRenderedFeatures(undefined, { layers: ['fav-groups'] });
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      return window.kosmos!.project([lng, lat]);
+    });
+    await page.mouse.click(group.x, group.y);
+    // In until the group parts: one star alone, the rest a smaller group or stars too.
+    await expect.poll(() => page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThan(11);
+    await idle(page);
+    const marks = () =>
+      page.evaluate(() =>
+        window
+          .kosmos!.queryRenderedFeatures(undefined, { layers: ['fav-groups', 'fav-stars'] })
+          .map((f) =>
+            f.properties.point_count ? `${f.properties.point_count}` : f.properties.name,
+          )
+          .sort(),
+      );
+    await expect.poll(async () => (await marks()).length).toBeGreaterThan(1);
+    // Close in, every one alone.
+    await jump(page, { ...CENTER, lng: CENTER.lng + 0.004, zoom: 15 });
+    await expect.poll(marks).toEqual(['A', 'B', 'C']);
+  });
+
   test('renames a favourite, and keeps favourites in a backup file', async ({ page }) => {
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');

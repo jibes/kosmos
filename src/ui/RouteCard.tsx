@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import {
   TRAVEL_MODES,
   formatClock,
@@ -24,6 +25,11 @@ export type RouteStatus = 'locating' | 'loading' | 'ready' | Exclude<RouteError,
 interface Props {
   to: Place;
   from: Place | null;
+  /** Stops on the way, by road. */
+  via: Place[];
+  /** Absent while no more can be added (public transport, or `MAX_STOPS` already). */
+  onAddStop?: () => void;
+  onRemoveStop: (index: number) => void;
   mode: TravelMode;
   routes: Route[];
   active: number;
@@ -146,15 +152,41 @@ export function RouteCard(props: Props) {
             </button>
           )}
         </dd>
+        {mode !== 'transit' &&
+          props.via.map((v, i) => (
+            <Fragment key={`${v.lng},${v.lat},${i}`}>
+              <dt>{t.stop}</dt>
+              <dd className="via">
+                <span className="end-btn">{v.name}</span>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={fill(t.removeStop, { name: v.name })}
+                  onClick={() => props.onRemoveStop(i)}
+                >
+                  <CloseIcon size={16} />
+                </button>
+              </dd>
+            </Fragment>
+          ))}
         <dt>{t.to}</dt>
         <dd>
           <button type="button" className="end-btn" onClick={props.onChangeEnd}>
             {to.name}
           </button>
         </dd>
+        {props.onAddStop && (
+          <dd className="add-stop">
+            <button type="button" className="quiet-link" onClick={props.onAddStop}>
+              + {t.addStop}
+            </button>
+          </dd>
+        )}
         <button
           type="button"
           className="icon-btn swap"
+          // Beside both ends and every stop between them.
+          style={{ gridRowEnd: `span ${2 + (mode === 'transit' ? 0 : props.via.length)}` }}
           aria-label={t.swapEnds}
           title={t.swapEnds}
           disabled={!props.onSwap}

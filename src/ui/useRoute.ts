@@ -12,6 +12,7 @@ import {
   type TravelMode,
 } from '../core/route';
 import { narrateWays, type ExitWords } from '../core/roundabout';
+import { nameStops, type StopWords } from '../core/stops';
 import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
 import { fill, t, units } from '../i18n';
@@ -25,6 +26,8 @@ export interface Trip {
   mode: TravelMode;
   /** Public transport departure, epoch ms; `null` or absent leaves now. */
   at?: number | null;
+  /** Stops on the way by road, in order (`MAX_STOPS`); public transport goes straight. */
+  via?: Place[];
 }
 
 interface Result {
@@ -49,8 +52,40 @@ const EXIT_WORDS: ExitWords = {
   heading: (way) => fill(t.exitHeading, { way: t[`way_${way}`] }),
 };
 
+/**
+ * The trip the other way round, its stops too. "My location" as the destination is the position
+ * now; swapped back, it is the live position again. `null` without a position to start from.
+ */
+export function swapEnds(trip: Trip, here: LngLat | null): Trip | null {
+  const me = here && { name: t.myLocation, detail: '', lng: here.lng, lat: here.lat, here: true };
+  const from = trip.from ?? me;
+  if (!from) return null;
+  return {
+    ...trip,
+    from: trip.to.here ? null : trip.to,
+    to: from,
+    via: [...viaOf(trip)].reverse(),
+  };
+}
+
+/** A stop said by its name. */
+const STOP_WORDS: StopWords = {
+  instruction: (name) => fill(t.stopAt, { name }),
+  alert: (name) => fill(t.stopAhead, { name }),
+  pre: (name) => fill(t.stopHere, { name }),
+};
+
+/** The stops a road trip goes by; public transport has none. */
+const NO_STOPS: Place[] = [];
+export const viaOf = (trip: Trip | null) =>
+  !trip || trip.mode === 'transit' ? NO_STOPS : (trip.via ?? NO_STOPS);
+
 const tripKey = (trip: Trip) =>
-  `${trip.mode}|${trip.mode === 'transit' ? (trip.at ?? 'now') : ''}|${trip.to.lng},${trip.to.lat}|${trip.from ? `${trip.from.lng},${trip.from.lat}` : 'me'}`;
+  `${trip.mode}|${trip.mode === 'transit' ? (trip.at ?? 'now') : ''}|${trip.to.lng},${trip.to.lat}|${viaOf(
+    trip,
+  )
+    .map((v) => `${v.lng},${v.lat}`)
+    .join(';')}|${trip.from ? `${trip.from.lng},${trip.from.lat}` : 'me'}`;
 
 /**
  * A failed reroute must not take the route away from someone who is following it, nor a failed
@@ -63,9 +98,14 @@ const keepWhileNavigating = (
   transit: boolean,
 ): Result => {
   const n = (prev?.n ?? 0) + 1;
-  // Across a key change only for a connection (its new start is the stop): a road route from
-  // a chosen start is no way from where the user now is.
-  const same = prev?.key === next.key || (transit && !!prev);
+  // Across a key change only for a connection (its new start is the stop), or a stop added
+  // while guiding from here: a road route from a chosen start is no way from where the user
+  // now is.
+  const fromHere = (k: string) => k.endsWith('|me');
+  const same =
+    prev?.key === next.key ||
+    (transit && !!prev) ||
+    (fromHere(next.key) && fromHere(prev?.key ?? ''));
   return pinned && !next.routes.length && same && prev?.routes.length
     ? { ...prev!, key: next.key, kept: true, n }
     : { ...next, n };
@@ -83,10 +123,14 @@ export function useRoute(
    * when a request is made, never a reason to ask.
    */
   avoidTolls = false,
+  /** Stops already reached while guiding: a reroute goes on to the rest. Read when asking. */
+  stopsBehind = 0,
 ) {
   const tollFreeRef = useRef(avoidTolls);
+  const behindRef = useRef(stopsBehind);
   useEffect(() => {
     tollFreeRef.current = avoidTolls;
+    behindRef.current = stopsBehind;
   });
   const [result, setResult] = useState<Result | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -121,6 +165,9 @@ export function useRoute(
     inflight.current?.abort();
     const ctrl = new AbortController();
     inflight.current = ctrl;
+    const behind = pinned ? behindRef.current : 0;
+    const via = viaOf(trip).slice(behind);
+    const names = viaOf(trip).map((v) => v.name);
     const road = (alternates: number, noTolls: boolean) =>
       getJson(
         // A reroute while guiding: one route, leaving in the direction of travel.
@@ -134,11 +181,16 @@ export function useRoute(
           alternates,
           units,
           noTolls,
+          via,
         ),
         ctrl.signal,
       ).then((r) => ({
         ...r,
-        routes: r.ok ? parseValhalla(r.json).map((x) => narrateWays(x, EXIT_WORDS)) : [],
+        routes: r.ok
+          ? parseValhalla(r.json).map((x) =>
+              nameStops(narrateWays(x, EXIT_WORDS), names, behind, STOP_WORDS),
+            )
+          : [],
       }));
     const ask =
       trip.mode === 'transit'
