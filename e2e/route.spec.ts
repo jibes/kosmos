@@ -470,15 +470,15 @@ test.describe('routes', () => {
     await page.getByRole('option').first().click();
     // The router takes the request and never answers.
     await context.route(/valhalla1\.openstreetmap\.de\/route/, () => undefined);
-    await page.clock.install();
-    const asked = page.waitForRequest(/valhalla1\.openstreetmap\.de\/route/);
+    // The real 20 s: a fake clock installed mid-session races the app's own timers.
+    test.setTimeout(60_000);
     await page
       .locator('.card')
       .getByRole('button', { name: /^Route$/ })
       .click();
-    await asked;
-    await page.clock.fastForward(21_000);
-    await expect(page.locator('.card.route').getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(page.locator('.card.route').getByRole('button', { name: 'Retry' })).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
   test('keeps the chosen route when a reroute fails', async ({ page, context }) => {

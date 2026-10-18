@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  sayable,
+  SAY_MAX_AGE_MS,
   initialNav,
   markReroute,
   markSpoken,
@@ -472,5 +474,14 @@ describe('asking the router again', () => {
     expect(rerouteDue(mark, at(5, 0, 150_000))).toBe(false);
     expect(rerouteDue(mark, at(5, 0, 180_000))).toBe(true);
     expect(markReroute(mark, at(0, 400, 200_000)).count).toBe(0);
+  });
+});
+
+describe('sayable', () => {
+  it('speaks about a fresh fix only, never one from a queue held up', () => {
+    expect(sayable(1000, 1000 + 2000)).toBe(true);
+    expect(sayable(1000, 1000 + SAY_MAX_AGE_MS)).toBe(false);
+    // A fix stamped slightly ahead of the phone's clock is fresh.
+    expect(sayable(5000, 4000)).toBe(true);
   });
 });

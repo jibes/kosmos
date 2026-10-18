@@ -417,3 +417,11 @@ export function navZoom(speed: number): number {
   if (kmh < 100) return 15.5;
   return 14.8;
 }
+
+/**
+ * A prompt is said only about a fix this fresh. Should the page have been held up (a phone
+ * suspends a page it does not show), the fixes queued meanwhile come all at once, and words
+ * about turns long passed would follow one another; guidance still steps through them.
+ */
+export const SAY_MAX_AGE_MS = 15_000;
+export const sayable = (fixTime: number, now: number) => now - fixTime < SAY_MAX_AGE_MS;

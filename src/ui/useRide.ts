@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { rideBuzz } from '../core/haptics';
+import { sayable } from '../core/nav';
 import {
   initialRide,
   markRideSpoken,
@@ -58,10 +59,13 @@ export function useRide(o: Options) {
       const p = ridePrompt(live, st);
       if (p) {
         st = markRideSpoken(st, p.key);
-        if (!opts.current.muted) opts.current.voice.speak(opts.current.say(live, p));
-        // Muted (every ride starts so): the phone in a pocket buzzes instead.
-        const buzz = rideBuzz(p.kind, opts.current.muted);
-        if (buzz) vibrate(buzz);
+        // Never about a fix from a queue held up meanwhile: it is no longer true.
+        if (!fix || sayable(fix.time, now)) {
+          if (!opts.current.muted) opts.current.voice.speak(opts.current.say(live, p));
+          // Muted (every ride starts so): the phone in a pocket buzzes instead.
+          const buzz = rideBuzz(p.kind, opts.current.muted);
+          if (buzz) vibrate(buzz);
+        }
       }
       setView({ planned, live, st });
       check(now);

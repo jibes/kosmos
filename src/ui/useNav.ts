@@ -6,6 +6,7 @@ import {
   type Prompt,
   prompt,
   rerouteDue,
+  sayable,
   step,
   track,
   type NavState,
@@ -88,14 +89,15 @@ export function useNav(o: Options) {
     const onFix = (fix: Fix) => {
       nav = step(tr, nav, fix);
       const p = prompt(tr, nav, mode);
-      if (p) {
+      // Said once, and only while it is still true: never about a fix from a queue.
+      if (p && sayable(fix.time, Date.now())) {
         nav = markSpoken(nav, p.key);
         const { muted, voice } = opts.current;
         if (!muted) voice.speak(promptWords(p));
         // Muted on foot or by bike: felt instead, in the pocket or on the handlebar.
         const buzz = buzzFor(p, mode, muted, tr.route.maneuvers.length - 1);
         if (buzz) vibrate(buzz);
-      }
+      } else if (p) nav = markSpoken(nav, p.key);
       setView({ tr, nav });
       opts.current.onStep(nav, fix);
       // Never on a coarse fix, and backing off when standing in the same wrong place.
