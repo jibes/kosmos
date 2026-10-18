@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { initialNav, markSpoken, prompt, step, track, type Fix } from '../src/core/nav';
 import { encodePolyline, parseValhalla, routeUrl } from '../src/core/route';
-import { MAX_STOPS, nameStops, stopsReached, type StopWords } from '../src/core/stops';
+import {
+  leavingStop,
+  MAX_STOPS,
+  moveStopUp,
+  nameStops,
+  SKIP_AWAY_M,
+  stopsReached,
+  type StopWords,
+} from '../src/core/stops';
 
 const O = { lng: 13.4, lat: 52.5 };
 /** A point `east`/`north` metres from O. */
@@ -118,5 +126,39 @@ describe('stops on the way', () => {
     expect(stopsReached(tr, { ...st, offRoute: true, next: 1 }, 0)).toBe(0);
     // What was reached before a reroute stays reached.
     expect(stopsReached(tr, st, 1)).toBe(1);
+  });
+
+  it('moves a stop a place earlier, never before one already reached', () => {
+    expect(moveStopUp(['a', 'b', 'c'], 2)).toEqual(['a', 'c', 'b']);
+    expect(moveStopUp(['a', 'b', 'c'], 0)).toEqual(['a', 'b', 'c']);
+    // Guiding, a reached: b stays the next one.
+    expect(moveStopUp(['a', 'b', 'c'], 1, 1)).toEqual(['a', 'b', 'c']);
+    expect(moveStopUp(['a', 'b', 'c'], 2, 1)).toEqual(['a', 'c', 'b']);
+  });
+
+  it('arrives 40 m short of the end along the route: the door is off the road', () => {
+    const tr = track(route);
+    let st = markSpoken(initialNav(), '0:pre');
+    for (let n = 0, i = 0; n <= 1465; n += 5, i++) st = step(tr, st, fixAt(n, i * 500));
+    expect(st.arrived).toBe(true);
+    let short = markSpoken(initialNav(), '0:pre');
+    for (let n = 0, i = 0; n <= 1450; n += 5, i++) short = step(tr, short, fixAt(n, i * 500));
+    expect(short.arrived).toBe(false);
+  });
+});
+
+describe('a stop left behind', () => {
+  it('is asked about only off the route, well beyond the closest yet', () => {
+    let w = leavingStop(null, 0, 3000, true, 'car').watch;
+    // Getting closer, then away again: off the route and 1 km past the closest, left behind.
+    w = leavingStop(w, 0, 800, true, 'car').watch;
+    expect(leavingStop(w, 0, 1700, true, 'car').leaving).toBe(false);
+    expect(leavingStop(w, 0, 1900, true, 'car').leaving).toBe(true);
+    // On the route the way may wind away from the stop: never.
+    expect(leavingStop(w, 0, 5000, false, 'car').leaving).toBe(false);
+    // On foot it comes sooner; the next stop starts afresh.
+    expect(leavingStop({ stop: 0, closest: 100 }, 0, 300, true, 'foot').leaving).toBe(true);
+    expect(leavingStop({ stop: 0, closest: 100 }, 1, 300, true, 'foot').leaving).toBe(false);
+    expect(SKIP_AWAY_M.bike).toBeLessThan(SKIP_AWAY_M.car);
   });
 });

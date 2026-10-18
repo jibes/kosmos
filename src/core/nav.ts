@@ -215,7 +215,9 @@ export const offRouteLimit = (accuracy: number, mode: Mode = 'car') =>
   Math.max(mode === 'foot' ? 20 : 35, Math.min(accuracy * 1.5, 80));
 /** How long a fix must stay off the line before rerouting. */
 export const OFF_ROUTE_MS = 8_000;
-export const ARRIVE_M = 25;
+/** Arrived this close along the route: the door is often off the road, a car parks short of it,
+ * and GPS between buildings is off by tens of metres. */
+export const ARRIVE_M = 40;
 
 /**
  * How far along the route a fix may be from the last one: what the fastest plausible travel

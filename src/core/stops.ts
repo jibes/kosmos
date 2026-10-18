@@ -1,5 +1,5 @@
 import { ARRIVE_M, type NavState, type Track } from './nav';
-import type { Route } from './route';
+import type { Mode, Route } from './route';
 
 /**
  * Stops on the way (a coffee, someone picked up, fuel): the router arrives at each and sets off
@@ -8,6 +8,14 @@ import type { Route } from './route';
 
 /** A few at most: more is planning a tour, not a trip. */
 export const MAX_STOPS = 3;
+
+/** The stops with the one at `i` a place earlier, never before `first` (those reached). */
+export function moveStopUp<T>(via: readonly T[], i: number, first = 0): T[] {
+  if (i <= first || i >= via.length) return [...via];
+  const next = [...via];
+  [next[i - 1], next[i]] = [next[i], next[i - 1]];
+  return next;
+}
 
 /** The words for a stop by its name: banner, early alert ("In 300 m, stop at …"), arrival. */
 export interface StopWords {
@@ -63,4 +71,34 @@ export function stopsReached(
     if (i < st.next || along >= tr.at[i] - ARRIVE_M) reached = Math.max(reached, m.via + 1);
   });
   return reached;
+}
+
+/** Off the route and this much further from the next stop than the closest yet: left behind. */
+export const SKIP_AWAY_M: Record<Mode, number> = { car: 1000, bike: 400, foot: 150 };
+/** How long the question waits before the stop is skipped by itself. */
+export const SKIP_DELAY_MS = 10_000;
+
+/** Watching the next stop while guiding: the closest the user came to it. */
+export interface StopWatch {
+  /** The trip's stop watched (`Trip.via` index). */
+  stop: number;
+  closest: number;
+}
+
+/**
+ * Whether the user is leaving the next stop behind: off the route (on it, the way to the stop
+ * may wind away from it) and well beyond the closest they came. A new stop starts afresh.
+ */
+export function leavingStop(
+  prev: StopWatch | null,
+  stop: number,
+  dist: number,
+  offRoute: boolean,
+  mode: Mode,
+): { watch: StopWatch; leaving: boolean } {
+  const closest = prev && prev.stop === stop ? Math.min(prev.closest, dist) : dist;
+  return {
+    watch: { stop, closest },
+    leaving: offRoute && dist > closest + SKIP_AWAY_M[mode],
+  };
 }

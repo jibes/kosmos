@@ -17,6 +17,7 @@ import { limitAt, limitIn, overLimit } from '../core/speedLimit';
 import { capital, fill, ordinal, t, units } from '../i18n';
 import { LaneIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
+import { StopList, type StopListProps } from './StopList';
 import { TripDetails } from './TripDetails';
 import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
@@ -33,6 +34,8 @@ interface Props {
   /** Asking the router for a new route, or it failed and the old one is followed. */
   reroute: 'idle' | 'asking' | 'failed';
   destination: string;
+  /** The stops still ahead, to move or take off on the way. */
+  stops: StopListProps;
   onMute: () => void;
   onEnd: () => void;
   /** The steps ahead, open under the banner (a tap on it; Back closes them). */
@@ -105,7 +108,7 @@ const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
 export function NavView(props: Props) {
-  const { route, mode, nav, lang, muted, reroute, destination, open, ...on } = props;
+  const { route, mode, nav, lang, muted, reroute, destination, open, stops, ...on } = props;
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
@@ -225,6 +228,7 @@ export function NavView(props: Props) {
         </section>
         {open && guiding && (
           <TripDetails onClose={() => on.onOpen(false)}>
+            <StopList {...stops} />
             <Steps
               route={route}
               from={started ? nav.next + 1 : 1}

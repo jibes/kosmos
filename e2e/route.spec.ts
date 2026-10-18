@@ -571,7 +571,7 @@ test.describe('routes', () => {
     await card.getByRole('button', { name: /Add stop/ }).click();
     await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
     await page.getByRole('option').filter({ hasText: 'Havel' }).click();
-    await expect(card.locator('.via')).toHaveCount(1);
+    await expect(card.locator('.stop-list li')).toHaveCount(1);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(1);
     await expect(card.locator('.summary strong')).toHaveText(/min|h/);
     await expect(page.locator('.stop-dot')).toHaveText(['1']);
@@ -580,21 +580,25 @@ test.describe('routes', () => {
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
     await page.mouse.click(at.x, at.y, { button: 'right' });
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
-    await expect(card.locator('.via')).toHaveCount(2);
+    await expect(card.locator('.stop-list li')).toHaveCount(2);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(2);
     // Where it was held, give or take the map settling under the pointer.
     expect(routeRequests.at(-1)!.via[1][0]).toBeCloseTo(CENTER.lng, 2);
     await expect(page.locator('.stop-dot')).toHaveText(['1', '2']);
+    // The second a place earlier: the router asked in the new order.
+    await card.getByRole('button', { name: /earlier$/ }).click();
+    await expect(card.locator('.stop-list li').first()).toContainText('Dropped pin');
+    await expect.poll(() => routeRequests.at(-1)?.via[0][0]).toBeCloseTo(CENTER.lng, 2);
     // Public transport goes straight there: no stops asked, none offered.
     await card.getByRole('radio', { name: 'Public transport' }).click();
     await expect(card.getByRole('radio', { name: 'Public transport' })).toHaveAttribute(
       'aria-checked',
       'true',
     );
-    await expect(card.locator('.via')).toHaveCount(0);
+    await expect(card.locator('.stop-list li')).toHaveCount(0);
     await expect(card.getByRole('button', { name: /Add stop/ })).toHaveCount(0);
     await card.getByRole('radio', { name: 'Car' }).click();
-    await expect(card.locator('.via')).toHaveCount(2);
+    await expect(card.locator('.stop-list li')).toHaveCount(2);
     // Taken off again: straight there.
     await card
       .getByRole('button', { name: /^Remove stop/ })
@@ -650,7 +654,77 @@ test.describe('routes', () => {
     expect(again.via[0][0]).toBeCloseTo(cafe.lng, 4);
     await expect(banner).toBeVisible();
     await expect(page.locator('.stop-dot')).toHaveText(['1']);
+    // The steps ahead list it: taken off again, straight there from here.
+    await banner.getByRole('button', { name: 'Show the steps ahead' }).click();
+    const list = page.locator('.ride-details .stop-list li');
+    await expect(list).toHaveText([/Café Einstein/]);
+    await list.getByRole('button', { name: /^Remove stop/ }).click();
+    await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(0);
+    await expect(page.locator('.stop-dot')).toHaveCount(0);
+    await expect(banner).toBeVisible();
   });
+
+  for (const how of ['tapped', 'by itself'] as const)
+    test(`asks to skip a stop left behind, aloud, and goes on without it (${how})`, async ({
+      page,
+      context,
+    }) => {
+      await page.evaluate(() => {
+        const w = window as unknown as { spoken: string[]; offset: number };
+        w.spoken = [];
+        w.offset = 0;
+        const now = Date.now.bind(Date);
+        Date.now = () => now() + w.offset;
+        Object.defineProperty(window, 'speechSynthesis', {
+          value: {
+            speak: (u: SpeechSynthesisUtterance) => w.spoken.push(u.text),
+            cancel: () => undefined,
+            speaking: false,
+            pending: false,
+          },
+        });
+      });
+      const seconds = (n: number) =>
+        page.evaluate((ms) => ((window as unknown as { offset: number }).offset += ms), n * 1000);
+      const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+      const go = (lng: number, lat: number) =>
+        context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+      await context.grantPermissions(['geolocation']);
+      await go(from.lng, from.lat);
+      await page.getByRole('combobox').fill('brandenburger');
+      await page.getByRole('option').first().click();
+      await page
+        .locator('.card')
+        .getByRole('button', { name: /^Route$/ })
+        .click();
+      const card = page.locator('.card.route');
+      await card.getByRole('button', { name: /Add stop/ }).click();
+      await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+      await page.getByRole('option').filter({ hasText: 'Havel' }).click();
+      await expect(card.locator('.summary strong')).toHaveText(/min|h/);
+      await page.getByRole('button', { name: 'Start', exact: true }).click();
+      await expect(page.locator('.nav-banner')).toBeVisible();
+
+      // The other way: east, off the route and further and further from the stop in the west.
+      for (let i = 1; i <= 8; i++) {
+        await seconds(3);
+        await go(from.lng + 0.01 + i * 0.004, from.lat);
+        await page.waitForTimeout(150);
+      }
+      const ask = page.locator('.toast').filter({ hasText: 'Skip the stop at' });
+      await expect(ask).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => (window as unknown as { spoken: string[] }).spoken))
+        .toContainEqual(expect.stringMatching(/leaving your stop .* behind/));
+      const asked = routeRequests.length;
+      // Skipped at a tap, or by itself once the question has waited 10 s.
+      if (how === 'tapped') await ask.getByRole('button', { name: 'Skip' }).click();
+      await expect(ask).toHaveCount(0, { timeout: 12_000 });
+      // From here straight to the destination.
+      await expect.poll(() => routeRequests.length).toBeGreaterThan(asked);
+      expect(routeRequests.at(-1)!.via).toEqual([]);
+      expect(routeRequests.at(-1)!.from[0]).toBeGreaterThan(from.lng + 0.03);
+    });
 
   test('offers another way when there is no route', async ({ page, context }) => {
     await context.grantPermissions(['geolocation']);

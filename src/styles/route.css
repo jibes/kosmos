@@ -82,17 +82,47 @@
   opacity: 0.35;
 }
 
-/* A stop is not changed, only taken off. */
-.ends .via .end-btn {
-  display: flex;
-  align-items: center;
-  background: none;
-  border: 1px dashed var(--line);
+/* Stops on the way, numbered as on the map: earlier, or off the trip. */
+.stop-list {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
 }
 
-.ends .add-stop .quiet-link {
-  padding: 0 12px;
+.stop-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-height: 44px;
+}
+
+.stop-num {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.stop-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quiet-link.add-stop {
+  min-height: 44px;
+  padding: 0 12px;
   text-align: left;
   color: var(--accent);
   font-weight: 600;

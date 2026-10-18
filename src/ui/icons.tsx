@@ -68,6 +68,13 @@ export const PencilIcon = ({ size = 18 }: { size?: number }) => (
   </Svg>
 );
 
+/** A stop a place earlier on the way. */
+export const UpIcon = ({ size = 16 }: { size?: number }) => (
+  <Svg size={size}>
+    <path d="M12 19V5m0 0-6 6m6-6 6 6" />
+  </Svg>
+);
+
 /** A search taken before. */
 export const ClockIcon = () => (
   <Svg>

@@ -32,7 +32,7 @@ import { useContactLayer, useContactsRow } from './ui/useContacts';
 import { logEvent } from './ui/usageLog';
 import { useMapGestures } from './ui/useMapGestures';
 import { swapEnds, useRoute, viaOf, type Trip } from './ui/useRoute';
-import { useStops } from './ui/useStops';
+import { useStopState, useStops } from './ui/useStops';
 import { useGuidance } from './ui/useGuidance';
 import { FRESH_MS } from './ui/useNav';
 import { useRouteLayer } from './ui/useRouteLayer';
@@ -104,11 +104,8 @@ export function App() {
   const [connAt, setConnAt] = useState<number | null>(null);
   /** The drive set off on a toll-free route chosen over toll ones: its reroutes stay so. */
   const [tollFree, setTollFree] = useState(false);
-  /** Stops on the way already reached while guiding (`useStops`). */
-  const [stopsBehind, setStopsBehind] = useState(0);
-  /** `useStops().addStop`, for the pickers and taps set up before it. */
-  const addStopRef = useRef<(p: Place) => void>(() => undefined);
-  const route = useRoute(trip, fix, lang, navigating, tollFree, stopsBehind);
+  const stopState = useStopState();
+  const route = useRoute(trip, fix, lang, navigating, tollFree, stopState.behind);
   // The voice speaks the language of the words it is given: the UI's (and the router's).
   const voice = useMemo(() => systemVoice(locale), []);
   const { muted, begin: beginVoice, toggle: toggleMute } = useMuted(voice);
@@ -201,7 +198,7 @@ export function App() {
     navRef,
     setActive,
     setTrip,
-    addStopRef,
+    addStopRef: stopState.addStopRef,
   });
 
   const pick = useCallback(
@@ -215,7 +212,7 @@ export function App() {
           setTrip({ ...tripRef.current, to: place });
           select(place);
         } else if (end === 'stop') {
-          addStopRef.current(place);
+          stopState.addStopRef.current(place);
         } else {
           setTrip({ ...tripRef.current, from: place });
         }
@@ -249,7 +246,7 @@ export function App() {
         });
       }
     },
-    [map, select, setFollow],
+    [map, select, setFollow, stopState.addStopRef],
   );
 
   /** The ride's whole trip, open under its banner: a step of its own for Back. */
@@ -366,11 +363,10 @@ export function App() {
     guided,
     nav,
     navigating,
-    setBehind: setStopsBehind,
+    state: stopState,
     showToast,
-  });
-  useEffect(() => {
-    addStopRef.current = stops.addStop;
+    pickStop: () => setPicking('stop'),
+    skip: { fix, mode: roadMode, voice, muted, reroute: route.retry, dismissText },
   });
   const navControls = useNavControls({
     map,
@@ -609,6 +605,7 @@ export function App() {
             reroute={rerouteState}
             onMute={toggleMute}
             destination={trip?.to.name ?? ''}
+            stops={stops.list}
             onEnd={endNav}
           />
         )}
@@ -631,9 +628,7 @@ export function App() {
                 <RouteCard
                   to={trip.to}
                   from={trip.from}
-                  via={viaOf(trip)}
-                  onAddStop={stops.canAdd ? () => setPicking('stop') : undefined}
-                  onRemoveStop={stops.removeStop}
+                  {...stops.card}
                   mode={trip.mode}
                   routes={shown}
                   active={chosen}
