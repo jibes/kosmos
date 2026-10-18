@@ -8,6 +8,9 @@ export const HINTED_KEY = 'kosmos.hinted.v1';
 /** The last searches taken (`core/recent.ts`); never leaves the device. */
 export const RECENT_KEY = 'kosmos.recent.v1';
 
+/** Contacts placed on the map (`core/contacts.ts`): their points, so no address is sent twice. */
+export const CONTACTS_KEY = 'kosmos.contacts.v1';
+
 /** Starred places (`core/favourites.ts`); never leave the device. */
 export const FAVOURITES_KEY = 'kosmos.favourites.v1';
 

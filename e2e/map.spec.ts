@@ -536,6 +536,68 @@ test.describe('map', () => {
     await expect.poll(onMap).toBe(0);
   });
 
+  test('puts contacts on the map, found by name, and takes them off again', async ({
+    page,
+    context,
+  }) => {
+    // The browser's contact picker, as Chrome on Android offers it: the user picks Anna.
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'contacts', {
+        value: {
+          select: async () => [
+            {
+              name: ['Anna Müller'],
+              address: [{ addressLine: ['Brandenburger Tor'], city: 'Berlin' }],
+            },
+            { name: ['No Address'], address: [] },
+          ],
+        },
+      });
+    });
+    await page.reload();
+    const input = page.getByRole('combobox');
+    await input.click();
+    const row = page.getByRole('option').filter({ hasText: "Show contacts' addresses" });
+    await row.click();
+    await expect(
+      page.getByRole('status').filter({ hasText: '1 contact on the map' }),
+    ).toBeVisible();
+    // Found by name, before the world's places; its card at the address.
+    await input.fill('anna');
+    const anna = page.getByRole('option').first();
+    await expect(anna).toContainText('Anna Müller');
+    await expect(anna).toContainText('Brandenburger Tor, Berlin');
+    await anna.click();
+    const card = page.locator('.card');
+    await expect(card.getByRole('heading')).toHaveText('Anna Müller');
+    await card.getByRole('button', { name: 'Close' }).click();
+    // Marked on the map where the address is.
+    const onMap = () =>
+      page.evaluate(
+        ([lng, lat]) => {
+          const m = window.kosmos!;
+          const p = m.project([lng, lat]);
+          return m.queryRenderedFeatures(
+            [
+              [p.x - 12, p.y - 12],
+              [p.x + 12, p.y + 12],
+            ],
+            { layers: ['contact-icons'] },
+          ).length;
+        },
+        [SEARCH_HIT.lng, SEARCH_HIT.lat],
+      );
+    await expect.poll(onMap).toBeGreaterThan(0);
+    // Taken off again from the empty field.
+    await input.fill('');
+    await input.click();
+    await page.getByRole('button', { name: 'Remove contacts from the map' }).click();
+    await expect(
+      page.getByRole('option').filter({ hasText: "Show contacts' addresses" }),
+    ).toBeVisible();
+    await expect.poll(onMap).toBe(0);
+  });
+
   test('keeps a usage log only when asked, saved as a file without places or words', async ({
     page,
   }) => {

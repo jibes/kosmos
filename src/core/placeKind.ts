@@ -21,6 +21,8 @@ export type PlaceKind =
   | 'town'
   | 'street'
   | 'address'
+  /** One of the user's contacts, at their address. */
+  | 'person'
   | 'place';
 
 /** By value alone: the map's subclasses, and OSM values that mean the same under any key. */

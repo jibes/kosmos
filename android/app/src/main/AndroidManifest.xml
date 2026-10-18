@@ -84,5 +84,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- A buzz for a turn while guiding on foot or by bike with the voice off. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Contacts' addresses on the map: read only when the user asks for them. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>

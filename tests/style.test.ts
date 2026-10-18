@@ -60,3 +60,19 @@ describe('buildStyle', () => {
     expect(keys(palettes.light)).toEqual(keys(palettes.dark));
   });
 });
+
+describe('the user’s own marks', () => {
+  it('draws contacts and favourites above the labels, below search results, in their colours', () => {
+    const style = buildStyle({ theme: 'light', lang: 'en' });
+    const ids = style.layers.map((l) => l.id);
+    const at = (id: string) => ids.indexOf(id);
+    expect(at('contact-icons')).toBeGreaterThan(at('label-poi'));
+    expect(at('fav-stars')).toBeGreaterThan(at('contact-names'));
+    expect(at('search-dots')).toBeGreaterThan(at('fav-names'));
+    for (const id of ['contact-icons', 'fav-stars']) {
+      const layer = style.layers.find((l) => l.id === id) as { layout?: Record<string, unknown> };
+      // Placed, so a tap finds them.
+      expect(layer.layout?.['icon-ignore-placement']).toBeUndefined();
+    }
+  });
+});

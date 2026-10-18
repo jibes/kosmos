@@ -6,6 +6,7 @@ import type {
   StyleSpecification,
 } from '@maplibre/maplibre-gl-style-spec';
 import { palettes, type Palette, type Theme } from './palette';
+import { contacts, favourites } from './styleMarks';
 
 /** OpenMapTiles-schema vector tiles, free and keyless. */
 export const TILES_URL = 'https://tiles.openfreemap.org/planet';
@@ -28,6 +29,8 @@ export const LABEL_LAYERS = [
   'search-dots',
   'fav-names',
   'fav-stars',
+  'contact-names',
+  'contact-icons',
   'label-poi',
   'label-village',
   'label-town',
@@ -49,6 +52,9 @@ export const ROUTE_ALT_LAYER = 'route-alt';
 export const FAV_SOURCE = 'favourites';
 /** The star's image, drawn by the app (`ui/useFavourites.ts`) and tinted here. */
 export const FAV_ICON = 'fav-star';
+/** The user's contacts at their addresses (`core/contacts.ts`), and their person image. */
+export const CONTACT_SOURCE = 'contacts';
+export const CONTACT_ICON = 'contact-person';
 
 export interface StyleOptions {
   theme: Theme;
@@ -479,44 +485,6 @@ function searchDots(p: Palette): LayerSpecification[] {
   ];
 }
 
-/** Favourites: a star and the name, above the map's labels, below search results. */
-function favourites(p: Palette): LayerSpecification[] {
-  return [
-    {
-      id: 'fav-stars',
-      type: 'symbol',
-      source: FAV_SOURCE,
-      layout: {
-        'icon-image': FAV_ICON,
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 16, 1.15] as unknown as Expr,
-        // Always shown; placed, so a tap finds it (an ignored placement is not hit-tested).
-        'icon-allow-overlap': true,
-      },
-      paint: {
-        'icon-color': p.favourite,
-        'icon-halo-color': p.routeCasing,
-        'icon-halo-width': 1.5,
-      },
-    },
-    {
-      id: 'fav-names',
-      type: 'symbol',
-      source: FAV_SOURCE,
-      minzoom: 12,
-      layout: {
-        'text-field': ['get', 'name'],
-        'text-font': [FONT.bold],
-        'text-size': 12,
-        'text-anchor': 'top',
-        'text-offset': [0, 0.9],
-        'text-max-width': 8,
-        'text-optional': true,
-      },
-      paint: { 'text-color': p.favourite, 'text-halo-color': p.halo, 'text-halo-width': 1.6 },
-    },
-  ];
-}
-
 function labels(p: Palette, lang: string): LayerSpecification[] {
   const halo = {
     'text-halo-color': p.halo,
@@ -719,6 +687,7 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
       [ROUTE_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       [SEARCH_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       [FAV_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      [CONTACT_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
     },
     glyphs: GLYPHS_URL,
     ...(fontFaces ? { 'font-faces': fontFaces } : {}),
@@ -740,6 +709,7 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
       ...roads(p),
       ...route(p),
       ...labels(p, lang),
+      ...contacts(p),
       ...favourites(p),
       ...searchDots(p),
     ],

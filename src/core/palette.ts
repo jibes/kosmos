@@ -51,6 +51,8 @@ export interface Palette {
   routeCasing: string;
   /** The user's favourite places: a star apart from the accent the search and route use. */
   favourite: string;
+  /** The user's contacts at their addresses. */
+  contact: string;
 }
 
 export type Theme = 'light' | 'dark';
@@ -95,6 +97,7 @@ export const palettes: Record<Theme, Palette> = {
     routeAlt: '#a9b6e3',
     routeCasing: '#ffffff',
     favourite: '#a86400',
+    contact: '#0f7d6c',
   },
   dark: {
     space: '#05060a',
@@ -135,5 +138,6 @@ export const palettes: Record<Theme, Palette> = {
     routeAlt: '#3b4675',
     routeCasing: '#0b0d12',
     favourite: '#f2b23c',
+    contact: '#4fd1b8',
   },
 };

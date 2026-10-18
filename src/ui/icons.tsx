@@ -274,6 +274,12 @@ export const VehicleIcon = ({ vehicle, size = 14 }: { vehicle: Vehicle; size?: n
 
 /** The kinds that are not vehicles: a line drawing each, at the size of a row's text. */
 const KIND_PATHS: Record<Exclude<PlaceKind, Vehicle>, ReactNode> = {
+  person: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20c.8-3.8 3.6-6 7-6s6.2 2.2 7 6" />
+    </>
+  ),
   food: <path d="M7 3v8m-2.5-8v5a2.5 2.5 0 0 0 5 0V3M7 11v10M16.5 21V3c-2 1.5-3 4-3 8h3" />,
   cafe: (
     <path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9Zm11 1.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3m4-3v3" />

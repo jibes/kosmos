@@ -11,6 +11,8 @@ import { touch } from './layout';
 import { useSwipe } from './useSwipe';
 import { ClockIcon, CloseIcon, KindIcon, SearchIcon, StarIcon } from './icons';
 import { placeOf, useFavourites } from './useFavourites';
+import { onMapText, placeOfContact } from './useContacts';
+import { matchContacts, type Contact } from '../core/contacts';
 import { isFavourite } from '../core/favourites';
 import { forgetRecent, rememberRecent, useRecent } from './useRecent';
 
@@ -71,6 +73,8 @@ interface Props {
   categoryRun?: number;
   /** The search key on a category: all its places on the map, none picked. */
   onShowAll?: () => void;
+  /** The user's contacts on the map: found by name, added or removed from the empty field. */
+  contacts?: { list: Contact[]; busy: boolean; onAdd: () => void; onForget: () => void };
 }
 
 const label = (k: Kind) => foundOf(k) ?? t[`cat_${k as Category}`];
@@ -97,9 +101,18 @@ const area = (b: SearchBias | undefined) =>
  * for, or a place found by name.
  */
 type Item =
-  | { cat: Kind; place?: undefined; recent?: undefined }
-  | { place: Place; fav?: boolean; cat?: undefined; recent?: undefined }
-  | { recent: Recent; cat?: undefined; place?: undefined };
+  | { cat: Kind; place?: undefined; recent?: undefined; act?: undefined }
+  | {
+      place: Place;
+      fav?: boolean;
+      contact?: boolean;
+      cat?: undefined;
+      recent?: undefined;
+      act?: undefined;
+    }
+  | { recent: Recent; cat?: undefined; place?: undefined; act?: undefined }
+  /** The user's contacts: put on the map, or how many there are, with a way to remove them. */
+  | { act: 'contacts'; cat?: undefined; place?: undefined; recent?: undefined };
 
 /** Offered in an empty field (after the recent ones): what people look for most. */
 const COMMON: Kind[] = ['restaurant', 'cafe', 'groceries', 'pharmacy', 'toilets', 'parking'];
@@ -126,6 +139,7 @@ export function SearchBar({
   onCategory,
   categoryRun,
   onShowAll,
+  contacts,
 }: Props) {
   const own = useSearch();
   /** A kind of place chosen from the suggestions: its places come from the map, not by name. */
@@ -189,6 +203,7 @@ export function SearchBar({
    * kinds of place people look for most. Nothing is taken until chosen. */
   const blank = q.length < 2 && !category;
   const recent = useRecent();
+  const placed = contacts?.list.filter((c) => c.lng !== undefined).length ?? 0;
   const favourites = useFavourites();
   const items: Item[] = blank
     ? [
@@ -198,9 +213,18 @@ export function SearchBar({
           .filter((r) => onCategory || 'place' in r)
           .filter((r) => !('place' in r) || !isFavourite(favourites, r.place))
           .map((r) => ({ recent: r })),
+        ...(contacts ? [{ act: 'contacts' as const }] : []),
         ...(onCategory ? COMMON.map((cat) => ({ cat })) : []),
       ]
-    : [...suggestions, ...results.map((place) => ({ place }))];
+    : [
+        ...suggestions,
+        // The user's own contacts by name, before the world's places.
+        ...(contacts && !category ? matchContacts(contacts.list, q) : []).map((c) => ({
+          place: placeOfContact(c),
+          contact: true,
+        })),
+        ...results.map((place) => ({ place })),
+      ];
   // A name search offers its top row for Enter; a category, or an empty field, picks nothing
   // until asked.
   const active =
@@ -360,13 +384,15 @@ export function SearchBar({
 
   /** Which kind of row was taken, for the usage log: never the text or the place. */
   const rowOf = (it: Item) => {
+    if (it.act) return 'contacts';
     if (it.recent) return 'recent';
-    if (it.place) return it.fav ? 'favourite' : 'name';
+    if (it.place) return it.fav ? 'favourite' : it.contact ? 'contact' : 'name';
     if (blank) return 'common';
     return 'kind';
   };
   const choice = (it: Item) => {
     logEvent('search.pick', { row: rowOf(it), at: items.indexOf(it) });
+    if (it.act) return contacts?.onAdd();
     if (it.recent)
       return 'place' in it.recent ? pick(it.recent.place) : choose(it.recent.kind as Kind);
     return it.cat ? choose(it.cat) : pick(it.place);
@@ -459,23 +485,58 @@ export function SearchBar({
           {items.map((it, i) => (
             <li
               key={
-                it.recent
-                  ? `recent|${'place' in it.recent ? `${it.recent.place.name}${it.recent.place.lat}` : it.recent.kind}`
-                  : it.cat
-                    ? `cat|${it.cat}`
-                    : `${it.place.name}${it.place.lat}${it.place.lng}`
+                it.act
+                  ? 'act|contacts'
+                  : it.recent
+                    ? `recent|${'place' in it.recent ? `${it.recent.place.name}${it.recent.place.lat}` : it.recent.kind}`
+                    : it.cat
+                      ? `cat|${it.cat}`
+                      : `${it.place.name}${it.place.lat}${it.place.lng}`
               }
               role="option"
               id={`${listId}-${i}`}
               className={
-                it.recent ? 'r-recent' : it.cat ? 'r-cat' : it.fav ? 'r-place r-fav' : 'r-place'
+                it.recent || it.act
+                  ? 'r-recent'
+                  : it.cat
+                    ? 'r-cat'
+                    : it.fav
+                      ? 'r-place r-fav'
+                      : 'r-place'
               }
               aria-selected={i === active}
               onPointerDown={(e) => e.preventDefault()}
               onClick={() => choice(it)}
               onPointerEnter={() => setActive(i)}
             >
-              {it.recent ? (
+              {it.act ? (
+                <>
+                  <KindIcon kind="person" />
+                  <span className="r-name">
+                    {placed
+                      ? onMapText(placed)
+                      : contacts?.busy
+                        ? t.contactsPlacing
+                        : t.contactsAdd}
+                  </span>
+                  <span className="r-detail">{t.contactsHint}</span>
+                  {!!placed && (
+                    <button
+                      type="button"
+                      className="r-forget icon-btn"
+                      aria-label={t.contactsForget}
+                      tabIndex={-1}
+                      onPointerDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        contacts?.onForget();
+                      }}
+                    >
+                      <CloseIcon />
+                    </button>
+                  )}
+                </>
+              ) : it.recent ? (
                 <>
                   <ClockIcon />
                   <span className="r-name">

@@ -15,6 +15,7 @@ import { lang, t } from '../i18n';
 import { onLongPress } from './gestures';
 import type { Trip } from './useRoute';
 import { favouriteAt, placeOf } from './useFavourites';
+import { contactAt, placeOfContact } from './useContacts';
 
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url);
@@ -120,6 +121,13 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
       const fav = f?.layer.id.startsWith('fav-') ? favouriteAt(Number(props.fav)) : undefined;
       if (fav) {
         select(placeOf(fav));
+        return;
+      }
+      const contact = f?.layer.id.startsWith('contact-')
+        ? contactAt(Number(props.contact))
+        : undefined;
+      if (contact) {
+        select(placeOfContact(contact));
         return;
       }
       const name = (props[`name:${labelLang}`] ?? props.name) as string | undefined;

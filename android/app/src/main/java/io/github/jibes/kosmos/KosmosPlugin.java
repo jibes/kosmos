@@ -1,7 +1,9 @@
 package io.github.jibes.kosmos;
 
+import android.Manifest;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.database.Cursor;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
@@ -11,6 +13,7 @@ import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.VibratorManager;
+import android.provider.ContactsContract;
 import android.provider.Settings;
 import android.util.Log;
 import androidx.core.content.FileProvider;
@@ -20,10 +23,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
 /**
  * The app's own small native helpers: its page in the system settings (where a refused location
@@ -33,7 +39,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * else from the WebView to the system log, so no position ever ends up there; the CI smoke test
  * reads the "loaded" line and web errors from this tag.
  */
-@CapacitorPlugin(name = "Kosmos")
+@CapacitorPlugin(
+    name = "Kosmos",
+    permissions = { @Permission(strings = { Manifest.permission.READ_CONTACTS }, alias = "contacts") }
+)
 public class KosmosPlugin extends Plugin {
 
     private static final String TAG = "kOSMos";
@@ -58,6 +67,67 @@ public class KosmosPlugin extends Plugin {
             }
         }
         call.reject("No settings screen", "UNAVAILABLE");
+    }
+
+    /** Addresses read at most: an address book can be long, the map need not show it all. */
+    private static final int CONTACTS_MAX = 500;
+
+    /**
+     * The contacts with a postal address: their name and the address as written. Asked for with
+     * `ask`, the permission is requested first; without, an address book not yet allowed gives
+     * `allowed: false` and nothing else. Nothing leaves the phone from here.
+     */
+    @PluginMethod
+    public void contacts(PluginCall call) {
+        if (getPermissionState("contacts") == PermissionState.GRANTED) {
+            call.resolve(readContacts());
+        } else if (Boolean.TRUE.equals(call.getBoolean("ask", false))) {
+            requestPermissionForAlias("contacts", call, "contactsAnswered");
+        } else {
+            JSObject none = new JSObject();
+            none.put("allowed", false);
+            call.resolve(none);
+        }
+    }
+
+    @PermissionCallback
+    private void contactsAnswered(PluginCall call) {
+        if (getPermissionState("contacts") == PermissionState.GRANTED) {
+            call.resolve(readContacts());
+        } else {
+            JSObject none = new JSObject();
+            none.put("allowed", false);
+            call.resolve(none);
+        }
+    }
+
+    private JSObject readContacts() {
+        JSArray list = new JSArray();
+        String[] columns = {
+            ContactsContract.CommonDataKinds.StructuredPostal.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS,
+        };
+        try (
+            Cursor c = getContext()
+                .getContentResolver()
+                .query(ContactsContract.CommonDataKinds.StructuredPostal.CONTENT_URI, columns, null, null, null)
+        ) {
+            while (c != null && c.moveToNext() && list.length() < CONTACTS_MAX) {
+                String name = c.getString(0);
+                String address = c.getString(1);
+                if (name == null || address == null) continue;
+                JSObject one = new JSObject();
+                one.put("name", name);
+                one.put("address", address);
+                list.put(one);
+            }
+        } catch (SecurityException e) {
+            Log.w(TAG, "contacts not readable", e);
+        }
+        JSObject result = new JSObject();
+        result.put("allowed", true);
+        result.put("contacts", list);
+        return result;
     }
 
     /**

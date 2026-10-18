@@ -49,6 +49,10 @@ const Kosmos = isNative
       vibrate(o: { pattern: number[] }): Promise<void>;
       takeShared(): Promise<{ text?: string }>;
       shareFile(o: { name: string; text: string }): Promise<void>;
+      contacts(o: { ask: boolean }): Promise<{
+        allowed: boolean;
+        contacts?: { name: string; address: string }[];
+      }>;
       addListener(
         event: 'shared',
         listener: (e: { text: string }) => void,
@@ -60,6 +64,16 @@ const Kosmos = isNative
 export const openAppSettings = Kosmos
   ? () => void Kosmos.openSettings().catch(() => undefined)
   : null;
+
+/**
+ * Android: the contacts with a postal address, the permission asked for when `ask`; `null` when
+ * not allowed (or on the web).
+ */
+export async function readContacts(ask: boolean) {
+  if (!Kosmos) return null;
+  const r = await Kosmos.contacts({ ask }).catch(() => null);
+  return r?.allowed ? (r.contacts ?? []) : null;
+}
 
 /** Android: a text file to the share sheet (Save to Files, Drive, another app). */
 export const shareFile = Kosmos
