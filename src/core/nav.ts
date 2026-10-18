@@ -18,6 +18,8 @@ function project([lng, lat]: [number, number], lat0: number): [number, number] {
 
 export interface Track {
   route: Route;
+  /** How the route is travelled: on foot, off the route is noticed sooner. */
+  mode: Mode;
   /** Metres from the start to each shape point. */
   along: number[];
   /** Metres from the start to each maneuver. */
@@ -28,7 +30,7 @@ export interface Track {
   xy: [number, number][];
 }
 
-export function track(route: Route): Track {
+export function track(route: Route, mode: Mode = 'car'): Track {
   const lat0 = route.coords[0][1];
   const xy = route.coords.map((c) => project(c, lat0));
   const along = [0];
@@ -42,7 +44,7 @@ export function track(route: Route): Track {
     timeLeft[i] = t;
     t += route.maneuvers[i].duration;
   }
-  return { route, along, at, timeLeft, lat0, xy };
+  return { route, mode, along, at, timeLeft, lat0, xy };
 }
 
 export interface Snap {
@@ -201,8 +203,13 @@ export const initialNav = (): NavState => ({
   time: 0,
 });
 
-/** How far off the line counts as off-route: wide enough for GPS noise, narrow enough to notice. */
-export const offRouteLimit = (accuracy: number) => Math.max(35, Math.min(accuracy * 1.5, 80));
+/**
+ * How far off the line counts as off-route: wide enough for GPS noise, narrow enough to notice.
+ * On foot a wrong path often runs within 35 m of the right one (the other side of a square, a
+ * parallel lane), so with a good fix 20 m is enough there.
+ */
+export const offRouteLimit = (accuracy: number, mode: Mode = 'car') =>
+  Math.max(mode === 'foot' ? 20 : 35, Math.min(accuracy * 1.5, 80));
 /** How long a fix must stay off the line before rerouting. */
 export const OFF_ROUTE_MS = 8_000;
 export const ARRIVE_M = 25;
@@ -231,7 +238,7 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
   const along =
     prev.snap && s.along < prev.snap.along - 30 && s.offset > 20 ? prev.snap.along : s.along;
   const total = tr.along[tr.along.length - 1];
-  const onLine = s.offset <= offRouteLimit(fix.accuracy);
+  const onLine = s.offset <= offRouteLimit(fix.accuracy, tr.mode);
   const joined = prev.joined || onLine;
   // Still getting to the route (it starts on the road nearest to where it was asked from):
   // heading for its start is not off it; only moving well away from it is.

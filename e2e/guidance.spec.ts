@@ -85,27 +85,24 @@ test.describe('guidance', () => {
     }
     // A phone goes on sending fixes at the destination; on a busy machine the jumps above may
     // come too close together to be believed at once (plausible travel since the last fix).
+    const asked = routeRequests.length;
     await expect
       .poll(
         async () => {
           await go({ lng: to.lng, lat: to.lat + 1e-7 * Math.random() });
-          return banner.textContent();
+          return banner.count();
         },
         { intervals: [500], timeout: 8000 },
       )
-      .toContain('You have arrived');
-    await expect(page.locator('.speed')).toHaveCount(0);
-    await expect(page.locator('.nav-eta')).toHaveText(SEARCH_HIT.name);
-    // Every prompt was queued: none cut another off.
-    expect(await page.evaluate(() => (window as unknown as { cancels: number }).cancels)).toBe(0);
-
-    // Done closes the trip: the destination's card is back, and no route is asked for from
-    // the destination to itself.
-    const asked = routeRequests.length;
-    await page.getByRole('button', { name: 'Done' }).click();
-    await expect(banner).toHaveCount(0);
+      .toBe(0);
+    // Arrived, guidance ends by itself: it says so, and the destination's card is back.
+    await expect(page.locator('.toast')).toContainText('You have arrived');
     await expect(page.locator('.card.route')).toHaveCount(0);
     await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    expect(await spoken()).toContain('You have arrived at your destination.');
+    // Every prompt was queued, the last one too: none cut another off.
+    expect(await page.evaluate(() => (window as unknown as { cancels: number }).cancels)).toBe(0);
+    // No route is asked for from the destination to itself.
     await page.waitForTimeout(500);
     expect(routeRequests.length).toBe(asked);
   });
@@ -815,6 +812,54 @@ test.describe('guidance', () => {
       )
       .toContainEqual([250]);
   });
+
+  for (const [label, costing, east] of [
+    ['Walk', 'pedestrian', 25],
+    ['Bike', 'bicycle', 60],
+  ] as const) {
+    test(`reroutes ${costing === 'pedestrian' ? 'on foot' : 'by bike'} the same way`, async ({
+      page,
+      context,
+    }) => {
+      await page.evaluate(() => {
+        const w = window as unknown as { offset: number };
+        w.offset = 0;
+        const now = Date.now.bind(Date);
+        Date.now = () => now() + w.offset;
+      });
+      const seconds = (n: number) =>
+        page.evaluate((ms) => ((window as unknown as { offset: number }).offset += ms), n * 1000);
+      const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+      const go = (lng: number, lat: number) =>
+        context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+      await context.grantPermissions(['geolocation']);
+      await go(from.lng, from.lat);
+      await page.getByRole('combobox').fill('brandenburger');
+      await page.getByRole('option').first().click();
+      await page
+        .locator('.card')
+        .getByRole('button', { name: /^Route$/ })
+        .click();
+      const card = page.locator('.card.route');
+      await card.getByRole('radio', { name: label }).click();
+      await expect(card.locator('.summary strong')).toHaveText(/min/);
+      await card.getByRole('button', { name: 'Start', exact: true }).click();
+      await expect(page.locator('.nav-banner')).toBeVisible();
+      const asked = routeRequests.length;
+
+      // A parallel way beside the first leg, followed for longer than a GPS wobble.
+      const dLng = east / (111_195 * Math.cos((from.lat * Math.PI) / 180));
+      for (let i = 1; i <= 6; i++) {
+        await seconds(3);
+        await go(from.lng + dLng, from.lat - i * 0.00004);
+        await page.waitForTimeout(200);
+      }
+      await expect.poll(() => routeRequests.length).toBeGreaterThan(asked);
+      const again = routeRequests.at(-1)!;
+      expect(again.costing).toBe(costing);
+      expect(again.from[0]).toBeCloseTo(from.lng + dLng, 4);
+    });
+  }
 
   test('remembers the voice for the next trip, however it goes', async ({ page, context }) => {
     test.slow(); // Six trips.

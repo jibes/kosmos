@@ -235,7 +235,7 @@ function routeThrough(points: [number, number][], kinds: { type: number; text: s
 
 /** Feeds fixes one second apart, speaking prompts; returns what was said and the states. */
 function replay(r: Route, fixes: [number, number][], speed: number | null, mode: Mode = 'car') {
-  const t = track(r);
+  const t = track(r, mode);
   let st = initialNav();
   const said: string[] = [];
   const states: NavState[] = [];
@@ -453,6 +453,59 @@ describe('fixes not to be trusted, turns not taken', () => {
       away = step(t, away, at(120 + i * 10, -i * 5, i * 1000, { speed: 8 }));
     }
     expect(away.offRoute).toBe(true);
+  });
+});
+
+describe('off the route by bike and on foot', () => {
+  /** One fix a second, `east` metres beside the first leg, moving north at `speed`. */
+  const beside = (t: ReturnType<typeof track>, east: number, speed: number, n = 20, acc = 8) => {
+    let st = initialNav();
+    for (let i = 0; i <= 10; i++) st = step(t, st, fixAt(m(0, i * speed), i * 1000, speed));
+    for (let i = 1; i <= n; i++) {
+      const fix = fixAt(m(east, (10 + i) * speed), (10 + i) * 1000, speed);
+      st = step(t, st, { ...fix, accuracy: acc });
+    }
+    return st;
+  };
+
+  it('notices a walker on a path 25 m beside the route, which a car would not', () => {
+    expect(beside(track(route, 'foot'), 25, 1.4).offRoute).toBe(true);
+    expect(beside(track(route, 'car'), 25, 10).offRoute).toBe(false);
+  });
+
+  it('lets a walker drift with a poor fix, and walk the pavement with a good one', () => {
+    expect(beside(track(route, 'foot'), 25, 1.4, 20, 25).offRoute).toBe(false);
+    expect(beside(track(route, 'foot'), 12, 1.4).offRoute).toBe(false);
+  });
+
+  it('notices walking back down the route', () => {
+    const fixes: [number, number][] = [];
+    for (let n = 0; n <= 140; n += 1.4) fixes.push(m(0, n));
+    for (let n = 140; n >= 70; n -= 1.4) fixes.push(m(0, n));
+    const { states } = replay(route, fixes, 1.4, 'foot');
+    expect(states.at(-1)!.offRoute).toBe(true);
+  });
+
+  it('notices a cyclist riding on past the turn, and one turned round', () => {
+    const past: [number, number][] = [];
+    for (let n = 0; n <= 1200; n += 5) past.push(m(0, n));
+    const { states } = replay(route, past, 5, 'bike');
+    expect(states.at(-1)!.offRoute).toBe(true);
+
+    const t = track(route, 'bike');
+    let st = initialNav();
+    for (let i = 0; i <= 10; i++)
+      st = step(t, st, { ...fixAt(m(0, i * 5), i * 1000, 5), heading: 0 });
+    for (let i = 11; i <= 14; i++)
+      st = step(t, st, { ...fixAt(m(0, 50), i * 1000, 5), heading: 180 });
+    expect(st.offSince).not.toBeNull();
+  });
+
+  it('stays on the route riding it with GPS jitter', () => {
+    const fixes: [number, number][] = [];
+    for (let n = 0; n <= 1000; n += 5) fixes.push(m(n % 10 ? 8 : -8, n));
+    const { states } = replay(route, fixes, 5, 'bike');
+    expect(states.some((s) => s.offSince !== null)).toBe(false);
   });
 });
 

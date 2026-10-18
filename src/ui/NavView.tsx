@@ -241,7 +241,7 @@ export function NavView(props: Props) {
         </div>
       )}
 
-      <NavBar muted={muted} arrived={nav.arrived} onMute={on.onMute} onEnd={on.onEnd}>
+      <NavBar muted={muted} onMute={on.onMute} onEnd={on.onEnd}>
         {/* Time left leads; a bare clock time would read as the time now. */}
         {nav.arrived ? (
           <strong>{destination}</strong>
@@ -303,7 +303,7 @@ export function NavWaiting({ status, location, destination, ...on }: WaitingProp
           </button>
         )}
       </section>
-      <NavBar muted={on.muted} arrived={false} onMute={on.onMute} onEnd={on.onEnd}>
+      <NavBar muted={on.muted} onMute={on.onMute} onEnd={on.onEnd}>
         <span>{destination}</span>
       </NavBar>
     </>

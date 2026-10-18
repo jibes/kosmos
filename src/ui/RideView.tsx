@@ -199,7 +199,7 @@ export function RideView(props: Props) {
         )}
       </div>
 
-      <NavBar muted={muted} arrived={st.phase === 'arrived'} onMute={on.onMute} onEnd={on.onEnd}>
+      <NavBar muted={muted} onMute={on.onMute} onEnd={on.onEnd}>
         {/* Time left leads, as on the road; due or late, the arrival time itself. */}
         {st.phase === 'arrived' ? (
           <strong>{destination}</strong>

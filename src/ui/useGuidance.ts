@@ -97,7 +97,7 @@ export function useGuidance(o: Options) {
       const s = nav.snap;
       // On the line the arrow rides the route; off it (or after arriving) it is where the fix
       // is, and so is the camera: a missed turn must not leave the user off the screen.
-      const onLine = !!s && !nav.arrived && s.offset < offRouteLimit(f.accuracy);
+      const onLine = !!s && !nav.arrived && s.offset < offRouteLimit(f.accuracy, ways.current.mode);
       const center: [number, number] = onLine ? s.point : [f.lng, f.lat];
       const course = nav.moving && f.heading != null && !Number.isNaN(f.heading) ? f.heading : null;
       const bearing = onLine

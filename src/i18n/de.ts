@@ -227,7 +227,6 @@ export const de = {
   endConfirmHintClick: 'Zum Beenden nochmal klicken',
   backToEnd: 'Zum Beenden der Navigation nochmal „Zurück“',
   escToEnd: 'Zum Beenden der Navigation nochmal Esc',
-  done: 'Fertig',
   then: 'Dann',
   routeTo: 'Route nach {name}',
   destinationAhead: 'Dein Ziel liegt vor dir',

@@ -30,16 +30,15 @@ interface Props {
   /** Arrival time and what is left. */
   children: ReactNode;
   muted: boolean;
-  arrived: boolean;
   onMute: () => void;
   onEnd: () => void;
 }
 
 /**
  * The bottom bar of guidance: time left, mute, and End. End next to Mute must not end a trip by
- * a slip of the thumb, so it asks for a second tap; once arrived it is a plain "Done".
+ * a slip of the thumb, so it asks for a second tap.
  */
-export function NavBar({ children, muted, arrived, onMute, onEnd }: Props) {
+export function NavBar({ children, muted, onMute, onEnd }: Props) {
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return;
@@ -62,13 +61,11 @@ export function NavBar({ children, muted, arrived, onMute, onEnd }: Props) {
       <button
         type="button"
         className="nav-end"
-        data-state={arrived ? 'done' : armed ? 'armed' : undefined}
-        aria-label={
-          armed && !arrived ? (touch() ? t.endConfirmHint : t.endConfirmHintClick) : undefined
-        }
-        onClick={() => (arrived || armed ? onEnd() : setArmed(true))}
+        data-state={armed ? 'armed' : undefined}
+        aria-label={armed ? (touch() ? t.endConfirmHint : t.endConfirmHintClick) : undefined}
+        onClick={() => (armed ? onEnd() : setArmed(true))}
       >
-        {arrived ? t.done : armed ? t.endConfirm : t.end}
+        {armed ? t.endConfirm : t.end}
       </button>
     </section>
   );

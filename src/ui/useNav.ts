@@ -63,7 +63,10 @@ export function promptWords(p: Prompt): string {
 
 /** Runs guidance for the current route on every fix; the router is never polled. */
 export function useNav(o: Options) {
-  const tr = useMemo(() => (o.active && o.route ? track(o.route) : null), [o.active, o.route]);
+  const tr = useMemo(
+    () => (o.active && o.route ? track(o.route, o.mode) : null),
+    [o.active, o.route, o.mode],
+  );
   const [view, setView] = useState<{ tr: Track | null; nav: NavState }>({
     tr: null,
     nav: initialNav(),

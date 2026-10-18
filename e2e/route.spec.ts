@@ -367,9 +367,8 @@ test.describe('routes', () => {
     await go(to.lng, stopLat);
     await expect(banner).toContainText('Walk to Brandenburger Tor');
     await go(to.lng, to.lat);
-    await expect(banner).toContainText('You have arrived');
-    await page.getByRole('button', { name: 'Done' }).click();
     await expect(banner).toHaveCount(0);
+    await expect(page.locator('.toast')).toContainText('You have arrived');
   });
 
   test('plans again when Start comes after the connection has left', async ({ page, context }) => {

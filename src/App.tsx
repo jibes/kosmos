@@ -59,7 +59,6 @@ interface Selection {
 }
 
 /** After arriving, guidance (screen on, background location) ends by itself. */
-const ARRIVED_END_MS = 60_000;
 /** A second back press within this ends navigation. */
 const BACK_TWICE_MS = 3000;
 
@@ -390,6 +389,12 @@ export function App() {
     if (rideFix && rideTime) updateRideTheme(rideFix, rideTime);
   }, [rideFix, rideTime, updateRideTheme]);
 
+  const arrived = navigating && (riding ? ride?.st.phase === 'arrived' : nav.arrived);
+  const arrivedRef = useRef(arrived);
+  useEffect(() => {
+    arrivedRef.current = arrived;
+  });
+
   const startNav = () => {
     if (!trip) return;
     logEvent('nav.start', { mode: trip.mode });
@@ -440,18 +445,20 @@ export function App() {
     }
   };
   const endNav = useCallback(() => {
-    logEvent('nav.end', { arrived: nav.arrived });
+    const done = arrivedRef.current;
+    logEvent('nav.end', { arrived: done });
     setNavigating(false);
     setConnAt(null);
     // At once, not after the next render: a compass reading in between would bring the arrow back.
     navRef.current = false;
     roadNavRef.current = false;
-    voice.stop();
+    // Arrived, "You have arrived" is still being said: let it finish.
+    if (!done) voice.stop();
     me.current?.heading(null);
     // Back on the map following north up, if following at all.
     if (followRef.current !== 'off') setFollow('position');
     map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: motion(800) });
-  }, [map, voice, setFollow, nav.arrived]);
+  }, [map, voice, setFollow]);
   useEffect(() => {
     if (!navigating) return;
     background(true, () =>
@@ -505,17 +512,16 @@ export function App() {
     }
   };
 
-  const arrived = navigating && (riding ? ride?.st.phase === 'arrived' : nav.arrived);
-  /** Arrived: guidance and the trip are done; the destination's card is what is left. */
-  const finish = useCallback(() => {
-    endNav();
-    closeRoute();
-  }, [endNav, closeRoute]);
+  /** Arrived: guidance and the trip end at once, the destination's card is what is left. */
   useEffect(() => {
     if (!arrived) return;
-    const id = setTimeout(finish, ARRIVED_END_MS);
+    const id = setTimeout(() => {
+      endNav();
+      closeRoute();
+      showToast(t.arrived);
+    });
     return () => clearTimeout(id);
-  }, [arrived, finish]);
+  }, [arrived, endNav, closeRoute, showToast]);
 
   // Back (Android) and Escape close one layer at a time; navigation needs a second press.
   const backAt = useRef(0);
@@ -523,7 +529,6 @@ export function App() {
     if (about) setAbout(false);
     else if (navigating) {
       if (tripList) setTripList(false);
-      else if (arrived) finish();
       else if (Date.now() - backAt.current < BACK_TWICE_MS) endNav();
       else {
         backAt.current = Date.now();
@@ -567,7 +572,7 @@ export function App() {
               });
               route.retry();
             }}
-            onEnd={arrived ? finish : endNav}
+            onEnd={endNav}
             open={tripList}
             onOpen={setTripList}
           />
@@ -584,7 +589,7 @@ export function App() {
             reroute={rerouteState}
             onMute={toggleMute}
             destination={trip?.to.name ?? ''}
-            onEnd={arrived ? finish : endNav}
+            onEnd={endNav}
           />
         )}
         {navigating && trip && !(riding ? ride : shown[chosen]) && (

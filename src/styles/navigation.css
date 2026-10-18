@@ -520,11 +520,6 @@ button.via[aria-expanded='true']::after {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 35%, transparent);
 }
 
-.nav-end[data-state='done'] {
-  background: var(--accent);
-  color: var(--accent-text);
-}
-
 /* Focus on the blue banner: a ring in the banner's own text colour, not blue on blue. */
 .nav-banner :focus-visible {
   outline-color: var(--accent-text);
