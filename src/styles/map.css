@@ -684,3 +684,8 @@
     display: none;
   }
 }
+
+/* The place is a favourite: the star filled, in the map's own favourite colour. */
+.icon-btn.fav[aria-pressed='true'] {
+  color: var(--fav);
+}

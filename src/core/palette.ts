@@ -49,6 +49,8 @@ export interface Palette {
   routeAlt: string;
   /** Outline that lifts the route off the roads. */
   routeCasing: string;
+  /** The user's favourite places: a star apart from the accent the search and route use. */
+  favourite: string;
 }
 
 export type Theme = 'light' | 'dark';
@@ -92,6 +94,7 @@ export const palettes: Record<Theme, Palette> = {
     accent: '#2f5cff',
     routeAlt: '#a9b6e3',
     routeCasing: '#ffffff',
+    favourite: '#a86400',
   },
   dark: {
     space: '#05060a',
@@ -131,5 +134,6 @@ export const palettes: Record<Theme, Palette> = {
     accent: '#6e8bff',
     routeAlt: '#3b4675',
     routeCasing: '#0b0d12',
+    favourite: '#f2b23c',
   },
 };

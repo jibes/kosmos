@@ -52,6 +52,16 @@ export const NearbyIcon = () => (
 );
 
 /** A search taken before. */
+/** A favourite: filled when the place is one. */
+export const StarIcon = ({ filled = false, size = 20 }: { filled?: boolean; size?: number }) => (
+  <Svg size={size}>
+    <path
+      d="m12 3.5 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8Z"
+      fill={filled ? 'currentColor' : 'none'}
+    />
+  </Svg>
+);
+
 export const ClockIcon = () => (
   <Svg>
     <circle cx="12" cy="12" r="8" />

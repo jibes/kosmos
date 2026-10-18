@@ -2,7 +2,7 @@ import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { Theme } from '../core/palette';
-import { ROUTE_SOURCE, SEARCH_SOURCE, buildStyle } from '../core/style';
+import { ROUTE_SOURCE, SEARCH_SOURCE, FAV_SOURCE, buildStyle } from '../core/style';
 import { DEFAULT_VIEW, VIEW_KEY, parseView, serializeView } from '../core/view';
 import { mapFontFaces } from './fonts';
 import { motion } from './motion';
@@ -99,7 +99,7 @@ export function useMap(
       // The route and search dots live in the map, not in the style; carry them over a theme swap.
       transformStyle: (prev, next) => {
         const sources = { ...next.sources };
-        for (const id of [ROUTE_SOURCE, SEARCH_SOURCE]) {
+        for (const id of [ROUTE_SOURCE, SEARCH_SOURCE, FAV_SOURCE]) {
           const kept = prev?.sources[id];
           if (kept) sources[id] = kept;
         }

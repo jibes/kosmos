@@ -27,6 +27,7 @@ import { useRideCamera } from './ui/useRideCamera';
 import { useNavView } from './ui/useNavView';
 import { useNavControls } from './ui/useNavControls';
 import { useFixCamera } from './ui/useFixCamera';
+import { useFavouriteLayer } from './ui/useFavourites';
 import { logEvent } from './ui/usageLog';
 import { useMapGestures } from './ui/useMapGestures';
 import { useRoute, type Trip } from './ui/useRoute';
@@ -286,6 +287,7 @@ export function App() {
     },
   });
 
+  useFavouriteLayer(map);
   useFixCamera(map, fix, {
     me,
     compass,

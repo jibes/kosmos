@@ -14,6 +14,7 @@ import { LABEL_LAYERS, ROUTE_ALT_LAYER } from '../core/style';
 import { lang, t } from '../i18n';
 import { onLongPress } from './gestures';
 import type { Trip } from './useRoute';
+import { favouriteAt, placeOf } from './useFavourites';
 
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url);
@@ -115,6 +116,12 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
         { layers },
       );
       const props = f?.properties ?? {};
+      // A star: the place as it was kept, its card at once (details by its OSM id).
+      const fav = f?.layer.id.startsWith('fav-') ? favouriteAt(Number(props.fav)) : undefined;
+      if (fav) {
+        select(placeOf(fav));
+        return;
+      }
       const name = (props[`name:${labelLang}`] ?? props.name) as string | undefined;
       if (!f || !name) {
         clear();

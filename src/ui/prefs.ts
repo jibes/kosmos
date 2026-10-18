@@ -8,6 +8,9 @@ export const HINTED_KEY = 'kosmos.hinted.v1';
 /** The last searches taken (`core/recent.ts`); never leaves the device. */
 export const RECENT_KEY = 'kosmos.recent.v1';
 
+/** Starred places (`core/favourites.ts`); never leave the device. */
+export const FAVOURITES_KEY = 'kosmos.favourites.v1';
+
 /** The usage log, kept only when the user turns it on (`ui/usageLog.ts`); never leaves the device
  * unless saved. */
 export const LOG_KEY = 'kosmos.log.v1';

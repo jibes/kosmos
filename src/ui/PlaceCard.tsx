@@ -3,7 +3,9 @@ import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { lang, locale, t } from '../i18n';
 import { focusSearch, useFocusOnMount } from './a11y';
-import { CloseIcon, CopyIcon, NearbyIcon, RouteIcon, ShareIcon } from './icons';
+import { CloseIcon, CopyIcon, NearbyIcon, RouteIcon, ShareIcon, StarIcon } from './icons';
+import { toggleFavouritePlace, useFavourites } from './useFavourites';
+import { isFavourite } from '../core/favourites';
 import { copy, share } from './native';
 import { Departures } from './Departures';
 import { PlaceDetails } from './PlaceDetails';
@@ -25,6 +27,7 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
   const details = usePlaceDetails(place.osm, lang);
   const heading = useFocusOnMount<HTMLHeadingElement>();
 
+  const starred = isFavourite(useFavourites(), place);
   const onShare = async () => {
     const result = await share({
       title: place.name,
@@ -53,6 +56,16 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
             loading && <p className="shimmer" aria-hidden="true" />
           )}
         </div>
+        <button
+          type="button"
+          className="icon-btn round fav"
+          aria-label={t.favourite}
+          title={t.favourite}
+          aria-pressed={starred}
+          onClick={() => toggleFavouritePlace(place)}
+        >
+          <StarIcon filled={starred} />
+        </button>
         <button
           type="button"
           className="icon-btn round"

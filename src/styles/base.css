@@ -18,6 +18,8 @@
   --on-danger: #ffffff;
   /* Delayed departures: 5.2:1 on the light card, 6.9:1 on the dark one. */
   --late: #c2410c;
+  /* Favourites, as their stars on the map (core/palette.ts). */
+  --fav: #a86400;
   --shadow:
     0 0.5px 1px rgb(20 18 14 / 0.06), 0 4px 12px -2px rgb(20 18 14 / 0.08),
     0 16px 40px -8px rgb(20 18 14 / 0.12);
@@ -50,6 +52,8 @@
     --accent: #6e8bff;
     --accent-text: #0b0d12;
     --late: #ff8a4c;
+    /* Favourites, as their stars on the map (core/palette.ts). */
+    --fav: #f2b23c;
     --shadow:
       0 0.5px 1px rgb(0 0 0 / 0.4), 0 4px 12px -2px rgb(0 0 0 / 0.35),
       0 16px 40px -8px rgb(0 0 0 / 0.5);
@@ -74,6 +78,8 @@
   --accent: #6e8bff;
   --accent-text: #0b0d12;
   --late: #ff8a4c;
+  /* Favourites, as their stars on the map (core/palette.ts). */
+  --fav: #f2b23c;
   --shadow:
     0 0.5px 1px rgb(0 0 0 / 0.4), 0 4px 12px -2px rgb(0 0 0 / 0.35),
     0 16px 40px -8px rgb(0 0 0 / 0.5);
@@ -416,6 +422,11 @@ h2[tabindex='-1']:focus-visible {
 .results-list button > svg {
   grid-row: span 2;
   color: var(--muted);
+}
+
+/* A favourite in the empty field: its star in the favourites' colour. */
+.r-fav > svg {
+  color: var(--fav);
 }
 
 /* A search taken before: the clock, its name and line, and a way to forget it. */

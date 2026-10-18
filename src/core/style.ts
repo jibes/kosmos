@@ -26,6 +26,8 @@ export const FONT = {
 export const LABEL_LAYERS = [
   'search-names',
   'search-dots',
+  'fav-names',
+  'fav-stars',
   'label-poi',
   'label-village',
   'label-town',
@@ -43,6 +45,10 @@ export const ROUTE_SOURCE = 'route';
 /** Places found by category, drawn as dots until the search is cleared. */
 export const SEARCH_SOURCE = 'search';
 export const ROUTE_ALT_LAYER = 'route-alt';
+/** The user's favourite places (`core/favourites.ts`), starred on the map. */
+export const FAV_SOURCE = 'favourites';
+/** The star's image, drawn by the app (`ui/useFavourites.ts`) and tinted here. */
+export const FAV_ICON = 'fav-star';
 
 export interface StyleOptions {
   theme: Theme;
@@ -473,6 +479,44 @@ function searchDots(p: Palette): LayerSpecification[] {
   ];
 }
 
+/** Favourites: a star and the name, above the map's labels, below search results. */
+function favourites(p: Palette): LayerSpecification[] {
+  return [
+    {
+      id: 'fav-stars',
+      type: 'symbol',
+      source: FAV_SOURCE,
+      layout: {
+        'icon-image': FAV_ICON,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.8, 16, 1.15] as unknown as Expr,
+        // Always shown; placed, so a tap finds it (an ignored placement is not hit-tested).
+        'icon-allow-overlap': true,
+      },
+      paint: {
+        'icon-color': p.favourite,
+        'icon-halo-color': p.routeCasing,
+        'icon-halo-width': 1.5,
+      },
+    },
+    {
+      id: 'fav-names',
+      type: 'symbol',
+      source: FAV_SOURCE,
+      minzoom: 12,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': [FONT.bold],
+        'text-size': 12,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.9],
+        'text-max-width': 8,
+        'text-optional': true,
+      },
+      paint: { 'text-color': p.favourite, 'text-halo-color': p.halo, 'text-halo-width': 1.6 },
+    },
+  ];
+}
+
 function labels(p: Palette, lang: string): LayerSpecification[] {
   const halo = {
     'text-halo-color': p.halo,
@@ -674,6 +718,7 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
       },
       [ROUTE_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       [SEARCH_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      [FAV_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
     },
     glyphs: GLYPHS_URL,
     ...(fontFaces ? { 'font-faces': fontFaces } : {}),
@@ -690,6 +735,13 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
     },
     light: { anchor: 'viewport', color: '#ffffff', intensity: p.light, position: [1.2, 210, 35] },
     transition: { duration: 300, delay: 0 },
-    layers: [...base(p), ...roads(p), ...route(p), ...labels(p, lang), ...searchDots(p)],
+    layers: [
+      ...base(p),
+      ...roads(p),
+      ...route(p),
+      ...labels(p, lang),
+      ...favourites(p),
+      ...searchDots(p),
+    ],
   };
 }

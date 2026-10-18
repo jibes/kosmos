@@ -174,7 +174,6 @@ test.describe('map', () => {
     // Said once.
     await page.reload();
     await idle(page);
-    await page.waitForTimeout(2500);
     await expect(note).toHaveCount(0);
   });
 
@@ -474,6 +473,60 @@ test.describe('map', () => {
     await expect(dialog).toHaveCount(0);
     // Focus goes back to what opened it.
     await expect(page.getByRole('button', { name: /OpenStreetMap/ })).toBeFocused();
+  });
+
+  test('stars a favourite: marked on the map, first in the empty search, kept', async ({
+    page,
+  }, info) => {
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    await page.getByRole('option').first().click();
+    const card = page.locator('.card');
+    const star = card.getByRole('button', { name: 'Favourite' });
+    await expect(star).toHaveAttribute('aria-pressed', 'false');
+    await star.click();
+    await expect(star).toHaveAttribute('aria-pressed', 'true');
+    await card.getByRole('button', { name: 'Close' }).click();
+    // Its star on the map, where the place is.
+    const onMap = () =>
+      page.evaluate(
+        ([lng, lat]) => {
+          const m = window.kosmos!;
+          const p = m.project([lng, lat]);
+          return m.queryRenderedFeatures(
+            [
+              [p.x - 12, p.y - 12],
+              [p.x + 12, p.y + 12],
+            ],
+            { layers: ['fav-stars'] },
+          ).length;
+        },
+        [SEARCH_HIT.lng, SEARCH_HIT.lat],
+      );
+    await expect.poll(onMap).toBeGreaterThan(0);
+    await idle(page);
+    await shot(page, info, 'favourite');
+    // A tap on it opens its card.
+    const at = await page.evaluate(
+      ([lng, lat]) => window.kosmos!.project([lng, lat]),
+      [SEARCH_HIT.lng, SEARCH_HIT.lat],
+    );
+    await page.mouse.click(at.x, at.y);
+    await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    await card.getByRole('button', { name: 'Close' }).click();
+    // Kept: after a reload, first in the empty search field.
+    await page.reload();
+    await input.click();
+    const first = page.getByRole('option').first();
+    await expect(first).toContainText(SEARCH_HIT.name);
+    await expect(first).toHaveClass(/r-fav/);
+    await first.click();
+    await card.getByRole('button', { name: 'Favourite' }).click();
+    await expect(card.getByRole('button', { name: 'Favourite' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    await expect.poll(onMap).toBe(0);
   });
 
   test('keeps a usage log only when asked, saved as a file without places or words', async ({

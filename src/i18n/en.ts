@@ -253,6 +253,8 @@ export const en = {
     'What was used and when, to improve the app: never a place, never what you type. It stays here until you save it; turning it off deletes it.',
   usageLogSave: 'Save log',
   usageLogFailed: 'The log could not be saved.',
+  favourite: 'Favourite',
+  favourites: 'Favourites',
   northUp: 'North up',
   noCompass: 'No compass on this device',
   lanes: 'Lanes',

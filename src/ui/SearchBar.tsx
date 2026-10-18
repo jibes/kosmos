@@ -23,7 +23,9 @@ import { logEvent } from './usageLog';
 import { fill, t, units } from '../i18n';
 import { touch } from './layout';
 import { useSwipe } from './useSwipe';
-import { ClockIcon, CloseIcon, KindIcon, SearchIcon } from './icons';
+import { ClockIcon, CloseIcon, KindIcon, SearchIcon, StarIcon } from './icons';
+import { placeOf, useFavourites } from './useFavourites';
+import { isFavourite } from '../core/favourites';
 import { forgetRecent, rememberRecent, useRecent } from './useRecent';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
@@ -120,7 +122,7 @@ const area = (b: SearchBias | undefined) =>
  */
 type Item =
   | { cat: Kind; n?: number; place?: undefined; recent?: undefined }
-  | { place: Place; cat?: undefined; recent?: undefined }
+  | { place: Place; fav?: boolean; cat?: undefined; recent?: undefined }
   | { recent: Recent; cat?: undefined; place?: undefined };
 
 /** Offered in an empty field (after the recent ones): what people look for most. */
@@ -234,9 +236,15 @@ export function SearchBar({
    * kinds of place people look for most. Nothing is taken until chosen. */
   const blank = q.length < 2 && !category;
   const recent = useRecent();
+  const favourites = useFavourites();
   const items: Item[] = blank
     ? [
-        ...recent.filter((r) => onCategory || 'place' in r).map((r) => ({ recent: r })),
+        // Favourites first, then what was searched lately (a favourite not twice).
+        ...favourites.map((f) => ({ place: placeOf(f), fav: true })),
+        ...recent
+          .filter((r) => onCategory || 'place' in r)
+          .filter((r) => !('place' in r) || !isFavourite(favourites, r.place))
+          .map((r) => ({ recent: r })),
         ...(onCategory ? COMMON.map((cat) => ({ cat })) : []),
       ]
     : [...suggestions, ...results.map((place) => ({ place })), ...guesses.map((cat) => ({ cat }))];
@@ -421,7 +429,7 @@ export function SearchBar({
   /** Which kind of row was taken, for the usage log: never the text or the place. */
   const rowOf = (it: Item) => {
     if (it.recent) return 'recent';
-    if (it.place) return 'name';
+    if (it.place) return it.fav ? 'favourite' : 'name';
     if (blank) return 'common';
     if (suggestions.includes(it)) return it.cat.startsWith('name:') ? 'chain' : 'kind';
     return 'guess';
@@ -528,7 +536,9 @@ export function SearchBar({
               }
               role="option"
               id={`${listId}-${i}`}
-              className={it.recent ? 'r-recent' : it.cat ? 'r-cat' : 'r-place'}
+              className={
+                it.recent ? 'r-recent' : it.cat ? 'r-cat' : it.fav ? 'r-place r-fav' : 'r-place'
+              }
               aria-selected={i === active}
               onPointerDown={(e) => e.preventDefault()}
               onClick={() => choice(it)}
@@ -567,7 +577,7 @@ export function SearchBar({
                 </>
               ) : (
                 <>
-                  <KindIcon kind={it.place.kind ?? 'place'} />
+                  {it.fav ? <StarIcon filled /> : <KindIcon kind={it.place.kind ?? 'place'} />}
                   <span className="r-name">{it.place.name}</span>
                   {it.place.distance !== undefined ? (
                     <span className="r-detail">
