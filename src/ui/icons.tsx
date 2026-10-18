@@ -51,7 +51,6 @@ export const NearbyIcon = () => (
   </Svg>
 );
 
-/** A search taken before. */
 /** A favourite: filled when the place is one. */
 export const StarIcon = ({ filled = false, size = 20 }: { filled?: boolean; size?: number }) => (
   <Svg size={size}>
@@ -62,6 +61,14 @@ export const StarIcon = ({ filled = false, size = 20 }: { filled?: boolean; size
   </Svg>
 );
 
+/** Its own name for a favourite. */
+export const PencilIcon = ({ size = 18 }: { size?: number }) => (
+  <Svg size={size}>
+    <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4ZM13.5 6.5l4 4" />
+  </Svg>
+);
+
+/** A search taken before. */
 export const ClockIcon = () => (
   <Svg>
     <circle cx="12" cy="12" r="8" />

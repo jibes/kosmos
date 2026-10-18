@@ -13,9 +13,18 @@ export function useFocusOnMount<T extends HTMLElement>() {
   return ref;
 }
 
-/** After a card closes from the keyboard, the search field is where to go on. */
+/**
+ * After a card closes from the keyboard, the search field is where to go on. At once where it
+ * is shown (in a tap, so a phone opens its keyboard); still hidden behind the closing card, once
+ * the card is gone.
+ */
 export function focusSearch() {
-  document.querySelector<HTMLInputElement>('.bar input')?.focus({ preventScroll: true });
+  const go = () => {
+    const input = document.querySelector<HTMLInputElement>('.bar input');
+    input?.focus({ preventScroll: true });
+    return !!input && document.activeElement === input;
+  };
+  if (!go()) requestAnimationFrame(() => void go());
 }
 
 const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };

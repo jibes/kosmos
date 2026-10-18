@@ -20,7 +20,7 @@ export const BUZZ = {
 
 /**
  * How a prompt feels, if at all: only on foot or by bike with the voice off (a car has its
- * voice), and never for "continue for …", which asks nothing of anyone.
+ * voice), and never for setting off or "continue for …", which ask nothing at once.
  */
 export function buzzFor(
   p: Prompt,
@@ -31,7 +31,10 @@ export function buzzFor(
   if (!muted || mode === 'car') return null;
   const [index, kind] = p.key.split(':');
   if (kind === 'alert') return BUZZ.ahead;
-  if (kind === 'pre') return Number(index) === lastManeuver ? BUZZ.arrive : BUZZ.now;
+  // Setting off ("Head north …", or to the route first) asks for no turn.
+  if (kind === 'pre' && Number(index) > 0) {
+    return Number(index) === lastManeuver ? BUZZ.arrive : BUZZ.now;
+  }
   return null;
 }
 

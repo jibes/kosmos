@@ -48,7 +48,8 @@ const Kosmos = isNative
       log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
       vibrate(o: { pattern: number[] }): Promise<void>;
       takeShared(): Promise<{ text?: string }>;
-      shareFile(o: { name: string; text: string }): Promise<void>;
+      shareFile(o: { name: string; text: string; type?: string }): Promise<void>;
+      openElsewhere(o: { uri: string; title: string }): Promise<void>;
       contacts(o: { ask: boolean }): Promise<{
         allowed: boolean;
         contacts?: { name: string; address: string }[];
@@ -58,6 +59,11 @@ const Kosmos = isNative
         listener: (e: { text: string }) => void,
       ): Promise<PluginListenerHandle>;
     }>('Kosmos')
+  : null;
+
+/** Android: a `geo:` link to the other maps apps, kOSMos left out of the chooser. */
+export const openElsewhere = Kosmos
+  ? (uri: string, title: string) => Kosmos.openElsewhere({ uri, title })
   : null;
 
 /** The app's page in the system settings (Android), where location can be allowed again. */
@@ -75,10 +81,27 @@ export async function readContacts(ask: boolean) {
   return r?.allowed ? (r.contacts ?? []) : null;
 }
 
-/** Android: a text file to the share sheet (Save to Files, Drive, another app). */
-export const shareFile = Kosmos
-  ? (name: string, text: string) => Kosmos.shareFile({ name, text })
-  : null;
+/**
+ * A text file for the user to keep: on Android to the share sheet (Save to Files, Drive, another
+ * app), in the browser a download. `false` when the app could not hand it over.
+ */
+export async function saveFile(name: string, text: string, type = 'text/plain') {
+  if (Kosmos) {
+    try {
+      await Kosmos.shareFile({ name, text, type });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return true;
+}
 
 /** Android: other audio ducks while `on` (a prompt speaks), and comes back after. */
 export const duckAudio = (on: boolean) => void Kosmos?.duck({ on }).catch(() => undefined);
@@ -156,6 +179,8 @@ type Grant = 'granted' | 'denied' | 'prompt' | 'prompt-with-rationale';
 interface NavLocationPlugin {
   /** `approximate`: running, but on approximate location only (kilometres off, rare). */
   start(o: { title: string; text: string }): Promise<{ approximate?: boolean } | undefined>;
+  /** The guidance notification's text; ignored while the service is not showing it. */
+  update(o: { title: string; text: string }): Promise<void>;
   stop(): Promise<void>;
   checkPermissions(): Promise<{ location: Grant; coarseLocation: Grant; notifications: Grant }>;
   addListener(event: 'location', fn: (fix: NativeFix) => void): Promise<PluginListenerHandle>;

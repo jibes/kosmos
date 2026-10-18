@@ -13,7 +13,7 @@ import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
 import { arrowRadios, focusSearch, useFocusOnMount } from './a11y';
 import { CloseIcon, CoinsIcon, LocateIcon, ModeIcon, SwapIcon, TurnIcon } from './icons';
-import { isNative } from './native';
+import { isNative, openElsewhere } from './native';
 import { Sheet } from './Sheet';
 import type { LocationStatus } from './useLocation';
 import { changesText, DepartTime, LineChips, TransitCredit, TransitLegs } from './TransitParts';
@@ -285,6 +285,14 @@ export function RouteCard(props: Props) {
         href={isNative ? geoUri(to, to.name) : directionsUrl(to)}
         target={isNative ? undefined : '_blank'}
         rel="noreferrer"
+        onClick={(e) => {
+          if (!openElsewhere) return;
+          // The chooser without kOSMos; the plain link only if that fails.
+          e.preventDefault();
+          openElsewhere(geoUri(to, to.name), t.openIn).catch(() => {
+            window.location.href = geoUri(to, to.name);
+          });
+        }}
       >
         {t.openIn}
       </a>

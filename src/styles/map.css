@@ -98,6 +98,19 @@
   overflow-wrap: anywhere;
 }
 
+.card-title .rename {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 600;
+}
+
 .card-title p {
   margin: 4px 0 0;
   color: var(--muted);
@@ -497,7 +510,8 @@
 }
 
 /* The usage log: kept only when asked, saved as a file to hand on. */
-.usage-log {
+.usage-log,
+.backup {
   display: grid;
   gap: 6px;
 }
@@ -515,8 +529,15 @@
   accent-color: var(--accent);
 }
 
-.usage-log small {
+.usage-log small,
+.backup small {
   color: var(--muted);
+}
+
+.backup div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .save-log {
@@ -605,10 +626,9 @@
   inset: -4px -6px;
 }
 
-/* While guiding, the top belongs to the next turn: notes sit above the speed, the bar and
-   Re-center, across the width. */
+/* While guiding, the top belongs to the next turn: notes sit above the speed and the bar, left
+   of the map's buttons, which stay free to tap. */
 .ui[data-nav] .notes {
-  right: calc(var(--gutter) + var(--safe-right));
   bottom: calc(var(--gutter) + var(--safe-bottom) + 184px);
   align-items: center;
   text-align: center;

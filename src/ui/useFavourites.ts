@@ -3,7 +3,10 @@ import { useEffect, useSyncExternalStore } from 'react';
 import {
   favouriteFeatures,
   isFavourite,
+  mergeFavourites,
   parseFavourites,
+  renameFavourite,
+  titleOf,
   toggleFavourite,
   type Favourite,
 } from '../core/favourites';
@@ -30,6 +33,7 @@ const subscribe = (l: () => void) => {
 export const useFavourites = () => useSyncExternalStore(subscribe, () => list);
 /** The list now, outside React (a tap on a star). */
 export const favouriteAt = (i: number): Favourite | undefined => list[i];
+export const favouritesNow = () => list;
 
 /** Star or unstar a place. */
 export function toggleFavouritePlace(p: Place) {
@@ -38,15 +42,34 @@ export function toggleFavouritePlace(p: Place) {
   set(toggleFavourite(list, p, Date.now()));
 }
 
-/** The place a favourite stands for: as it was starred, its card opened from it. */
-export const placeOf = ({ name, detail, lng, lat, osm, kind, stop }: Favourite): Place => ({
-  name,
-  detail,
+/** Its own name for a starred place, or the place's again (empty). */
+export function renameFavouritePlace(p: Place, label: string) {
+  logEvent('favourite.rename', { named: !!label.trim() });
+  set(renameFavourite(list, p, label));
+}
+
+/** Favourites from a backup, added to these; how many were new. */
+export function restoreFavourites(restored: Favourite[]): number {
+  const next = mergeFavourites(list, restored);
+  const added = next.length - list.length;
+  set(next);
+  return added;
+}
+
+const placeRest = ({ lng, lat, osm, kind, stop }: Favourite) => ({
   lng,
   lat,
   ...(osm ? { osm } : {}),
   ...(kind ? { kind } : {}),
   ...(stop ? { stop } : {}),
+});
+
+/** The place a favourite stands for: as it was starred, by the user's name for it, the
+ * place's own name then in front of the detail. Its card opens from it. */
+export const placeOf = (f: Favourite): Place => ({
+  name: titleOf(f),
+  detail: f.label ? [f.name, f.detail].filter(Boolean).join(', ') : f.detail,
+  ...placeRest(f),
 });
 
 /** A five-pointed star, white on clear, tinted by the style (an SDF image), with room around it

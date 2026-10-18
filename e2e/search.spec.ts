@@ -798,5 +798,14 @@ test.describe('search', () => {
     await place.getByRole('button', { name: 'Close' }).press('Enter');
     await expect(place).toHaveCount(0);
     await expect(input).toBeFocused();
+
+    // The route card's own close from the keyboard lands in the search too.
+    await input.fill('brandenburg');
+    await page.getByRole('option').filter({ hasText: SEARCH_HIT.name }).first().click();
+    await place.getByRole('button', { name: /^Route$/ }).press('Enter');
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'Close' }).press('Enter');
+    await expect(card).toHaveCount(0);
+    await expect(input).toBeFocused();
   });
 });

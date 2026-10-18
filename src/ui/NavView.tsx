@@ -1,5 +1,5 @@
 import { laneSize, lanesNeeded, laneViews } from '../core/lanes';
-import type { NavState } from '../core/nav';
+import { headingToRoute, type NavState } from '../core/nav';
 import {
   bannerText,
   roadOf,
@@ -20,6 +20,7 @@ import { NavBar } from './NavBar';
 import { TripDetails } from './TripDetails';
 import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
+import { useNavNotice } from './useNavNotice';
 import { useNow } from './useNow';
 import { useSpeedLimits } from './useSpeedLimits';
 
@@ -122,13 +123,15 @@ export function NavView(props: Props) {
   // Only while off the route: back on it, guidance carries on whatever the router said.
   const rerouting = nav.offRoute;
   const guiding = !nav.arrived && !rerouting;
-  const lanes = guiding && lanesNeeded(m?.lanes) ? m.lanes : undefined;
+  // Started away from the route: first there, how far its start is, nothing of what comes after.
+  const heading = guiding && headingToRoute(nav);
+  const lanes = !heading && guiding && lanesNeeded(m?.lanes) ? m.lanes : undefined;
   const size = lanes && started ? laneSize(nav.toNext, nav.speed, mode) : 'none';
 
   // The step after shows under the next one, so it is no surprise; close behind it, without
   // the distance between them.
   const after = route.maneuvers[started ? nav.next + 1 : 1];
-  const then = guiding && m && after ? after : undefined;
+  const then = guiding && !heading && m && after ? after : undefined;
   // How far from here, as in the steps list: the next turn's distance and on to this one.
   const thenFar =
     then && m.distance > THEN_M ? formatDistance((toNext ?? 0) + m.distance, lang, units) : null;
@@ -142,6 +145,10 @@ export function NavView(props: Props) {
   if (started && !nav.arrived && m && nav.next === route.maneuvers.length - 1) {
     title = shown = m.alert ?? t.destinationAhead;
   }
+  if (heading) {
+    title = shown = t.headToRoute;
+    turn = 'depart';
+  }
   if (nav.arrived) {
     title = shown = t.arrived;
     turn = 'arrive';
@@ -150,12 +157,18 @@ export function NavView(props: Props) {
     title = shown = reroute === 'failed' ? t.rerouteFailed : t.rerouting;
     turn = reroute === 'failed' ? 'uturn' : 'depart';
   }
+  const big = heading ? nav.toRoute : toNext;
+  const arrival = fill(t.arriveAt, { time: formatClock(new Date(now + eta * 1000), lang) });
+  useNavNotice(
+    guiding && started && m ? `${formatDistance(big ?? 0, lang, units)} · ${title}` : title,
+    `${formatDuration(eta)} · ${arrival}`,
+  );
   // What the user should know besides the instruction: no position yet, or a poor one.
   const note = !started
     ? t.locating
     : nav.weak && !nav.arrived
       ? t.weakGps
-      : guiding && m
+      : guiding && !heading && m
         ? road(m)
         : null;
 
@@ -178,7 +191,7 @@ export function NavView(props: Props) {
           )}
           <TurnIcon turn={turn} size={40} />
           <div>
-            {guiding && toNext != null && <strong>{formatDistance(toNext, lang, units)}</strong>}
+            {guiding && big != null && <strong>{formatDistance(big, lang, units)}</strong>}
             {/* Only the instruction is announced: the distance changes with every fix. */}
             <p aria-live="polite">
               {shown === title ? (
@@ -249,8 +262,7 @@ export function NavView(props: Props) {
           <>
             <strong>{formatDuration(eta)}</strong>
             <span>
-              {fill(t.arriveAt, { time: formatClock(new Date(now + eta * 1000), lang) })} ·{' '}
-              {formatDistance(remaining, lang, units)}
+              {arrival} · {formatDistance(remaining, lang, units)}
             </span>
           </>
         )}

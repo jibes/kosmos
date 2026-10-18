@@ -84,15 +84,14 @@ export function useNav(o: Options) {
 
   useEffect(() => {
     if (!tr) return;
+    // "Head north on …" (a new route's first words after a reroute too) comes with the first
+    // fix, as `prompt` says: on the route, or "head to the route" where it starts further off.
     let nav = initialNav();
-    // "Head north on …" at the start, and a new route's first words after a reroute.
-    const depart = tr.route.maneuvers[0];
-    if (depart && !opts.current.muted) opts.current.voice.speak(depart.pre ?? depart.instruction);
-    nav = markSpoken(nav, '0:pre');
     const { mode, subscribe } = opts.current;
     const onFix = (fix: Fix) => {
       nav = step(tr, nav, fix);
-      const p = prompt(tr, nav, mode);
+      const found = prompt(tr, nav, mode);
+      const p = found?.head ? { ...found, text: t.headToRoute } : found;
       // Said once, and only while it is still true: never about a fix from a queue.
       // The usage log: each prompt, how old its fix was, and whether it was said.
       if (p) {

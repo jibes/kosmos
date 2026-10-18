@@ -1,6 +1,12 @@
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { contactFeatures, mergeContacts, parseContacts, type Contact } from '../core/contacts';
+import {
+  addContacts,
+  contactFeatures,
+  mergeContacts,
+  parseContacts,
+  type Contact,
+} from '../core/contacts';
 import { parsePhoton, searchUrl, type Place } from '../core/search';
 import { CONTACT_ICON, CONTACT_SOURCE } from '../core/style';
 import { fill, lang, t } from '../i18n';
@@ -24,6 +30,15 @@ const subscribe = (l: () => void) => {
 
 export const useContacts = () => useSyncExternalStore(subscribe, () => list);
 export const contactAt = (i: number): Contact | undefined => list[i];
+export const contactsNow = () => list;
+
+/** Contacts from a backup, added to these with their points; how many were new. */
+export function restoreContacts(restored: Contact[]): number {
+  const next = addContacts(list, restored);
+  const added = next.length - list.length;
+  set(next);
+  return added;
+}
 
 /** The browser's contact picker (Chrome on Android): the user picks whom to add. */
 interface ContactsManager {

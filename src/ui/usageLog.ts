@@ -1,6 +1,6 @@
 import { appendLog, logFileName, logHeader, logLine, type LogData } from '../core/usageLog';
 import { lang } from '../i18n';
-import { isNative, shareFile } from './native';
+import { isNative, saveFile } from './native';
 import { LOG_KEY, LOGGING_KEY, store, stored } from './prefs';
 
 let on = stored(LOGGING_KEY) === '1';
@@ -61,21 +61,7 @@ export async function saveLog(): Promise<boolean> {
   );
   const text = `${header}\n${stored(LOG_KEY) ?? ''}\n`;
   const name = logFileName(now);
-  if (shareFile) {
-    try {
-      await shareFile(name, text);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  return true;
+  return saveFile(name, text);
 }
 
 // The app going out of sight and back: when guidance goes quiet in the background, this says

@@ -175,6 +175,8 @@ export interface NavState {
   joined: boolean;
   /** Closest to the route's start so far, metres, while getting to it. */
   approach: number | null;
+  /** How far the route's start is now, metres, while getting to it; `null` once on it. */
+  toRoute: number | null;
   /** Furthest along the route so far, metres. */
   peak: number;
   /** Fixes in a row moving against the route's direction. */
@@ -198,6 +200,7 @@ export const initialNav = (): NavState => ({
   weak: false,
   joined: false,
   approach: null,
+  toRoute: null,
   peak: 0,
   against: 0,
   time: 0,
@@ -243,11 +246,12 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
   // Still getting to the route (it starts on the road nearest to where it was asked from):
   // heading for its start is not off it; only moving well away from it is.
   let approach = prev.approach;
+  let toRoute: number | null = null;
   let off = !onLine;
   if (!joined) {
-    const toStart = distance(fix, { lng: tr.route.coords[0][0], lat: tr.route.coords[0][1] });
-    approach = Math.min(approach ?? toStart, toStart);
-    off = toStart > approach + LEAVE_M;
+    toRoute = distance(fix, { lng: tr.route.coords[0][0], lat: tr.route.coords[0][1] });
+    approach = Math.min(approach ?? toRoute, toRoute);
+    off = toRoute > approach + LEAVE_M;
   }
   // The wrong way along the route: going back down it, or a course against it.
   const peak = Math.max(prev.peak, along);
@@ -305,6 +309,7 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
     weak: false,
     joined,
     approach,
+    toRoute,
     peak,
     against,
     time: fix.time,
@@ -349,7 +354,17 @@ export interface Prompt {
   /** Metres to the maneuver, to say before the text ("In 500 m, turn right …"). The router's
    * alert carries no distance of its own. */
   distance?: number;
+  /** Not the router's words: the route starts further off, the user is to head there first. */
+  head?: true;
 }
+
+/** Further than this from the route's start at first, the user heads there before its first
+ * words ("Head north on …"), which only make sense on it. */
+export const HEAD_M = 30;
+
+/** Still getting to a route that starts further off. */
+export const headingToRoute = (st: NavState) =>
+  !st.joined && st.toRoute !== null && st.toRoute > HEAD_M;
 
 /** A final instruction this far ahead (fast roads) still says how far. */
 const PRE_WITH_DISTANCE_M = 150;
@@ -372,6 +387,14 @@ export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
   if (!st.arrived && st.offSince !== null) return null;
   const said = (k: string) => st.spoken.includes(k);
   const ms = tr.route.maneuvers;
+  // How it sets off: first to the route where it starts further off, its own words once there.
+  if (!st.arrived && headingToRoute(st)) {
+    return said('0:head') ? null : { key: '0:head', text: '', head: true };
+  }
+  const depart = ms[0];
+  if (!st.arrived && depart && !said('0:pre')) {
+    return { key: '0:pre', text: depart.pre ?? depart.instruction };
+  }
   if (st.arrived) {
     const last = ms.length - 1;
     const text = ms[last]?.pre ?? ms[last]?.instruction;

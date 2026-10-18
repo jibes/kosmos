@@ -3,9 +3,17 @@ import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { lang, locale, t } from '../i18n';
 import { focusSearch, useFocusOnMount } from './a11y';
-import { CloseIcon, CopyIcon, NearbyIcon, RouteIcon, ShareIcon, StarIcon } from './icons';
-import { toggleFavouritePlace, useFavourites } from './useFavourites';
-import { isFavourite } from '../core/favourites';
+import {
+  CloseIcon,
+  CopyIcon,
+  NearbyIcon,
+  PencilIcon,
+  RouteIcon,
+  ShareIcon,
+  StarIcon,
+} from './icons';
+import { renameFavouritePlace, toggleFavouritePlace, useFavourites } from './useFavourites';
+import { favouriteOf, LABEL_MAX, titleOf } from '../core/favourites';
 import { copy, share } from './native';
 import { Departures } from './Departures';
 import { PlaceDetails } from './PlaceDetails';
@@ -27,7 +35,15 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
   const details = usePlaceDetails(place.osm, lang);
   const heading = useFocusOnMount<HTMLHeadingElement>();
 
-  const starred = isFavourite(useFavourites(), place);
+  const fav = favouriteOf(useFavourites(), place);
+  const starred = !!fav;
+  // A renamed favourite goes by the user's name, however its card was opened.
+  const name = fav ? titleOf(fav) : place.name;
+  const [naming, setNaming] = useState(false);
+  const rename = (label: string) => {
+    renameFavouritePlace(place, label);
+    setNaming(false);
+  };
   const onShare = async () => {
     const result = await share({
       title: place.name,
@@ -44,12 +60,32 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
   };
 
   return (
-    <Sheet className="card surface" busy={loading} peek={<strong>{place.name}</strong>}>
+    <Sheet className="card surface" busy={loading} peek={<strong>{name}</strong>}>
       <header>
         <div className="card-title">
-          <h2 ref={heading} tabIndex={-1}>
-            {place.name}
-          </h2>
+          {naming && fav ? (
+            <input
+              className="rename"
+              aria-label={t.favouriteName}
+              defaultValue={name}
+              maxLength={LABEL_MAX}
+              autoFocus
+              enterKeyHint="done"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') rename(e.currentTarget.value);
+                if (e.key === 'Escape') {
+                  // Only the field: the card stays open.
+                  e.stopPropagation();
+                  setNaming(false);
+                }
+              }}
+              onBlur={(e) => naming && rename(e.currentTarget.value)}
+            />
+          ) : (
+            <h2 ref={heading} tabIndex={-1}>
+              {name}
+            </h2>
+          )}
           {place.detail ? (
             <p>{place.detail}</p>
           ) : (
@@ -66,6 +102,17 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
         >
           <StarIcon filled={starred} />
         </button>
+        {starred && !naming && (
+          <button
+            type="button"
+            className="icon-btn round"
+            aria-label={t.rename}
+            title={t.rename}
+            onClick={() => setNaming(true)}
+          >
+            <PencilIcon size={16} />
+          </button>
+        )}
         <button
           type="button"
           className="icon-btn round"

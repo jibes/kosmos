@@ -536,6 +536,48 @@ test.describe('map', () => {
     await expect.poll(onMap).toBe(0);
   });
 
+  test('renames a favourite, and keeps favourites in a backup file', async ({ page }) => {
+    const input = page.getByRole('combobox');
+    await input.fill('brandenburger');
+    await page.getByRole('option').first().click();
+    const card = page.locator('.card');
+    await expect(card.getByRole('button', { name: 'Rename' })).toHaveCount(0);
+    await card.getByRole('button', { name: 'Favourite' }).click();
+    await card.getByRole('button', { name: 'Rename' }).click();
+    const field = card.getByRole('textbox', { name: 'Name of this favourite' });
+    await expect(field).toBeFocused();
+    await field.fill('Gate');
+    await field.press('Enter');
+    await expect(card.getByRole('heading')).toHaveText('Gate');
+    await card.getByRole('button', { name: 'Close' }).click();
+    // Listed by its new name, the place's own after it.
+    await input.fill('');
+    const first = page.getByRole('option').first();
+    await expect(first).toContainText('Gate');
+    await expect(first).toContainText(SEARCH_HIT.name);
+    await page.keyboard.press('Escape');
+
+    // Saved as a file, then gone, and back from the file.
+    await page.getByRole('button', { name: '© OpenStreetMap' }).click();
+    const saved = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Save backup' }).click();
+    const file = await saved;
+    expect(file.suggestedFilename()).toMatch(/^kosmos-backup-\d{4}-\d{2}-\d{2}\.json$/);
+    const path = await file.path();
+    await page.evaluate(() => localStorage.removeItem('kosmos.favourites.v1'));
+    await page.reload();
+    await page.getByRole('button', { name: '© OpenStreetMap' }).click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Restore…' }).click();
+    await (await chooser).setFiles(path);
+    await expect(page.getByRole('status').filter({ hasText: 'Added' })).toHaveText(
+      'Added 1 favourites and 0 contacts.',
+    );
+    await page.keyboard.press('Escape');
+    await input.click();
+    await expect(page.getByRole('option').first()).toContainText('Gate');
+  });
+
   test('puts contacts on the map, found by name, and takes them off again', async ({
     page,
     context,

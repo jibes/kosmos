@@ -6,6 +6,7 @@ import { capital, fill, t, units } from '../i18n';
 import { ModeIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
 import { TripDetails } from './TripDetails';
+import { useNavNotice } from './useNavNotice';
 import { LineChip, TransitLegs, lineName, platformWord, sayPlatformOf } from './TransitParts';
 
 interface Props {
@@ -135,6 +136,8 @@ export function RideView(props: Props) {
   } else if (st.phase === 'arrived') {
     icon = <ModeIcon mode="transit" size={40} />;
   }
+
+  useNavNotice(big ? `${big} · ${title}` : title, change || sub || goal || destination);
 
   // Of the current ride's stops served (those passed through, then the one to get off at), how
   // many are behind the rider.

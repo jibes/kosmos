@@ -110,3 +110,10 @@ export function contactFeatures(list: Contact[]): GeoJSON.FeatureCollection {
     ),
   };
 }
+
+/** Contacts from a backup added to those there are: one placed already keeps its point. */
+export function addContacts(here: Contact[], restored: Contact[]): Contact[] {
+  const known = new Set(here.map(keyOf));
+  const added = restored.filter((c) => !known.has(keyOf(c)));
+  return [...here, ...added].slice(0, CONTACTS_MAX);
+}

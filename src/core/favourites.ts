@@ -13,6 +13,8 @@ export interface Favourite {
   osm?: string;
   kind?: PlaceKind;
   stop?: boolean;
+  /** The user's own name for it ("Home"); `name` stays the place's, to know it again. */
+  label?: string;
   at: number;
 }
 
@@ -20,13 +22,33 @@ export const FAVOURITES_MAX = 200;
 /** The same place: its OSM id, or its name a few steps away (a label tapped again). */
 const SAME_M = 50;
 
-export const sameFavourite = (
-  a: Pick<Favourite, 'name' | 'lng' | 'lat' | 'osm'>,
-  b: Pick<Favourite, 'name' | 'lng' | 'lat' | 'osm'>,
-) => (a.osm && b.osm ? a.osm === b.osm : a.name === b.name && distance(a, b) <= SAME_M);
+type Spot = Pick<Favourite, 'name' | 'lng' | 'lat' | 'osm' | 'label'>;
+/** A place opened from a renamed favourite carries the new name: either name knows it. */
+const sameName = (a: Spot, b: Spot) =>
+  a.name === b.name || (!!a.label && a.label === b.name) || (!!b.label && b.label === a.name);
 
-export const isFavourite = (list: Favourite[], p: Parameters<typeof sameFavourite>[0]) =>
-  list.some((f) => sameFavourite(f, p));
+export const sameFavourite = (a: Spot, b: Spot) =>
+  a.osm && b.osm ? a.osm === b.osm : sameName(a, b) && distance(a, b) <= SAME_M;
+
+export const favouriteOf = (list: Favourite[], p: Spot) => list.find((f) => sameFavourite(f, p));
+export const isFavourite = (list: Favourite[], p: Spot) => !!favouriteOf(list, p);
+
+/** A name, not a note. */
+export const LABEL_MAX = 60;
+
+/** Its own name for a favourite; empty, or the place's own name, takes it off again. */
+export function renameFavourite(list: Favourite[], p: Spot, label: string): Favourite[] {
+  const name = label.trim().slice(0, LABEL_MAX);
+  return list.map((f) => {
+    if (!sameFavourite(f, p)) return f;
+    const rest = { ...f };
+    delete rest.label;
+    return name && name !== f.name ? { ...rest, label: name } : rest;
+  });
+}
+
+/** What a favourite is called: the user's name for it, else the place's. */
+export const titleOf = (f: Pick<Favourite, 'name' | 'label'>) => f.label ?? f.name;
 
 /** Starred now, or unstarred: the list with `p` added first or taken out. */
 export function toggleFavourite(
@@ -65,7 +87,8 @@ export function parseFavourites(raw: string | null): Favourite[] {
           Number.isFinite(f.lat) &&
           Math.abs(f.lat) <= 90 &&
           Math.abs(f.lng) <= 180 &&
-          typeof f.at === 'number',
+          typeof f.at === 'number' &&
+          (f.label === undefined || typeof f.label === 'string'),
       )
       .slice(0, FAVOURITES_MAX);
   } catch {
@@ -81,7 +104,13 @@ export function favouriteFeatures(list: Favourite[]): GeoJSON.FeatureCollection 
       type: 'Feature',
       id: i,
       geometry: { type: 'Point', coordinates: [f.lng, f.lat] },
-      properties: { name: f.name, fav: i },
+      properties: { name: titleOf(f), fav: i },
     })),
   };
+}
+
+/** Favourites from a backup added to those there are: the same place is kept as it is here. */
+export function mergeFavourites(here: Favourite[], restored: Favourite[]): Favourite[] {
+  const added = restored.filter((r) => !here.some((f) => sameFavourite(f, r)));
+  return [...here, ...added].sort((a, b) => b.at - a.at).slice(0, FAVOURITES_MAX);
 }

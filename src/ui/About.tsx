@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { CloseIcon, Mark } from './icons';
+import { restoreBackup, saveBackup } from './backup';
 import { logging, saveLog, setLogging } from './usageLog';
 
 const SOURCE = 'https://github.com/jibes/kosmos';
@@ -9,6 +10,9 @@ export function About({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [keeping, setKeeping] = useState(logging);
   const [saveFailed, setSaveFailed] = useState(false);
+  /** What the last save or restore of the backup came to, said where its buttons are. */
+  const [backupNote, setBackupNote] = useState('');
+  const file = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const d = dialog.current;
@@ -72,6 +76,36 @@ export function About({ onClose }: { onClose: () => void }) {
               </button>
             )}
             {saveFailed && <small role="alert">{t.usageLogFailed}</small>}
+          </dd>
+          <dt>{t.backup}</dt>
+          <dd className="backup">
+            <small>{t.backupText}</small>
+            <div>
+              <button
+                type="button"
+                className="save-log"
+                onClick={() =>
+                  void saveBackup().then((ok) => setBackupNote(ok ? '' : t.backupFailed))
+                }
+              >
+                {t.backupSave}
+              </button>
+              <button type="button" className="save-log" onClick={() => file.current?.click()}>
+                {t.backupRestore}
+              </button>
+            </div>
+            <input
+              ref={file}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (f) void restoreBackup(f).then(setBackupNote);
+              }}
+            />
+            <small role="status">{backupNote}</small>
           </dd>
         </dl>
         <p className="fine">

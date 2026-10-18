@@ -53,6 +53,18 @@ test.describe('guidance', () => {
     // Time left leads the bar; the clock time says it is the arrival.
     await expect(page.locator('.nav-eta strong')).toHaveText(/min$/);
     await expect(page.locator('.nav-eta span')).toContainText('arrival');
+    // "Keep the app open" leaves the map's buttons free to tap.
+    const note = await page.locator('.toast').filter({ hasText: 'open' }).boundingBox();
+    expect(note).not.toBeNull();
+    for (const b of await page.locator('.controls button:visible').all()) {
+      const c = (await b.boundingBox())!;
+      const apart =
+        c.x >= note!.x + note!.width ||
+        c.x + c.width <= note!.x ||
+        c.y >= note!.y + note!.height ||
+        c.y + c.height <= note!.y;
+      expect(apart).toBe(true);
+    }
     const spoken = () => page.evaluate(() => (window as unknown as { spoken: string[] }).spoken);
     await expect.poll(spoken).toContain('Head south on Friedrichstraße.');
     // Lanes stay out of the way while the turn is far.

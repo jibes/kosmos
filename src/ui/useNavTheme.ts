@@ -11,6 +11,8 @@ import { logEvent } from './usageLog';
 type Pt = [number, number];
 
 const TUNNEL_READ_MS = 4_000;
+/** New tiles are read sooner, but not on every fix: while driving tiles arrive all the time. */
+const TUNNEL_NEW_TILES_MS = 1_000;
 
 /** Road tunnels in the tiles already loaded around the user; asks no server. */
 function tunnelLines(map: maplibregl.Map): Pt[][] {
@@ -50,9 +52,12 @@ export function useNavTheme(active: boolean) {
   const lastTunnel = useRef(-Infinity);
   /**
    * Tunnels near the user, read from the loaded tiles every few seconds, not on every fix; tiles
-   * that arrive meanwhile are read on the next fix, so the tunnel ahead is never missed.
+   * that arrive meanwhile are read within a second, so the tunnel ahead is never missed.
    */
-  const tunnels = useRef<{ at: number; lines: Pt[][] }>({ at: -Infinity, lines: [] });
+  const tunnels = useRef<{ at: number; lines: Pt[][]; stale?: boolean }>({
+    at: -Infinity,
+    lines: [],
+  });
   const watched = useRef<maplibregl.Map | null>(null);
   // Each drive decides afresh; the last one's night or tunnel says nothing about this one.
   const [wasActive, setWasActive] = useState(active);
@@ -73,11 +78,12 @@ export function useNavTheme(active: boolean) {
       if (watched.current !== map) {
         watched.current = map;
         map.on('sourcedata', (e) => {
-          if (e.sourceId === MAP_SOURCE && e.tile) tunnels.current.at = -Infinity;
+          if (e.sourceId === MAP_SOURCE && e.tile) tunnels.current.stale = true;
         });
       }
       const [lng, lat] = s.point;
-      if (time - tunnels.current.at > TUNNEL_READ_MS) {
+      const since = time - tunnels.current.at;
+      if (since > TUNNEL_READ_MS || (tunnels.current.stale && since > TUNNEL_NEW_TILES_MS)) {
         tunnels.current = { at: time, lines: tunnelLines(map) };
       }
       if (inTunnel(s.point, s.bearing, tunnels.current.lines)) lastTunnel.current = time;

@@ -44,6 +44,8 @@ public class NavLocationService extends Service implements LocationListener {
 
     /** Where fixes go: the plugin, while the app runs. */
     static volatile Consumer<Location> sink;
+    /** In the foreground, its notification showing: only then is it updated. */
+    private static volatile boolean shown;
 
     private LocationManager manager;
     private long lastGps;
@@ -89,6 +91,7 @@ public class NavLocationService extends Service implements LocationListener {
         String text = intent != null ? intent.getStringExtra(EXTRA_TEXT) : null;
         try {
             Notification notification = notification(
+                this,
                 title != null ? title : getString(R.string.app_name),
                 text != null ? text : ""
             );
@@ -97,6 +100,7 @@ public class NavLocationService extends Service implements LocationListener {
             } else {
                 startForeground(NOTIFICATION_ID, notification);
             }
+            shown = true;
         } catch (RuntimeException e) {
             // Refused (for example without a location permission): fixes still come while the app
             // is in front, which is what the web watch would have done anyway.
@@ -106,24 +110,37 @@ public class NavLocationService extends Service implements LocationListener {
         return START_NOT_STICKY;
     }
 
-    private Notification notification(String title, String text) {
-        NotificationManager notifications = getSystemService(NotificationManager.class);
+    /**
+     * The next turn or stop on the notification, readable on the lock screen without unlocking.
+     * Silent: only the text changes.
+     */
+    static void show(Context context, String title, String text) {
+        if (!shown) return;
+        context.getSystemService(NotificationManager.class)
+            .notify(NOTIFICATION_ID, notification(context, title, text));
+    }
+
+    private static Notification notification(Context context, String title, String text) {
+        NotificationManager notifications = context.getSystemService(NotificationManager.class);
         NotificationChannel channel = new NotificationChannel(
             CHANNEL,
-            getString(R.string.navigation_channel),
+            context.getString(R.string.navigation_channel),
             NotificationManager.IMPORTANCE_LOW
         );
         channel.setShowBadge(false);
         notifications.createNotificationChannel(channel);
-        Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent back = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE);
-        return new NotificationCompat.Builder(this, CHANNEL)
+        Intent open = new Intent(context, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        PendingIntent back = PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE);
+        return new NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_navigation)
             .setContentTitle(title)
             .setContentText(text)
             .setContentIntent(back)
             .setOngoing(true)
             .setSilent(true)
+            .setOnlyAlertOnce(true)
+            // The turn ahead is what the lock screen is for while driving.
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(Notification.CATEGORY_NAVIGATION)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build();
@@ -192,6 +209,7 @@ public class NavLocationService extends Service implements LocationListener {
 
     @Override
     public void onDestroy() {
+        shown = false;
         main.removeCallbacks(relisten);
         unregisterReceiver(switched);
         if (manager != null) manager.removeUpdates(this);

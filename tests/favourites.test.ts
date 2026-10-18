@@ -3,7 +3,10 @@ import {
   favouriteFeatures,
   FAVOURITES_MAX,
   isFavourite,
+  mergeFavourites,
   parseFavourites,
+  renameFavourite,
+  titleOf,
   toggleFavourite,
 } from '../src/core/favourites';
 
@@ -47,5 +50,28 @@ describe('favourites', () => {
     const f = favouriteFeatures([{ ...cafe, at: 1 }]).features[0];
     expect(f.geometry).toEqual({ type: 'Point', coordinates: [13.35, 52.5] });
     expect(f.properties).toEqual({ name: 'Café Einstein', fav: 0 });
+  });
+
+  it("takes the user's own name, and knows the place by either name", () => {
+    let list = renameFavourite(toggleFavourite([], cafe, 1), cafe, '  Coffee  ');
+    expect(list[0]).toMatchObject({ name: 'Café Einstein', label: 'Coffee' });
+    expect(titleOf(list[0])).toBe('Coffee');
+    expect(favouriteFeatures(list).features[0].properties!.name).toBe('Coffee');
+    // Opened from the list it carries the new name; tapped on the map, the old one.
+    expect(isFavourite(list, { ...cafe, name: 'Coffee' })).toBe(true);
+    expect(isFavourite(list, cafe)).toBe(true);
+    expect(toggleFavourite(list, { ...cafe, name: 'Coffee' }, 2)).toEqual([]);
+    // Empty, or the place's own name, takes the name off again.
+    list = renameFavourite(list, cafe, '');
+    expect(list[0].label).toBeUndefined();
+    expect(renameFavourite(list, cafe, 'Café Einstein')[0].label).toBeUndefined();
+    expect(parseFavourites(JSON.stringify([{ ...cafe, at: 1, label: 3 }]))).toEqual([]);
+  });
+
+  it('adds favourites from a backup, the same place kept as it is here', () => {
+    const here = renameFavourite(toggleFavourite([], cafe, 5), cafe, 'Coffee');
+    const tor = { name: 'Tor', detail: '', lng: 13.37, lat: 52.51, at: 9 };
+    const merged = mergeFavourites(here, [{ ...cafe, at: 1 }, tor]);
+    expect(merged.map(titleOf)).toEqual(['Tor', 'Coffee']);
   });
 });

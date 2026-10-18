@@ -13,7 +13,9 @@ import {
   track,
   type Fix,
   type NavState,
+  headingToRoute,
 } from '../src/core/nav';
+import { buzzFor } from '../src/core/haptics';
 import type { Mode, Route } from '../src/core/route';
 
 const O = { lng: 13.4, lat: 52.5 };
@@ -113,12 +115,13 @@ describe('guidance', () => {
   it('announces each maneuver once, in order, and arrives', () => {
     const { st, said } = drive(path());
     expect(said.map((s) => s.text)).toEqual([
+      'Head north.',
       'Turn right onto B.',
       'Turn right onto B now.',
       'Continue for 500 meters.',
       'You have arrived.',
     ]);
-    const [alert, pre] = said;
+    const [, alert, pre] = said;
     expect(1000 - alert.along).toBeLessThanOrEqual(600);
     expect(1000 - alert.along).toBeGreaterThan(150);
     expect(1000 - pre.along).toBeLessThanOrEqual(80);
@@ -267,7 +270,7 @@ describe('arrival', () => {
     const fixes: [number, number][] = [];
     for (let d = 0; d <= 2000; d += 25) fixes.push(m(0, d));
     const { said, states } = replay(r, fixes, 25);
-    expect(said).toEqual(['You have arrived.']);
+    expect(said).toEqual(['Head north.', 'You have arrived.']);
     const at = states.findIndex((s) => s.arrived);
     expect(2000 - states[at].snap!.along).toBeLessThan(25);
   });
@@ -453,6 +456,36 @@ describe('fixes not to be trusted, turns not taken', () => {
       away = step(t, away, at(120 + i * 10, -i * 5, i * 1000, { speed: 8 }));
     }
     expect(away.offRoute).toBe(true);
+  });
+});
+
+describe('setting off', () => {
+  it('says how the route sets off with the first fix on it', () => {
+    const st = step(tr, initialNav(), fixAt(m(5, 0), 0));
+    expect(prompt(tr, st, 'car')).toEqual({ key: '0:pre', text: 'Head north.' });
+  });
+
+  it('heads to a route that starts further off first, its own words once there', () => {
+    // In a car park 120 m west of where the route starts.
+    let st = step(tr, initialNav(), fixAt(m(-120, 0), 0, 3));
+    expect(headingToRoute(st)).toBe(true);
+    expect(st.toRoute).toBeCloseTo(120, -1);
+    const head = prompt(tr, st, 'car');
+    expect(head).toEqual({ key: '0:head', text: '', head: true });
+    st = markSpoken(st, head!.key);
+    st = step(tr, st, fixAt(m(-90, 0), 10_000, 3));
+    expect(prompt(tr, st, 'car')).toBeNull();
+    // On the road: off it goes.
+    for (let i = 1; i <= 4; i++) st = step(tr, st, fixAt(m(-90 + i * 22, 0), (10 + i) * 1000, 3));
+    expect(headingToRoute(st)).toBe(false);
+    expect(prompt(tr, st, 'car')?.key).toBe('0:pre');
+  });
+
+  it('buzzes for no setting off', () => {
+    const muted = (key: string) => buzzFor({ key, text: '' }, 'foot', true, 2);
+    expect(muted('0:pre')).toBeNull();
+    expect(muted('0:head')).toBeNull();
+    expect(muted('1:pre')).not.toBeNull();
   });
 });
 

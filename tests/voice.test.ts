@@ -52,4 +52,19 @@ describe('spoken prompts in the app', () => {
     vi.advanceTimersByTime(25_000);
     expect(ducked).toEqual([true, false]);
   });
+
+  it('keeps ducking under a new prompt when one stopped before ends late', async () => {
+    const voice = nativeVoice('en');
+    voice.speak('Turn right.');
+    voice.stop();
+    voice.speak('Rerouting: turn left.');
+    expect(ducked).toEqual([true, false, true]);
+    // The stopped prompt's engine call only now settles: the new one still speaks.
+    pending.shift()!();
+    await settle();
+    expect(ducked).toEqual([true, false, true]);
+    pending.shift()!();
+    await settle();
+    expect(ducked).toEqual([true, false, true, false]);
+  });
 });

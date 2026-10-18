@@ -2,6 +2,7 @@ package io.github.jibes.kosmos;
 
 import android.Manifest;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.database.Cursor;
 import android.media.AudioAttributes;
@@ -34,7 +35,7 @@ import com.getcapacitor.annotation.PermissionCallback;
 /**
  * The app's own small native helpers: its page in the system settings (where a refused location
  * permission is allowed again), other audio ducking under spoken prompts, a buzz for a turn
- * when the voice is off, the usage log handed to the share sheet, a place opened
+ * when the voice is off, the usage log handed to the share sheet, a place handed to another maps app, a place opened
  * or shared from another app, and a log line under its own tag. Release builds forward nothing
  * else from the WebView to the system log, so no position ever ends up there; the CI smoke test
  * reads the "loaded" line and web errors from this tag.
@@ -131,8 +132,8 @@ public class KosmosPlugin extends Plugin {
     }
 
     /**
-     * The usage log handed to the share sheet as a file (Save to Files, Drive, another app):
-     * written to the cache, shared by a content link that only the chosen app may read.
+     * A file handed to the share sheet (Save to Files, Drive, another app): the usage log or a
+     * backup, written to the cache, shared by a content link that only the chosen app may read.
      */
     @PluginMethod
     public void shareFile(PluginCall call) {
@@ -151,7 +152,7 @@ public class KosmosPlugin extends Plugin {
                 file
             );
             Intent send = new Intent(Intent.ACTION_SEND)
-                .setType("text/plain")
+                .setType(call.getString("type", "text/plain"))
                 .putExtra(Intent.EXTRA_STREAM, uri)
                 .putExtra(Intent.EXTRA_SUBJECT, name)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -160,8 +161,35 @@ public class KosmosPlugin extends Plugin {
             getContext().startActivity(chooser);
             call.resolve();
         } catch (IOException | IllegalArgumentException | ActivityNotFoundException e) {
-            Log.w(TAG, "could not share the log", e);
+            Log.w(TAG, "could not share the file", e);
             call.reject("Could not share", "UNAVAILABLE");
+        }
+    }
+
+    /**
+     * A place handed to another maps or navigation app ("Open in…"). The chooser leaves this app
+     * out: as a `geo:` handler it would list itself, and once picked as the default the link
+     * would only come back here.
+     */
+    @PluginMethod
+    public void openElsewhere(PluginCall call) {
+        String uri = call.getString("uri", "");
+        if (!uri.startsWith("geo:")) {
+            call.reject("Not a geo link", "INVALID");
+            return;
+        }
+        Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
+        Intent chooser = Intent.createChooser(view, call.getString("title", ""))
+            .putExtra(
+                Intent.EXTRA_EXCLUDE_COMPONENTS,
+                new ComponentName[] { new ComponentName(getContext(), MainActivity.class) }
+            )
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            getContext().startActivity(chooser);
+            call.resolve();
+        } catch (ActivityNotFoundException e) {
+            call.reject("No other app", "UNAVAILABLE");
         }
     }
 

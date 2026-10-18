@@ -110,6 +110,13 @@ public class NavLocationPlugin extends Plugin {
         }
     }
 
+    /** The notification's text: the next turn or stop as guidance shows it. */
+    @PluginMethod
+    public void update(PluginCall call) {
+        NavLocationService.show(getContext(), call.getString("title", ""), call.getString("text", ""));
+        call.resolve();
+    }
+
     @PluginMethod
     public void stop(PluginCall call) {
         getContext().stopService(new Intent(getContext(), NavLocationService.class));

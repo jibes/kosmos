@@ -42,21 +42,26 @@ const DUCK_MAX_MS = 20_000;
  */
 export function nativeVoice(lang: string): Voice {
   let speaking = 0;
+  /** Bumped by every release: a prompt from before it (stopped, or past the watchdog) no longer
+   * counts, so its late end cannot lift the ducking under a prompt spoken since. */
+  let round = 0;
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   const release = () => {
     speaking = 0;
+    round++;
     clearTimeout(watchdog);
     duckAudio(false);
   };
   return {
     speak(text) {
       if (speaking++ === 0) duckAudio(true);
+      const mine = round;
       clearTimeout(watchdog);
       watchdog = setTimeout(release, DUCK_MAX_MS);
       void TextToSpeech.speak({ text, lang, rate: 1, queueStrategy: QueueStrategy.Add })
         .catch(() => undefined)
         .finally(() => {
-          if (speaking > 0 && --speaking === 0) release();
+          if (mine === round && --speaking === 0) release();
         });
     },
     stop() {
