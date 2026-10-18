@@ -27,6 +27,7 @@ import { useRideCamera } from './ui/useRideCamera';
 import { useNavView } from './ui/useNavView';
 import { useNavControls } from './ui/useNavControls';
 import { useFixCamera } from './ui/useFixCamera';
+import { logEvent } from './ui/usageLog';
 import { useMapGestures } from './ui/useMapGestures';
 import { useRoute, type Trip } from './ui/useRoute';
 import { useGuidance } from './ui/useGuidance';
@@ -268,12 +269,14 @@ export function App() {
   useMapGestures(map, me, touching, {
     // The user's own move: a fix arriving late no longer flies the map away from it.
     drag: () => {
+      if (navRef.current) logEvent('cam.drag', { overview: view.overviewRef.current });
       flyOnFix.current = false;
       setFollow('off');
       view.setOverview(false);
     },
     // Zoom and tilt are the user's: following goes on with them; the overview is left.
     look: () => {
+      if (navRef.current) logEvent('cam.look', { overview: view.overviewRef.current });
       flyOnFix.current = false;
       if (!view.overviewRef.current) view.looked();
       else {
@@ -386,6 +389,7 @@ export function App() {
 
   const startNav = () => {
     if (!trip) return;
+    logEvent('nav.start', { mode: trip.mode });
     beginVoice(trip.mode);
     // A plan for "now" left open until its first vehicle has gone: the next ones instead.
     const tr = shown[chosen]?.transit;
@@ -433,6 +437,7 @@ export function App() {
     }
   };
   const endNav = useCallback(() => {
+    logEvent('nav.end', { arrived: nav.arrived });
     setNavigating(false);
     setConnAt(null);
     // At once, not after the next render: a compass reading in between would bring the arrow back.
@@ -443,7 +448,7 @@ export function App() {
     // Back on the map following north up, if following at all.
     if (followRef.current !== 'off') setFollow('position');
     map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: motion(800) });
-  }, [map, voice, setFollow]);
+  }, [map, voice, setFollow, nav.arrived]);
   useEffect(() => {
     if (!navigating) return;
     background(true, () =>
@@ -659,6 +664,7 @@ export function App() {
                   onRoute={openRoute}
                   onNearby={() => {
                     const p = selection.place;
+                    logEvent('place.nearby');
                     setNear(p);
                     search.clear();
                     map?.easeTo({

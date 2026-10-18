@@ -249,6 +249,12 @@ export const de = {
   speedLimit: 'Tempolimit {n}',
   notServed: 'entfällt heute',
   replanned: 'Die ist schon weg: hier die nächsten Verbindungen.',
+  usageLog: 'Nutzungsprotokoll',
+  usageLogKeep: 'Nutzungsprotokoll auf diesem Gerät führen',
+  usageLogText:
+    'Was wann genutzt wurde, um die App zu verbessern: nie ein Ort, nie, was du tippst. Es bleibt hier, bis du es speicherst; Ausschalten löscht es.',
+  usageLogSave: 'Protokoll speichern',
+  usageLogFailed: 'Das Protokoll konnte nicht gespeichert werden.',
   northUp: 'Norden oben',
   noCompass: 'Kein Kompass auf diesem Gerät',
   lanes: 'Fahrspuren',

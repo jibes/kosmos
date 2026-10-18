@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { TravelMode } from '../core/route';
 import { duckAudio, isNative } from './native';
 import { MUTED_KEY, store, storedMuted } from './prefs';
+import { logEvent } from './usageLog';
 
 /** Spoken guidance. Web Speech in browsers; the system engine (Google's voices) on Android. */
 export interface Voice {
@@ -82,6 +83,7 @@ export function useMuted(voice: Voice) {
   }, []);
   const toggle = useCallback(() => {
     const now = !muted;
+    logEvent('voice.mute', { muted: now, driving: driving.current });
     setMuted(now);
     if (driving.current) store(MUTED_KEY, now ? '1' : '0');
     if (now) voice.stop();

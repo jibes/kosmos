@@ -49,6 +49,7 @@ const Kosmos = isNative
       light(o: { on: boolean }): Promise<{ available: boolean }>;
       vibrate(o: { pattern: number[] }): Promise<void>;
       takeShared(): Promise<{ text?: string }>;
+      shareFile(o: { name: string; text: string }): Promise<void>;
       addListener(
         event: 'light',
         listener: (e: { lux: number }) => void,
@@ -63,6 +64,11 @@ const Kosmos = isNative
 /** The app's page in the system settings (Android), where location can be allowed again. */
 export const openAppSettings = Kosmos
   ? () => void Kosmos.openSettings().catch(() => undefined)
+  : null;
+
+/** Android: a text file to the share sheet (Save to Files, Drive, another app). */
+export const shareFile = Kosmos
+  ? (name: string, text: string) => Kosmos.shareFile({ name, text })
   : null;
 
 /** Android: other audio ducks while `on` (a prompt speaks), and comes back after. */

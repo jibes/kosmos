@@ -2,6 +2,7 @@ import type * as maplibregl from 'maplibre-gl';
 import { useCallback } from 'react';
 import type { Follow } from './Controls';
 import { motion } from './motion';
+import { logEvent } from './usageLog';
 import type { useNavView } from './useNavView';
 
 interface Options {
@@ -32,6 +33,7 @@ export function useNavControls({ map, follow, setFollow, view, canTurn, recenter
   );
 
   const locate = useCallback(() => {
+    logEvent('cam.locate', { from: overviewRef.current ? 'overview' : follow });
     if (overviewRef.current) {
       setOverview(false);
       if (follow === 'off') resume();
@@ -52,6 +54,7 @@ export function useNavControls({ map, follow, setFollow, view, canTurn, recenter
 
   const toggleOverview = useCallback(() => {
     const on = !overviewRef.current;
+    logEvent('cam.overview', { on });
     setOverview(on);
     if (!on && follow === 'off') resume();
     recenter();
@@ -59,6 +62,7 @@ export function useNavControls({ map, follow, setFollow, view, canTurn, recenter
 
   /** North up and flat; heading-up gives way to following with north up. */
   const north = useCallback(() => {
+    logEvent('cam.north');
     if (follow === 'compass') setFollow('position');
     level();
     map?.easeTo({ bearing: 0, pitch: 0, duration: motion(500) });

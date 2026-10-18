@@ -489,6 +489,39 @@
   margin: 4px 0 0;
 }
 
+/* The usage log: kept only when asked, saved as a file to hand on. */
+.usage-log {
+  display: grid;
+  gap: 6px;
+}
+
+.usage-log label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.usage-log input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.usage-log small {
+  color: var(--muted);
+}
+
+.save-log {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  background: var(--hover);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .fine {
   margin: 24px 0 0;
   font-size: 12px;

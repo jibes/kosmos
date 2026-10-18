@@ -19,6 +19,7 @@ import type { LngLat } from '../core/geo';
 import type { Recent } from '../core/recent';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
 import { getJson, nominatimSlot } from './http';
+import { logEvent } from './usageLog';
 import { fill, t, units } from '../i18n';
 import { touch } from './layout';
 import { useSwipe } from './useSwipe';
@@ -344,6 +345,7 @@ export function SearchBar({
         console.warn('search failed', e);
       }
       const status = timedOut ? 'slow' : 'error';
+      logEvent('search.photon', { status });
       if (q.length < 3) {
         setResponse({ key, places: [], status });
         return;
@@ -358,6 +360,7 @@ export function SearchBar({
       }
       const places = await viaNominatim().catch(() => null);
       if (fallback.signal.aborted) return;
+      logEvent('search.nominatim', { found: places?.length ?? -1 });
       if (places) done(places, true);
       else setResponse({ key, places: [], status });
     }, DEBOUNCE_MS);
@@ -409,19 +412,26 @@ export function SearchBar({
 
   /** Enter without picking one of several names: all of them on the map, nearest first. */
   const showFound = (places: Place[]) => {
+    logEvent('search.pick', { row: 'all', n: places.length });
     foundPlaces.current = places;
     setCategory(foundFor(q));
     input.current?.blur();
   };
 
-  const choice = (it: Item) =>
-    it.recent
-      ? 'place' in it.recent
-        ? pick(it.recent.place)
-        : choose(it.recent.kind as Kind)
-      : it.cat
-        ? choose(it.cat)
-        : pick(it.place);
+  /** Which kind of row was taken, for the usage log: never the text or the place. */
+  const rowOf = (it: Item) => {
+    if (it.recent) return 'recent';
+    if (it.place) return 'name';
+    if (blank) return 'common';
+    if (suggestions.includes(it)) return it.cat.startsWith('name:') ? 'chain' : 'kind';
+    return 'guess';
+  };
+  const choice = (it: Item) => {
+    logEvent('search.pick', { row: rowOf(it), at: items.indexOf(it) });
+    if (it.recent)
+      return 'place' in it.recent ? pick(it.recent.place) : choose(it.recent.kind as Kind);
+    return it.cat ? choose(it.cat) : pick(it.place);
+  };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // Keys while an input method composes a word belong to it: Enter commits the word.

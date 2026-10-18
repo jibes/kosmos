@@ -10,6 +10,7 @@ import {
   type RideState,
 } from '../core/ride';
 import { vibrate } from './native';
+import { logEvent } from './usageLog';
 import { DEPARTURE_CHECK_MS, tripUrl, withLiveTrip, type Transit } from '../core/transit';
 import { getJson } from './http';
 import type { Fix } from './useLocation';
@@ -59,6 +60,7 @@ export function useRide(o: Options) {
       const p = ridePrompt(live, st);
       if (p) {
         st = markRideSpoken(st, p.key);
+        logEvent('ride.prompt', { kind: p.kind, age: fix ? now - fix.time : null });
         // Never about a fix from a queue held up meanwhile: it is no longer true.
         if (!fix || sayable(fix.time, now)) {
           if (!opts.current.muted) opts.current.voice.speak(opts.current.say(live, p));

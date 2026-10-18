@@ -19,6 +19,7 @@ import type { Fix } from './useLocation';
 import type { Voice } from './voice';
 import { buzzFor } from '../core/haptics';
 import { vibrate } from './native';
+import { logEvent } from './usageLog';
 
 /** A fix this recent counts at once when guidance starts: the arrow need not wait for the next. */
 export const FRESH_MS = 10_000;
@@ -90,6 +91,12 @@ export function useNav(o: Options) {
       nav = step(tr, nav, fix);
       const p = prompt(tr, nav, mode);
       // Said once, and only while it is still true: never about a fix from a queue.
+      // The usage log: each prompt, how old its fix was, and whether it was said.
+      if (p) {
+        const fresh = sayable(fix.time, Date.now());
+        const age = Date.now() - fix.time;
+        logEvent('nav.prompt', { key: p.key, age, muted: opts.current.muted, fresh });
+      }
       if (p && sayable(fix.time, Date.now())) {
         nav = markSpoken(nav, p.key);
         const { muted, voice } = opts.current;

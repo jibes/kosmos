@@ -34,7 +34,7 @@ SHA-256 (release certificate): 00:82:00:1C:3F:66:FD:D2:C1:4F:80:85:2F:4A:D2:96:9
 
 ## Privacy
 
-No account, no analytics, no tracking. Recent searches stay on the device. Your location leaves the device as the start of a route you ask for, and, while the map follows you, as the map's centre or view that searches are biased to. The app talks to exactly five services:
+No account, no analytics, no tracking. Recent searches stay on the device. An optional usage log (About → Keep a usage log, off by default) records on the device which controls were used and when, never a place or what was typed, at most about 400 KB with the oldest dropped; it leaves the device only when you save it as a file, and turning it off deletes it. Your location leaves the device as the start of a route you ask for, and, while the map follows you, as the map's centre or view that searches are biased to. The app talks to exactly five services:
 
 | Service                                                                | For                                     | Sends                                                                                                                                                                                  |
 | ---------------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

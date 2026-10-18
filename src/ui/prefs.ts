@@ -8,6 +8,11 @@ export const HINTED_KEY = 'kosmos.hinted.v1';
 /** The last searches taken (`core/recent.ts`); never leaves the device. */
 export const RECENT_KEY = 'kosmos.recent.v1';
 
+/** The usage log, kept only when the user turns it on (`ui/usageLog.ts`); never leaves the device
+ * unless saved. */
+export const LOG_KEY = 'kosmos.log.v1';
+export const LOGGING_KEY = 'kosmos.logging.v1';
+
 export const stored = (key: string) => {
   try {
     return localStorage.getItem(key);

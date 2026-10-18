@@ -11,6 +11,7 @@ import { motion } from './motion';
 import type { Fix } from './useLocation';
 import { useNav } from './useNav';
 import type { Voice } from './voice';
+import { logEvent } from './usageLog';
 import type { Follow } from './Controls';
 import type { Adjust } from './useNavView';
 import { navZoomFor } from '../core/navView';
@@ -54,6 +55,7 @@ export function useGuidance(o: Options) {
   const { adjustRef, lookedRef } = o;
   const { settled, retry } = o;
   const lastView = useRef<NavCamera | null>(null);
+  const autoRef = useRef(false);
   /** What is left of the route from the user on, for the overview. */
   const rest = useRef<[number, number][]>([]);
   const ways = useRef({ route: o.route, mode: o.mode });
@@ -124,7 +126,11 @@ export function useGuidance(o: Options) {
         };
       }
       const away = s && !onLine && !nav.arrived ? s.point : null;
-      if (away && distance(f, { lng: away[0], lat: away[1] }) > OVERVIEW_M) {
+      const far = !!away && distance(f, { lng: away[0], lat: away[1] }) > OVERVIEW_M;
+      // The usage log: how often the camera takes in the way back by itself.
+      if (far !== autoRef.current) logEvent('nav.autoOverview', { on: far });
+      autoRef.current = far;
+      if (away && far) {
         overviewNav(map, center, away, cameraBearing(map, bearing), motion(1000));
       } else {
         follow(map, motion(1000));

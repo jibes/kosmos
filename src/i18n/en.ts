@@ -247,6 +247,12 @@ export const en = {
   speedLimit: 'limit {n}',
   notServed: 'not served today',
   replanned: 'That one has left: here are the next connections.',
+  usageLog: 'Usage log',
+  usageLogKeep: 'Keep a usage log on this device',
+  usageLogText:
+    'What was used and when, to improve the app: never a place, never what you type. It stays here until you save it; turning it off deletes it.',
+  usageLogSave: 'Save log',
+  usageLogFailed: 'The log could not be saved.',
   northUp: 'North up',
   noCompass: 'No compass on this device',
   lanes: 'Lanes',

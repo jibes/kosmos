@@ -475,6 +475,47 @@ test.describe('map', () => {
     // Focus goes back to what opened it.
     await expect(page.getByRole('button', { name: /OpenStreetMap/ })).toBeFocused();
   });
+
+  test('keeps a usage log only when asked, saved as a file without places or words', async ({
+    page,
+  }) => {
+    const about = () => page.getByRole('button', { name: '© OpenStreetMap' }).click();
+    await about();
+    const keep = page.getByRole('checkbox', { name: 'Keep a usage log on this device' });
+    await expect(keep).not.toBeChecked();
+    await keep.check();
+    await page.keyboard.press('Escape');
+    // Something used: a kind of place taken from the list.
+    await jump(page, { ...CENTER, zoom: 14 });
+    const input = page.getByRole('combobox');
+    await input.fill('restaurant');
+    const kind = page.getByRole('option').first();
+    await expect(kind).toHaveText(/Restaurants/);
+    await kind.click();
+    await about();
+    const saved = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Save log' }).click();
+    const file = await saved;
+    expect(file.suggestedFilename()).toMatch(/^kosmos-log-\d{4}-\d{2}-\d{2}\.txt$/);
+    const text = await (
+      await file.createReadStream()
+    )
+      .toArray()
+      .then((c) => Buffer.concat(c).toString());
+    const lines = text
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+    expect(lines[0]).toMatchObject({ e: 'log.export' });
+    expect(lines.some((l) => l.e === 'search.pick' && l.row === 'kind')).toBe(true);
+    // Never what was typed, never a place.
+    expect(text).not.toContain('restaurant');
+    expect(text).not.toMatch(/"(lat|lng|lon)"/);
+    // Off deletes it.
+    await keep.uncheck();
+    expect(await page.evaluate(() => localStorage.getItem('kosmos.log.v1'))).toBeNull();
+    await expect(page.getByRole('button', { name: 'Save log' })).toHaveCount(0);
+  });
 });
 
 test('works offline after the first visit', async ({ context, page }) => {

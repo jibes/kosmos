@@ -7,6 +7,7 @@ import { inTunnel, isNight, TUNNEL_HOLD_MS } from '../core/daylight';
 import type { Snap } from '../core/nav';
 import { MAP_SOURCE } from '../core/style';
 import { isNative, watchLight } from './native';
+import { logEvent } from './usageLog';
 
 type Pt = [number, number];
 
@@ -43,9 +44,14 @@ export function useNavTheme(active: boolean, ambient: boolean) {
   /** Night or a tunnel at the last fix; `null` before the first. */
   const sun = useRef<boolean | null>(null);
   const around = useRef<Ambient>(AMBIENT_START);
+  const shown = useRef<boolean | null>(null);
   const decide = useCallback(() => {
     const dim = around.current.dark === true;
-    setDark(sun.current === null ? (dim ? true : null) : sun.current || dim);
+    const next = sun.current === null ? (dim ? true : null) : sun.current || dim;
+    // The usage log: what turned it, night or tunnel (`sun`) or the light sensor alone.
+    if (next !== shown.current) logEvent('theme', { dark: next, sun: sun.current, light: dim });
+    shown.current = next;
+    setDark(next);
   }, []);
   const lastTunnel = useRef(-Infinity);
   /**

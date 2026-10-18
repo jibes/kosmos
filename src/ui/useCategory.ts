@@ -1,4 +1,3 @@
-import { motion } from './motion';
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { foundOf, nearBest, nearest, type Kind } from '../core/categories';
@@ -6,6 +5,8 @@ import { distance, type LngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { SEARCH_SOURCE } from '../core/style';
 import { findCategory, seen, sharedNameInView } from './categorySearch';
+import { motion } from './motion';
+import { logEvent } from './usageLog';
 
 const SEARCH_LAYERS = ['search-dots', 'search-names'];
 
@@ -248,11 +249,15 @@ export function useCategory(
 
   /** Search the category again where the map is now. */
   const searchHere = useCallback(() => {
+    logEvent('search.here.tap');
     setMoved(false);
     setRun((n) => n + 1);
   }, []);
 
   // Names found are Photon's answer, not the map's: there is no area to search again.
   const offerHere = !!active && foundOf(active) === null && moved;
+  useEffect(() => {
+    if (offerHere) logEvent('search.here.offer');
+  }, [offerHere]);
   return { onCategory, names, showAll, searchHere, run, offerHere, results, highlight };
 }

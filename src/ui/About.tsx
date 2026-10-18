@@ -1,11 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { CloseIcon, Mark } from './icons';
+import { logging, saveLog, setLogging } from './usageLog';
 
 const SOURCE = 'https://github.com/jibes/kosmos';
 
 export function About({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [keeping, setKeeping] = useState(logging);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     const d = dialog.current;
@@ -45,6 +48,31 @@ export function About({ onClose }: { onClose: () => void }) {
           <dd>{t.creditsText}</dd>
           <dt>{t.privacy}</dt>
           <dd>{t.privacyText}</dd>
+          <dt>{t.usageLog}</dt>
+          <dd className="usage-log">
+            <label>
+              <input
+                type="checkbox"
+                checked={keeping}
+                onChange={(e) => {
+                  setLogging(e.target.checked);
+                  setKeeping(e.target.checked);
+                }}
+              />
+              {t.usageLogKeep}
+            </label>
+            <small>{t.usageLogText}</small>
+            {keeping && (
+              <button
+                type="button"
+                className="save-log"
+                onClick={() => void saveLog().then((ok) => setSaveFailed(!ok))}
+              >
+                {t.usageLogSave}
+              </button>
+            )}
+            {saveFailed && <small role="alert">{t.usageLogFailed}</small>}
+          </dd>
         </dl>
         <p className="fine">
           {t.licence}{' '}
