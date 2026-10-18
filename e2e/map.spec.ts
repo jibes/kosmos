@@ -25,7 +25,7 @@ test.describe('map', () => {
     await jump(page, { ...CENTER, zoom: 15.2 });
     await shot(page, info, 'city');
     await jump(page, { ...CENTER, zoom: 16.2, pitch: 60, bearing: -25 });
-    await expect(page.getByRole('button', { name: /north|Norden/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /north|Norden/i })).toBeVisible();
     await shot(page, info, 'city-3d');
   });
 
@@ -207,7 +207,7 @@ test.describe('map', () => {
     expect(await hit('Share')).toBe('Share');
   });
 
-  test('follows the compass on the second tap of the location button', async ({
+  test('follows with the location button, turns with the compass by the needle', async ({
     page,
     context,
   }) => {
@@ -288,22 +288,29 @@ test.describe('map', () => {
 
     await face(90);
 
+    // The location button only follows; which way is up is the needle's.
     await locate.click();
+    await expect(locate).toHaveAttribute('data-follow', 'position');
+    const needle = page.locator('.controls .compass');
+    await expect(needle).toHaveAttribute('aria-label', 'Turn map with compass');
+    await needle.click();
     await expect(locate).toHaveAttribute('data-follow', 'compass');
+    await expect(needle).toHaveAttribute('data-heading', 'true');
     await face(90);
     // Facing magnetic east, the map turns to east of true north by the declination.
     await expect
       .poll(() => page.evaluate(() => window.kosmos!.getBearing()))
       .toBeCloseTo(90 + decl, 0);
 
-    // The orientation button returns to north-up but keeps following.
-    await page.getByRole('button', { name: /north|Norden/ }).click();
+    // The needle returns to north-up but keeps following.
+    await expect(needle).toHaveAttribute('aria-label', 'North up');
+    await needle.click();
     await expect(locate).toHaveAttribute('data-follow', 'position');
     await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getBearing()))).toBe(0);
 
     // A drag while the compass turns the map every frame still pans, and leaves compass mode
     // (a turn once cancelled every gesture the moment it began).
-    await locate.click();
+    await needle.click();
     await expect(locate).toHaveAttribute('data-follow', 'compass');
     await page.evaluate(() => {
       let alpha = 0;

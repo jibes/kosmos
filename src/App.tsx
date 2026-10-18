@@ -480,27 +480,22 @@ export function App() {
     void compass.start();
     // The user's own place again: distances count from there, not from a "nearby" place.
     setNear(null);
-    if (navigating && navControls.locate()) return;
-    // Following, yet the map shows somewhere else (a fit to results): back to the user first.
-    if (follow !== 'off' && fix && map && !map.isMoving() && offCentre(map, fix)) {
-      map.flyTo(
-        { center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: motion(1400) },
-        ASKED,
-      );
-      return;
-    }
-    if (follow === 'position') {
-      // Second tap: let the map turn with the phone, like a held paper map.
-      if (compass.available) setFollow('compass');
-      else showToast(t.noCompass);
-      return;
-    }
-    if (follow === 'compass') {
-      setFollow('position');
-      map?.easeTo({ bearing: 0, duration: motion(500) });
+    if (navigating) return navControls.locate();
+    // Following already: only back to the user when the map shows somewhere else (a fit to
+    // results); which way is up is the needle's.
+    if (follow !== 'off') {
+      if (fix && map && !map.isMoving() && offCentre(map, fix)) {
+        map.flyTo(
+          { center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: motion(1400) },
+          ASKED,
+        );
+      }
       return;
     }
     setFollow('position');
+    flyToMe();
+  };
+  const flyToMe = () => {
     if (fix && map) {
       map.flyTo(
         { center: [fix.lng, fix.lat], zoom: Math.max(map.getZoom(), 15), duration: motion(1400) },
@@ -729,13 +724,23 @@ export function App() {
         <Controls
           map={map}
           status={status}
-          follow={overview ? 'off' : follow}
+          follow={follow}
           guiding={navigating}
+          canTurn={navigating && !riding ? true : compass.available}
           onLocate={locate}
-          onNorth={() => {
-            if (navigating) return navControls.north();
-            if (follow === 'compass') setFollow('position');
-            map?.easeTo({ bearing: 0, pitch: 0, duration: motion(500) });
+          onTurn={() => {
+            if (navigating) return navControls.turn();
+            // North up (and flat) from heading-up or a hand's turn; else heading-up, following.
+            const turned = !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5);
+            if (follow === 'compass' || turned) {
+              if (follow === 'compass') setFollow('position');
+              map?.easeTo({ bearing: 0, pitch: 0, duration: motion(500) });
+              return;
+            }
+            start();
+            void compass.start();
+            setFollow('compass');
+            if (follow === 'off') flyToMe();
           }}
           overview={navigating ? overview : undefined}
           onOverview={navControls.toggleOverview}

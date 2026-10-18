@@ -25,32 +25,20 @@ interface Options {
  * button turns heading-up and back to north up. Zoom and tilt are the user's at any time.
  */
 export function useNavControls({ map, follow, setFollow, view, canTurn, recenter }: Options) {
-  const { overviewRef, setOverview, level } = view;
+  const { overviewRef, setOverview, level, unlevel } = view;
   /** Following again after looking around: heading-up where it can, as each trip starts. */
   const resume = useCallback(
     () => setFollow(canTurn ? 'compass' : 'position'),
     [setFollow, canTurn],
   );
 
+  /** Follow the user again: out of the overview, or after looking around; always back to them. */
   const locate = useCallback(() => {
     logEvent('cam.locate', { from: overviewRef.current ? 'overview' : follow });
-    if (overviewRef.current) {
-      setOverview(false);
-      if (follow === 'off') resume();
-    } else if (follow === 'off') {
-      resume();
-    } else if (follow === 'position') {
-      if (!canTurn) return false;
-      setFollow('compass');
-    } else {
-      setFollow('position');
-      map?.easeTo({ bearing: 0, duration: motion(500) });
-      recenter(0);
-      return true;
-    }
+    if (overviewRef.current) setOverview(false);
+    if (follow === 'off') resume();
     recenter();
-    return true;
-  }, [map, follow, setFollow, overviewRef, setOverview, resume, canTurn, recenter]);
+  }, [follow, overviewRef, setOverview, resume, recenter]);
 
   const toggleOverview = useCallback(() => {
     const on = !overviewRef.current;
@@ -60,14 +48,26 @@ export function useNavControls({ map, follow, setFollow, view, canTurn, recenter
     recenter();
   }, [overviewRef, setOverview, follow, resume, recenter]);
 
-  /** North up and flat; heading-up gives way to following with north up. */
-  const north = useCallback(() => {
-    logEvent('cam.north');
-    if (follow === 'compass') setFollow('position');
-    level();
-    map?.easeTo({ bearing: 0, pitch: 0, duration: motion(500) });
-    recenter(0);
-  }, [map, follow, setFollow, level, recenter]);
+  /**
+   * The needle: north up and flat from heading-up or a hand's turn; else heading-up again, at
+   * the way of travel's own tilt, following.
+   */
+  const turn = useCallback(() => {
+    const turned = !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5);
+    logEvent('cam.turn', { from: follow, turned });
+    if (follow === 'compass' || turned) {
+      if (follow === 'compass') setFollow('position');
+      level();
+      map?.easeTo({ bearing: 0, pitch: 0, duration: motion(500) });
+      recenter(0);
+      return;
+    }
+    if (!canTurn) return;
+    unlevel();
+    if (overviewRef.current) setOverview(false);
+    setFollow('compass');
+    recenter();
+  }, [map, follow, setFollow, level, unlevel, canTurn, overviewRef, setOverview, recenter]);
 
-  return { locate, toggleOverview, north };
+  return { locate, toggleOverview, turn };
 }

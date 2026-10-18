@@ -40,5 +40,19 @@ export function useNavView() {
   const level = useCallback(() => {
     adjustRef.current = { ...adjustRef.current, pitch: 0 };
   }, []);
-  return { overview, overviewRef, setOverview, adjustRef, lookedRef, reset, looked, level };
+  /** The way of travel's own tilt again, as heading-up starts it. */
+  const unlevel = useCallback(() => {
+    adjustRef.current = { ...adjustRef.current, pitch: null };
+  }, []);
+  return {
+    overview,
+    overviewRef,
+    setOverview,
+    adjustRef,
+    lookedRef,
+    reset,
+    looked,
+    level,
+    unlevel,
+  };
 }

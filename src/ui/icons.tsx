@@ -96,6 +96,15 @@ export const CompassModeIcon = () => (
   </Svg>
 );
 
+/** The whole route: where it starts, the way, where it ends. */
+export const WholeRouteIcon = () => (
+  <Svg>
+    <circle cx="4.8" cy="19.2" r="2.4" />
+    <path d="M7.1 17.6c5.2-1.6 2.6-9.4 9.2-11.1" strokeDasharray="2.4 2.4" />
+    <circle cx="19" cy="5.2" r="2.9" fill="currentColor" />
+  </Svg>
+);
+
 export const NoLocationIcon = () => (
   <Svg>
     <path d="M20 4 13.6 18.6M11.4 13.2 4 11l9.5-4.2M3 3l18 18" />

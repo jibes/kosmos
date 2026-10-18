@@ -644,10 +644,12 @@ test.describe('guidance', () => {
         return { zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() };
       });
     await expect.poll(async () => Math.round((await cam()).pitch)).toBe(55);
-    // Heading-up from the start: the button's next step is north up.
+    // Heading-up from the start, following: the location button pressed, the needle's next
+    // step north up.
     const locate = page.locator('.controls .ctl[data-follow]');
-    await expect(locate).toHaveAttribute('aria-label', 'North up');
-    await expect(locate).toHaveAttribute('data-following', 'true');
+    const needle = page.locator('.controls .compass');
+    await expect(locate).toHaveAttribute('aria-pressed', 'true');
+    await expect(needle).toHaveAttribute('aria-label', 'North up');
     // Zooming out by hand does not stop following: the next fix keeps the zoom and moves on.
     const before = (await cam()).zoom;
     const box = (await page.locator('.map').boundingBox())!;
@@ -667,27 +669,30 @@ test.describe('guidance', () => {
     // A few metres on, slowly: the speed's own zoom stays as it was.
     await go(from.lng, from.lat - 0.00004);
     await page.waitForTimeout(1600);
-    await expect(locate).toHaveAttribute('data-following', 'true');
+    await expect(locate).toHaveAttribute('aria-pressed', 'true');
     expect(Math.abs((await cam()).zoom - zoomed)).toBeLessThan(0.3);
-    // Next: north up, still following.
-    await locate.click();
+    // The needle: north up and flat, still following.
+    await needle.click();
     await expect.poll(async () => Math.round((await cam()).bearing)).toBe(0);
-    await expect(locate).toHaveAttribute('aria-label', 'Turn map with your way');
-    // The needle levels the map; following goes on.
-    await page.getByRole('button', { name: 'Reset to north' }).click();
     await expect.poll(async () => Math.round((await cam()).pitch)).toBe(0);
+    await expect(needle).toHaveAttribute('aria-label', 'Turn map with your way');
     await go(from.lng, from.lat - 0.003);
     await page.waitForTimeout(1600);
     expect(Math.round((await cam()).pitch)).toBe(0);
-    await expect(locate).toHaveAttribute('data-following', 'true');
-    // A drag lets go; the button resumes heading-up.
+    await expect(locate).toHaveAttribute('aria-pressed', 'true');
+    // And heading-up again, at the drive's own tilt.
+    await needle.click();
+    await expect.poll(async () => Math.round((await cam()).pitch)).toBe(55);
+    await expect(needle).toHaveAttribute('aria-label', 'North up');
+    // A drag lets go; the location button follows again, heading-up as before.
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2 + 60, { steps: 6 });
     await page.mouse.up();
-    await expect(locate).not.toHaveAttribute('data-following', 'true');
+    await expect(locate).toHaveAttribute('aria-pressed', 'false');
     await locate.click();
-    await expect(locate).toHaveAttribute('aria-label', 'North up');
+    await expect(locate).toHaveAttribute('aria-pressed', 'true');
+    await expect(locate).toHaveAttribute('data-follow', 'compass');
   });
 
   test('shows a signed turn by where it leads, the road below', async ({ page, context }, info) => {
