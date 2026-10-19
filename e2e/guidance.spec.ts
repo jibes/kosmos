@@ -477,10 +477,7 @@ test.describe('guidance', () => {
     await expect(page.getByRole('button', { name: 'Show the whole route' })).toBeVisible();
   });
 
-  test('glides the arrow along the road between fixes, the camera with it', async ({
-    page,
-    context,
-  }) => {
+  test('runs the arrow on between uneven fixes, the camera with it', async ({ page, context }) => {
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const go = (lng: number, lat: number) =>
       context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
@@ -496,7 +493,7 @@ test.describe('guidance', () => {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expect(page.locator('.me.nav')).toHaveCount(1);
     await page.waitForTimeout(1500);
-    // Every frame of the next fix's move: where the arrow is on the map and on the screen.
+    // Every frame while fixes come: where the arrow is on the map and on the screen.
     await page.evaluate(() => {
       const w = window as unknown as { frames: number[][]; watching: boolean };
       w.frames = [];
@@ -504,32 +501,40 @@ test.describe('guidance', () => {
       const tick = () => {
         const el = document.querySelector('.me.nav')!.getBoundingClientRect();
         const c = window.kosmos!.getCenter();
-        w.frames.push([c.lat, el.x + el.width / 2, el.y + el.height / 2]);
+        w.frames.push([performance.now(), c.lat, el.x + el.width / 2, el.y + el.height / 2]);
         if (w.watching) requestAnimationFrame(tick);
       };
       tick();
     });
-    // 60 m on down the first street.
-    await go(from.lng, from.lat - 0.00055);
-    await page.waitForTimeout(1600);
+    // 10 m/s down the first street, the fixes uneven as a phone's: one each second, but every
+    // other one hard on the heels of the one before.
+    const t0 = Date.now();
+    for (const at of [0, 1000, 1100, 2100, 2200, 3200, 3300]) {
+      await page.waitForTimeout(Math.max(0, at - (Date.now() - t0)));
+      const s = (Date.now() - t0) / 1000;
+      await go(from.lng, from.lat - 0.00009 * (s + 1));
+    }
+    await page.waitForTimeout(300);
     const frames = await page.evaluate(() => {
       const w = window as unknown as { frames: number[][]; watching: boolean };
       w.watching = false;
       return w.frames;
     });
-    // Through the metres in between, not in one jump: frames on the way, however few a busy
-    // machine draws.
-    const lats = frames.map(([lat]) => lat);
-    const [a, b] = [lats[0], lats.at(-1)!];
-    expect(Math.abs(b - a)).toBeGreaterThan(0.0002);
-    const between = lats.filter((lat) => {
-      const k = (lat - a) / (b - a);
-      return k > 0.15 && k < 0.85;
-    });
-    expect(between.length).toBeGreaterThan(0);
+    // Under way, the map moves on every stretch of the drive, never stands and then jumps.
+    const start = frames[0][0];
+    const moving = frames.filter(([t]) => t > start + 1500 && t < start + 3500);
+    let still = 0;
+    let worst = 0;
+    for (let i = 1; i < moving.length; i++) {
+      still = moving[i][1] === moving[i - 1][1] ? still + moving[i][0] - moving[i - 1][0] : 0;
+      worst = Math.max(worst, still);
+    }
+    expect(moving.length).toBeGreaterThan(3);
+    expect(Math.abs(moving.at(-1)![1] - moving[0][1])).toBeGreaterThan(0.0001);
+    expect(worst).toBeLessThan(250);
     // On screen the arrow stays where it is: the map moves under it.
-    const xs = frames.map(([, x]) => x);
-    const ys = frames.map(([, , y]) => y);
+    const xs = frames.map(([, , x]) => x);
+    const ys = frames.map(([, , , y]) => y);
     expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(3);
     expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(3);
   });

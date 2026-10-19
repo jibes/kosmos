@@ -711,24 +711,28 @@ test.describe('routes', () => {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const banner = page.locator('.nav-banner');
     await expect(banner).toBeVisible();
-    // Once the camera has followed the first fix (its glide over), the map is looked around.
-    await page.waitForTimeout(1600);
-    // Looking around the map: the café on the way.
+    // Once the camera has followed the first fix, the map is looked around: the café on the
+    // way (again, should the camera still have been on its way back to the user).
+    await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getPitch()))).toBe(55);
     const cafe = { lng: CENTER.lng + 140 / 67800, lat: CENTER.lat - 170 / 111200 };
-    await jump(page, { ...cafe, zoom: 17 });
-    const at = await screenAt(page, cafe.lng, cafe.lat);
+    let at = { x: 0, y: 0 };
     await expect
-      .poll(() =>
-        page.evaluate(
-          ({ x, y }) =>
-            window
-              .kosmos!.queryRenderedFeatures([
-                [x - 10, y - 10],
-                [x + 10, y + 10],
-              ])
-              .some((f) => f.properties.name === 'Café Einstein'),
-          at,
-        ),
+      .poll(
+        async () => {
+          await jump(page, { ...cafe, zoom: 17 });
+          at = await screenAt(page, cafe.lng, cafe.lat);
+          return page.evaluate(
+            ({ x, y }) =>
+              window
+                .kosmos!.queryRenderedFeatures([
+                  [x - 10, y - 10],
+                  [x + 10, y + 10],
+                ])
+                .some((f) => f.properties.name === 'Café Einstein'),
+            at,
+          );
+        },
+        { timeout: 15_000 },
       )
       .toBe(true);
     const asked = routeRequests.length;

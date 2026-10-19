@@ -123,7 +123,7 @@ export function useGuidance(o: Options) {
         ? travelHeading(s.bearing, compass.current(), nav.moving)
         : (course ?? compass.current());
       movingRef.current = nav.moving;
-      meRef.current?.heading(bearing);
+      if (!nav.moving) meRef.current?.heading(bearing);
       if (s && map) updateTheme(map, s, nav.time);
       // Closer in as a turn comes (not for going straight on or setting off).
       const m = ways.current.route?.maneuvers[nav.next];
@@ -138,19 +138,29 @@ export function useGuidance(o: Options) {
       const coords = ways.current.route?.coords;
       rest.current = s && coords ? routeRest(coords, s.segment, center) : [center];
 
-      // About the time to the next fix, so the arrow is never still and never jumps.
-      const gap = lastFix.current ? f.time - lastFix.current : 1000;
+      // The same fix twice (both location sources, or a retry) is not news: the arrow runs on.
+      const again = f.time === lastFix.current;
       lastFix.current = f.time;
-      const ms = motion(Math.max(300, Math.min(1500, gap)));
-      const glideTo = (cam: ReturnType<typeof followCamera> | null) =>
+      const glideTo = (cam: ReturnType<typeof followCamera> | null) => {
+        if (again) return;
         glide?.to(
-          { point: center, along: onLine ? s.along : null },
-          ms,
+          {
+            point: center,
+            along: onLine ? s.along : null,
+            speed: nav.moving ? nav.speed : 0,
+            bearing,
+          },
           line,
           cam,
-          (p) => meRef.current?.update({ lng: p[0], lat: p[1], accuracy: f.accuracy }),
+          (p, heading) => {
+            meRef.current?.update({ lng: p[0], lat: p[1], accuracy: f.accuracy });
+            // Standing, the compass turns it (`useCompassFollow`).
+            if (movingRef.current) meRef.current?.heading(heading);
+          },
           () => !touchingRef.current.size && !lookedRef.current && !overviewRef.current,
+          motion(1) === 0,
         );
+      };
 
       if (!map || touchingRef.current.size || followRef.current === 'off') return glideTo(null);
       if (overviewRef.current) {
