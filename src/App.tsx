@@ -31,6 +31,7 @@ import { useFavouriteLayer } from './ui/useFavourites';
 import { useContactLayer, useContactsRow } from './ui/useContacts';
 import { logEvent } from './ui/usageLog';
 import { useMapGestures } from './ui/useMapGestures';
+import { useDotInView } from './ui/useDotInView';
 import { useRoute, viaOf, type Trip } from './ui/useRoute';
 import { useStopState, useStops } from './ui/useStops';
 import { useGuidance } from './ui/useGuidance';
@@ -308,6 +309,7 @@ export function App() {
     touching,
     setFollow,
   });
+  useDotInView(map, fix, me, compass, navigating || follow === 'compass');
 
   // Route: alternatives under the chosen one; refit only when the trip itself changes.
   const shown = route.routes;

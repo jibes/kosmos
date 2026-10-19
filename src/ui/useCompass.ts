@@ -35,18 +35,14 @@ export function useCompass(where: LngLat | null) {
     for (const fn of listeners.current) fn(heading.current);
   }, [lat, lng]);
   const [available, setAvailable] = useState(false);
+  /** Listening now: detaches its listeners. */
   const stop = useRef<(() => void) | null>(null);
+  /** Started once (the user asked): `need` may listen again without asking. */
+  const started = useRef(false);
+  const needed = useRef(true);
 
-  /** Call from a tap: iOS only grants orientation access inside a user gesture. */
-  const start = useCallback(async () => {
-    if (stop.current || typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) {
-      return;
-    }
-    // iOS (and newer Chromium) gate sensors behind requestPermission. A refusal only means no
-    // events will arrive, so listen regardless rather than giving up on browsers that answer
-    // "denied" without asking.
-    const D = window.DeviceOrientationEvent as unknown as IOSOrientationEvent;
-    if (D.requestPermission) await D.requestPermission().catch(() => 'denied');
+  const attach = useCallback(() => {
+    if (stop.current) return;
     const onEvent = (e: Event) => {
       const o = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
       const h = headingOf(
@@ -66,15 +62,48 @@ export function useCompass(where: LngLat | null) {
       heading.current = filter.current.heading;
       for (const fn of listeners.current) fn(heading.current);
     };
-    // Chromium sends north-anchored readings as deviceorientationabsolute, Safari and some
-    // browsers as deviceorientation (absolute or with webkitCompassHeading). Listen to both;
-    // headingOf drops relative readings, so a wrong north never gets in.
-    const types = ['deviceorientationabsolute', 'deviceorientation'];
+    // Chromium sends north-anchored readings as deviceorientationabsolute, and its
+    // deviceorientation is relative (headingOf drops it): listening to that too would run a
+    // second sensor for nothing. Safari and Firefox send north in deviceorientation (absolute,
+    // or with webkitCompassHeading).
+    const types =
+      'ondeviceorientationabsolute' in window
+        ? ['deviceorientationabsolute']
+        : ['deviceorientation'];
     for (const type of types) window.addEventListener(type, onEvent);
     stop.current = () => {
       for (const type of types) window.removeEventListener(type, onEvent);
+      stop.current = null;
     };
   }, []);
+
+  /** Call from a tap: iOS only grants orientation access inside a user gesture. */
+  const start = useCallback(async () => {
+    if (started.current || typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) {
+      return;
+    }
+    started.current = true;
+    // iOS (and newer Chromium) gate sensors behind requestPermission. A refusal only means no
+    // events will arrive, so listen regardless rather than giving up on browsers that answer
+    // "denied" without asking.
+    const D = window.DeviceOrientationEvent as unknown as IOSOrientationEvent;
+    if (D.requestPermission) await D.requestPermission().catch(() => 'denied');
+    if (needed.current) attach();
+  }, [attach]);
+
+  /**
+   * Whether anything shows a heading now (the dot in view, the map turning with it, guidance):
+   * the sensor runs only then, as it costs battery 10 to 60 times a second. Its smoothing is
+   * kept, so it goes on from where it was.
+   */
+  const need = useCallback(
+    (on: boolean) => {
+      needed.current = on;
+      if (!on) stop.current?.();
+      else if (started.current) attach();
+    },
+    [attach],
+  );
 
   useEffect(() => () => stop.current?.(), []);
 
@@ -88,7 +117,7 @@ export function useCompass(where: LngLat | null) {
   const current = useCallback(() => heading.current, []);
 
   return useMemo(
-    () => ({ start, subscribe, current, available }),
-    [start, subscribe, current, available],
+    () => ({ start, need, subscribe, current, available }),
+    [start, need, subscribe, current, available],
   );
 }

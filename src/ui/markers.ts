@@ -42,11 +42,22 @@ export function userMarker(map: maplibregl.Map) {
   let pos: LngLat | null = null;
   let navigating = false;
   let facingDeg: number | null = null;
+  /** As drawn last: a write that changes nothing still costs a style recalculation. */
+  let rotation: number | null = null;
+  let ringPx = -1;
+  const rotate = (deg: number) => {
+    // Less than a third of a degree is not seen; the compass sends 10 to 60 readings a second.
+    if (rotation !== null && Math.abs(((((deg - rotation) % 360) + 540) % 360) - 180) < 0.3) return;
+    rotation = deg;
+    marker.setRotation(deg);
+  };
 
   const resize = () => {
     if (!pos) return;
-    const d = (2 * accuracy) / metersPerPixel(pos.lat, map.getZoom());
-    ring.style.width = ring.style.height = `${Math.min(d, 4000)}px`;
+    const d = Math.round(Math.min((2 * accuracy) / metersPerPixel(pos.lat, map.getZoom()), 4000));
+    if (d === ringPx) return;
+    ringPx = d;
+    ring.style.width = ring.style.height = `${d}px`;
     ring.style.opacity = d < 24 ? '0' : '1';
   };
   map.on('zoom', resize);
@@ -61,17 +72,23 @@ export function userMarker(map: maplibregl.Map) {
     },
     /** Turns the dot into an arrow along `deg` while navigating; `null` turns it back. */
     heading(deg: number | null) {
-      navigating = deg !== null;
-      el.classList.toggle('nav', navigating);
-      // Lying on a tilted map it shrinks to a wedge; the arrow faces the screen instead.
-      marker.setPitchAlignment(navigating ? 'viewport' : 'map');
-      marker.setRotation(deg ?? facingDeg ?? 0);
+      if (navigating !== (deg !== null)) {
+        navigating = deg !== null;
+        el.classList.toggle('nav', navigating);
+        // Lying on a tilted map it shrinks to a wedge; the arrow faces the screen instead.
+        marker.setPitchAlignment(navigating ? 'viewport' : 'map');
+      }
+      rotate(deg ?? facingDeg ?? 0);
     },
     /** The compass beam: where the phone points, like a torch; `null` hides it. */
     facing(deg: number | null) {
+      if ((facingDeg === null) !== (deg === null)) el.classList.toggle('facing', deg !== null);
       facingDeg = deg;
-      el.classList.toggle('facing', deg !== null);
-      if (!navigating) marker.setRotation(deg ?? 0);
+      if (!navigating) rotate(deg ?? 0);
+    },
+    /** Off the map's view: its pulse stops (`.away`), as it would keep the screen drawing. */
+    away(on: boolean) {
+      el.classList.toggle('away', on);
     },
     remove() {
       map.off('zoom', resize);

@@ -46,7 +46,7 @@ No account, no analytics, no tracking. Recent searches, favourites and contacts'
 
 ## Android permissions
 
-Location (while navigating it runs in a foreground service with a notification, so directions continue with the screen off; turn-by-turn needs precise location, and the app asks once to change approximate to precise and explains otherwise), notifications (asked for once, on the first navigation, Android 13+, only for that notification), internet. Nothing runs in the background outside navigation. Location comes from Android's own location service (GPS, or the network), so the app needs no Google Play services and works on de-Googled phones. Release builds write nothing about your position to the system log.
+Location (while navigating it runs in a foreground service with a notification, so directions continue with the screen off; turn-by-turn needs precise location, and the app asks once to change approximate to precise and explains otherwise), notifications (asked for once, on the first navigation, Android 13+, only for that notification), internet. Nothing runs in the background outside navigation. Location comes from Android's own location service (GPS, or the network only while GPS has no fix, as its scans cost battery), so the app needs no Google Play services and works on de-Googled phones. Release builds write nothing about your position to the system log.
 
 ## Run locally
 

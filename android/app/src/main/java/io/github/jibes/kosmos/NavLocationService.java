@@ -29,8 +29,8 @@ import java.util.function.Consumer;
 /**
  * Keeps location coming while guiding, also with the screen off or another app in front: a
  * foreground service with the platform's own LocationManager (GPS, and the network where GPS is
- * off or only approximate location is allowed). No Google Play services, so it works on any
- * Android.
+ * off, has had no fix for a while, or only approximate location is allowed). No Google Play
+ * services, so it works on any Android.
  */
 public class NavLocationService extends Service implements LocationListener {
 
@@ -49,6 +49,30 @@ public class NavLocationService extends Service implements LocationListener {
 
     private LocationManager manager;
     private long lastGps;
+    /** Asked for network fixes now: only while GPS has none fresh, as they cost scans. */
+    private boolean networkOn;
+    /** May the network be asked at all (approximate location at least). */
+    private boolean coarse;
+    /** Network fixes, on their own listener so they stop without stopping GPS. */
+    private final LocationListener network = new LocationListener() {
+        @Override
+        public void onLocationChanged(Location location) {
+            NavLocationService.this.onLocationChanged(location);
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+        @Override
+        public void onProviderEnabled(String provider) {
+            listenAgain();
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {}
+    };
+    /** No GPS fix for `GPS_FRESH_MS`: the network again (a tunnel, GPS switched off). */
+    private final Runnable gpsStale = this::networkOn;
     /** The first fix is logged (its provider, never the position): CI checks that fixes come. */
     private boolean announced;
 
@@ -158,16 +182,29 @@ public class NavLocationService extends Service implements LocationListener {
     private void listen() {
         if (manager == null) manager = getSystemService(LocationManager.class);
         manager.removeUpdates(this);
+        manager.removeUpdates(network);
+        networkOn = false;
         boolean fine = allowed(Manifest.permission.ACCESS_FINE_LOCATION);
-        boolean coarse = fine || allowed(Manifest.permission.ACCESS_COARSE_LOCATION);
-        if (fine) request(LocationManager.GPS_PROVIDER, 1000);
-        if (coarse) request(LocationManager.NETWORK_PROVIDER, 2000);
+        coarse = fine || allowed(Manifest.permission.ACCESS_COARSE_LOCATION);
+        if (fine) request(LocationManager.GPS_PROVIDER, 1000, this);
+        // A first fix comes sooner from the network; it stops once GPS has one.
+        if (!fine || !gpsFresh()) networkOn();
+    }
+
+    private boolean gpsFresh() {
+        return lastGps != 0 && SystemClock.elapsedRealtime() - lastGps < GPS_FRESH_MS;
+    }
+
+    private void networkOn() {
+        if (networkOn || !coarse || manager == null) return;
+        networkOn = true;
+        request(LocationManager.NETWORK_PROVIDER, 2000, network);
     }
 
     /** One provider: its failure (missing on this phone, refused) leaves the other one asked. */
-    private void request(String provider, long intervalMs) {
+    private void request(String provider, long intervalMs, LocationListener to) {
         try {
-            manager.requestLocationUpdates(provider, intervalMs, 0, this, Looper.getMainLooper());
+            manager.requestLocationUpdates(provider, intervalMs, 0, to, Looper.getMainLooper());
         } catch (SecurityException | IllegalArgumentException e) {
             Log.w(TAG, "no location updates from " + provider, e);
         }
@@ -182,6 +219,13 @@ public class NavLocationService extends Service implements LocationListener {
         long now = SystemClock.elapsedRealtime();
         if (LocationManager.GPS_PROVIDER.equals(location.getProvider())) {
             lastGps = now;
+            // GPS has it: the network rests until GPS has had nothing for a while.
+            main.removeCallbacks(gpsStale);
+            main.postDelayed(gpsStale, GPS_FRESH_MS);
+            if (networkOn) {
+                manager.removeUpdates(network);
+                networkOn = false;
+            }
         } else if (lastGps != 0 && now - lastGps < GPS_FRESH_MS) {
             return;
         }
@@ -211,8 +255,12 @@ public class NavLocationService extends Service implements LocationListener {
     public void onDestroy() {
         shown = false;
         main.removeCallbacks(relisten);
+        main.removeCallbacks(gpsStale);
         unregisterReceiver(switched);
-        if (manager != null) manager.removeUpdates(this);
+        if (manager != null) {
+            manager.removeUpdates(this);
+            manager.removeUpdates(network);
+        }
         stopForeground(STOP_FOREGROUND_REMOVE);
         super.onDestroy();
     }

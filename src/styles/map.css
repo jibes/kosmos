@@ -439,6 +439,10 @@
   background: var(--accent);
   animation: pulse 2.4s var(--ease) infinite;
 }
+/* Off the view, the pulse would keep the screen drawing for nothing. */
+.me.away .me-dot::after {
+  animation: none;
+}
 
 @keyframes pulse {
   from {

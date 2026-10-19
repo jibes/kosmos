@@ -26,6 +26,16 @@ interface Refs {
 }
 
 /**
+ * Within `px` of the middle of the view: GPS jitter while standing, not worth a camera move
+ * (each one a second of full renders).
+ */
+export function nearCentre(map: maplibregl.Map, p: { lng: number; lat: number }, px = 2) {
+  const a = map.project([p.lng, p.lat]);
+  const c = map.project(map.getCenter());
+  return Math.hypot(a.x - c.x, a.y - c.y) < px;
+}
+
+/**
  * Each fix on the map: the user's dot, and the camera as the location button says. Guidance
  * with a route and the ride's camera take over from it.
  */
@@ -73,7 +83,7 @@ export function useFixCamera(map: maplibregl.Map | null, fix: Fix | null, refs: 
       // fix may come.
       const follow = () => {
         const f = latestFixRef.current;
-        if (f) map.easeTo({ center: [f.lng, f.lat], duration: motion(800) });
+        if (f && !nearCentre(map, f)) map.easeTo({ center: [f.lng, f.lat], duration: motion(800) });
       };
       if (!map.isMoving()) follow();
       else if (!catchingUpRef.current) {
@@ -85,7 +95,7 @@ export function useFixCamera(map: maplibregl.Map | null, fix: Fix | null, refs: 
       }
     } else if (followRef.current === 'compass') {
       // The compass turns the map every frame; an ease here would fight it, so the centre jumps.
-      if (!map.isMoving()) map.jumpTo({ center: [fix.lng, fix.lat] });
+      if (!map.isMoving() && !nearCentre(map, fix)) map.jumpTo({ center: [fix.lng, fix.lat] });
     }
   }, [
     map,
