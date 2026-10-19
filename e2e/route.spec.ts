@@ -48,6 +48,8 @@ test.describe('routes', () => {
 
     // Looked elsewhere: the whole route on screen again, at a tap.
     await page.evaluate(() => window.kosmos!.jumpTo({ center: [0, 0], zoom: 5 }));
+    // The location button: the user first, then, following, the whole route.
+    await page.getByRole('button', { name: 'Show my location' }).click();
     await page.getByRole('button', { name: 'Show the whole route' }).click();
     await routeInView(
       page,
@@ -91,12 +93,18 @@ test.describe('routes', () => {
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Brandenburg an der Havel');
   });
 
-  test('swaps the start and the destination, and back', async ({ page, context }) => {
+  test('swaps the start and the destination by their grips, and back', async ({
+    page,
+    context,
+  }) => {
     const card = await openRoute(page, context);
     const ends = card.locator('.end-btn');
     await expect(ends).toHaveText(['My location', SEARCH_HIT.name]);
-    const swap = card.getByRole('button', { name: 'Swap start and destination' });
-    await swap.click();
+    // From the keyboard: the grip with the arrow keys, its focus kept as it moves.
+    const grip = card.getByRole('button', { name: 'Move My location' });
+    await grip.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(grip).toBeFocused();
     await expect(ends).toHaveText([SEARCH_HIT.name, 'My location']);
     // From the place to where the user is now.
     await expect.poll(() => routeRequests.at(-1)?.from[0]).toBeCloseTo(SEARCH_HIT.lng, 4);
@@ -104,7 +112,7 @@ test.describe('routes', () => {
     // Guidance always starts where the user is: towards there it has nowhere to go.
     await expect(card.getByRole('button', { name: 'Start', exact: true })).toHaveCount(0);
     // Back again: "My location" is the live position again, not the point it was.
-    await swap.click();
+    await page.keyboard.press('ArrowUp');
     await expect(ends).toHaveText(['My location', SEARCH_HIT.name]);
     await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(SEARCH_HIT.lng, 4);
     await expect(card.getByRole('button', { name: 'Use my location' })).toHaveCount(0);
@@ -318,13 +326,12 @@ test.describe('routes', () => {
       );
     await expect.poll(() => inView(to.lng, stopLat)).toBe(true);
     expect(await page.evaluate(() => window.kosmos!.getPitch())).toBe(0);
-    // The overview takes in the rest of the trip, the destination too; a second tap leaves it.
-    const overview = page.getByRole('button', { name: 'Overview' });
-    await overview.click();
-    await expect(overview).toHaveAttribute('aria-pressed', 'true');
+    // The overview takes in the rest of the trip, the destination too.
+    // The location button: following, the whole trip; then the rider again.
+    await page.getByRole('button', { name: 'Show the whole route' }).click();
     await expect.poll(() => inView(to.lng, to.lat)).toBe(true);
-    await overview.click();
-    await expect(overview).toHaveAttribute('aria-pressed', 'false');
+    await page.getByRole('button', { name: 'Show my location' }).click();
+    await expect(page.getByRole('button', { name: 'Show the whole route' })).toBeVisible();
     // Tapping the banner shows the whole trip: this ride open, the stop behind dimmed.
     await banner.click();
     const trip = page.locator('.ride-details');
@@ -543,7 +550,7 @@ test.describe('routes', () => {
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
     await page.mouse.click(at.x, at.y, { button: 'right' });
     await page.locator('.toast').getByRole('button', { name: 'Go here' }).click();
-    await expect(card.locator('.ends')).not.toContainText('Brandenburger Tor');
+    await expect(card.locator('.point-list')).not.toContainText('Brandenburger Tor');
     await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(CENTER.lng, 3);
     // The pin moves to the new destination: it no longer marks the old one.
     await idle(page);
@@ -571,7 +578,7 @@ test.describe('routes', () => {
     await card.getByRole('button', { name: /Add stop/ }).click();
     await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
     await page.getByRole('option').filter({ hasText: 'Havel' }).click();
-    await expect(card.locator('.stop-list li')).toHaveCount(1);
+    await expect(card.locator('.point-list li')).toHaveCount(3);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(1);
     await expect(card.locator('.summary strong')).toHaveText(/min|h/);
     await expect(page.locator('.stop-dot')).toHaveText(['1']);
@@ -580,14 +587,28 @@ test.describe('routes', () => {
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
     await page.mouse.click(at.x, at.y, { button: 'right' });
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
-    await expect(card.locator('.stop-list li')).toHaveCount(2);
+    await expect(card.locator('.point-list li')).toHaveCount(4);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(2);
     // Where it was held, give or take the map settling under the pointer.
     expect(routeRequests.at(-1)!.via[1][0]).toBeCloseTo(CENTER.lng, 2);
     await expect(page.locator('.stop-dot')).toHaveText(['1', '2']);
-    // The second a place earlier: the router asked in the new order.
-    await card.getByRole('button', { name: /earlier$/ }).click();
-    await expect(card.locator('.stop-list li').first()).toContainText('Dropped pin');
+    // The second dragged above the first by its grip: the router asked in the new order.
+    const grip = card.getByRole('button', { name: 'Move Dropped pin', exact: true });
+    // Measured once the card has settled: it grows as the stops come in.
+    await expect
+      .poll(async () => {
+        const y = (await grip.boundingBox())!.y;
+        await page.waitForTimeout(200);
+        return Math.abs((await grip.boundingBox())!.y - y);
+      })
+      .toBeLessThan(1);
+    const above = (await card.getByRole('button', { name: /^Move Brandenburg an/ }).boundingBox())!;
+    const box = (await grip.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, above.y + above.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect(card.locator('.point-list li').nth(1)).toContainText('Dropped pin');
     await expect.poll(() => routeRequests.at(-1)?.via[0][0]).toBeCloseTo(CENTER.lng, 2);
     // Public transport goes straight there: no stops asked, none offered.
     await card.getByRole('radio', { name: 'Public transport' }).click();
@@ -595,16 +616,15 @@ test.describe('routes', () => {
       'aria-checked',
       'true',
     );
-    await expect(card.locator('.stop-list li')).toHaveCount(0);
+    await expect(card.locator('.point-list li')).toHaveCount(2);
     await expect(card.getByRole('button', { name: /Add stop/ })).toHaveCount(0);
     await card.getByRole('radio', { name: 'Car' }).click();
-    await expect(card.locator('.stop-list li')).toHaveCount(2);
+    await expect(card.locator('.point-list li')).toHaveCount(4);
     // Taken off again: straight there.
-    await card
-      .getByRole('button', { name: /^Remove stop/ })
-      .first()
-      .click();
-    await card.getByRole('button', { name: /^Remove stop/ }).click();
+    await card.getByRole('button', { name: 'Remove Dropped pin' }).click();
+    await card.getByRole('button', { name: /^Remove Brandenburg an/ }).click();
+    // Two left: neither comes off.
+    await expect(card.getByRole('button', { name: /^Remove / })).toHaveCount(0);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(0);
     await expect(page.locator('.stop-dot')).toHaveCount(0);
   });
@@ -655,10 +675,10 @@ test.describe('routes', () => {
     await expect(banner).toBeVisible();
     await expect(page.locator('.stop-dot')).toHaveText(['1']);
     // The steps ahead list it: taken off again, straight there from here.
-    await banner.getByRole('button', { name: 'Show the steps ahead' }).click();
-    const list = page.locator('.ride-details .stop-list li');
+    await banner.getByRole('button', { name: 'Show the route' }).click();
+    const list = page.locator('.ride-details .point-list li').filter({ hasText: 'Café' });
     await expect(list).toHaveText([/Café Einstein/]);
-    await list.getByRole('button', { name: /^Remove stop/ }).click();
+    await list.getByRole('button', { name: /^Remove Café/ }).click();
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(0);
     await expect(page.locator('.stop-dot')).toHaveCount(0);
     await expect(banner).toBeVisible();
@@ -767,7 +787,7 @@ test.describe('routes', () => {
     const card = page.locator('.card');
     await expect(card.getByRole('heading')).toHaveText('Dropped pin');
     await card.getByRole('button', { name: /^Route$/ }).click();
-    await expect(page.locator('.card.route .ends')).toContainText('Unter den Linden 5');
+    await expect(page.locator('.card.route .point-list')).toContainText('Unter den Linden 5');
   });
 
   test('remembers the travel mode; Escape closes one layer at a time', async ({

@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  boundsOf,
-  navPitch,
-  navZoomFor,
-  routeRest,
-  stepsAhead,
-  tripRest,
-} from '../src/core/navView';
+import { boundsOf, navPitch, navZoomFor, routeRest, tripRest } from '../src/core/navView';
 import type { RideState } from '../src/core/ride';
 import type { Transit, TransitLeg } from '../src/core/transit';
 
@@ -91,11 +84,5 @@ describe('navigation views', () => {
       [4, 5],
     ]);
     expect(boundsOf([])).toBeNull();
-  });
-
-  it('counts each step ahead from here', () => {
-    // 300 m to the step in the banner (index 1), which is 500 m long, the next 200 m.
-    expect(stepsAhead([100, 500, 200, 0], 2, 300)).toEqual([800, 1000]);
-    expect(stepsAhead([100, 500], 2, 300)).toEqual([]);
   });
 });

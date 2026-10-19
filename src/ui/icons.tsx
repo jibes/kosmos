@@ -36,13 +36,6 @@ export const SearchIcon = () => (
   </Svg>
 );
 
-/** Start and destination change places. */
-export const SwapIcon = () => (
-  <Svg>
-    <path d="M8 4v16m0-16-3.5 3.5M8 4l3.5 3.5M16 20V4m0 16-3.5-3.5M16 20l3.5-3.5" />
-  </Svg>
-);
-
 /** Places around this one. */
 export const NearbyIcon = () => (
   <Svg>
@@ -65,6 +58,13 @@ export const StarIcon = ({ filled = false, size = 20 }: { filled?: boolean; size
 export const PencilIcon = ({ size = 18 }: { size?: number }) => (
   <Svg size={size}>
     <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4ZM13.5 6.5l4 4" />
+  </Svg>
+);
+
+/** A grip: hold and drag the row it is on. */
+export const GripIcon = () => (
+  <Svg>
+    <path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" strokeWidth={3} />
   </Svg>
 );
 

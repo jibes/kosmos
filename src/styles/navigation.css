@@ -387,47 +387,6 @@ button.via[aria-expanded='true']::after {
   line-clamp: none;
 }
 
-/* The steps ahead, under the banner: arrow, where it leads (the road small), how far. */
-.nav-steps {
-  margin: 0;
-  padding: 4px 0;
-  list-style: none;
-}
-
-.nav-steps li {
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 6px 0;
-  border-bottom: 0.5px solid var(--line);
-}
-
-.nav-steps li:last-child {
-  border-bottom: 0;
-}
-
-.nav-steps li > span {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.nav-steps li > span small,
-.nav-steps li > small {
-  color: var(--muted);
-  font-weight: 400;
-  font-size: 13px;
-}
-
-.nav-steps li > small {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .nav-then-far {
   flex: none;
   margin-left: auto;
@@ -590,11 +549,6 @@ button.via[aria-expanded='true']::after {
 /* While guiding the map's own buttons sit above the bar, clear of the credit and the speed. */
 .ui[data-nav] .controls {
   bottom: calc(var(--gutter) + var(--safe-bottom) + 128px);
-}
-
-/* The overview on: the route is what the camera tracks, shown as following is. */
-.ctl.overview[aria-pressed='true'] {
-  color: var(--accent);
 }
 
 .ui[data-nav] .credit {

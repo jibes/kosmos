@@ -45,79 +45,80 @@
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
 }
 
-.ends {
+/* A route's points, start to end, all alike: a grip to drag, a mark, the name, off. */
+.point-list {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 6px 12px;
+  gap: 4px;
   margin: 14px 0 0;
-  font-size: 14px;
-}
-
-.ends dt {
-  grid-column: 1;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.ends dd {
-  grid-column: 2;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  min-height: 44px;
-  margin: 0;
-}
-
-/* Between the two ends, beside both: they change places. */
-.ends .swap {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-}
-
-.ends .swap:disabled {
-  opacity: 0.35;
-}
-
-/* Stops on the way, numbered as on the map: earlier, or off the trip. */
-.stop-list {
-  display: grid;
-  gap: 2px;
-  margin: 8px 0 0;
   padding: 0;
   list-style: none;
   font-size: 14px;
 }
 
-.stop-list li {
+.point-list li {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: 44px;
+  transition: transform 0.15s;
 }
 
-.stop-num {
+.point-list li[data-dragging] {
+  z-index: 1;
+  transition: none;
+}
+
+.point-list li[data-dragging] .end-btn {
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+}
+
+/* Held and dragged by touch: no scrolling, no panel swipe under it. */
+.grip {
   display: grid;
   place-items: center;
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 44px;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.grip:active {
+  cursor: grabbing;
+}
+
+/* The start a ring, the stops numbered as on the map, the end filled. */
+.point-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.stop-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+.point-mark[data-mark='start'] {
+  border: 3px solid var(--accent);
+}
+
+.point-mark[data-mark='stop'] {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.point-mark[data-mark='end'] {
+  background: var(--text);
+  border: 3px solid var(--surface-solid);
+  box-shadow: 0 0 0 2px var(--text);
+}
+
+span.end-btn {
+  display: flex;
+  align-items: center;
 }
 
 .quiet-link.add-stop {
@@ -128,7 +129,7 @@
   font-weight: 600;
 }
 
-/* From and To look like fields: a tap changes them. */
+/* A route's points look like fields: a tap changes them. */
 .end-btn {
   flex: 1;
   min-width: 0;

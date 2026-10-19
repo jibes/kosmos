@@ -12,10 +12,10 @@ import { directionsUrl, geoUri } from '../core/geo';
 import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
 import { arrowRadios, focusSearch, useFocusOnMount } from './a11y';
-import { CloseIcon, CoinsIcon, LocateIcon, ModeIcon, SwapIcon, TurnIcon } from './icons';
+import { CloseIcon, CoinsIcon, ModeIcon, TurnIcon } from './icons';
 import { isNative, openElsewhere } from './native';
 import { Sheet } from './Sheet';
-import { StopList } from './StopList';
+import { PointList, type PointListProps } from './PointList';
 import type { LocationStatus } from './useLocation';
 import { changesText, DepartTime, LineChips, TransitCredit, TransitLegs } from './TransitParts';
 import { useNow } from './useNow';
@@ -24,13 +24,10 @@ export type RouteStatus = 'locating' | 'loading' | 'ready' | Exclude<RouteError,
 
 interface Props {
   to: Place;
-  from: Place | null;
-  /** Stops on the way, by road. */
-  via: Place[];
+  /** Start, stops, destination: dragged, changed by name or taken off. */
+  points: PointListProps;
   /** Absent while no more can be added (public transport, or `MAX_STOPS` already). */
-  onAddStop?: () => void;
-  onRemoveStop: (index: number) => void;
-  onMoveStopUp: (index: number) => void;
+  onAdd?: () => void;
   mode: TravelMode;
   routes: Route[];
   active: number;
@@ -40,11 +37,8 @@ interface Props {
   lang: string;
   onMode: (mode: TravelMode) => void;
   onActive: (index: number) => void;
+  /** No position yet: another start, by name. */
   onChangeStart: () => void;
-  onChangeEnd: () => void;
-  onUseMyLocation: () => void;
-  /** Start and destination change places; absent while there is no position to swap. */
-  onSwap?: () => void;
   onRetry: () => void;
   onClose: () => void;
   /** Absent hides Start. */
@@ -62,7 +56,7 @@ const MESSAGE: Partial<Record<RouteStatus, string>> = {
 };
 
 export function RouteCard(props: Props) {
-  const { to, from, mode, routes, active, status, location, lang } = props;
+  const { to, mode, routes, active, status, location, lang } = props;
   const stuck = status === 'locating' && (location === 'denied' || location === 'unavailable');
   const message = stuck
     ? location === 'denied'
@@ -135,46 +129,9 @@ export function RouteCard(props: Props) {
         </button>
       </header>
 
-      <dl className="ends">
-        <dt>{t.from}</dt>
-        <dd>
-          <button type="button" className="end-btn" onClick={props.onChangeStart}>
-            {from ? from.name : t.myLocation}
-          </button>
-          {from && (
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label={t.useMyLocation}
-              title={t.useMyLocation}
-              onClick={props.onUseMyLocation}
-            >
-              <LocateIcon />
-            </button>
-          )}
-        </dd>
-        <dt>{t.to}</dt>
-        <dd>
-          <button type="button" className="end-btn" onClick={props.onChangeEnd}>
-            {to.name}
-          </button>
-        </dd>
-        <button
-          type="button"
-          className="icon-btn swap"
-          aria-label={t.swapEnds}
-          title={t.swapEnds}
-          disabled={!props.onSwap}
-          onClick={props.onSwap}
-        >
-          <SwapIcon />
-        </button>
-      </dl>
-      {mode !== 'transit' && (
-        <StopList via={props.via} onMoveUp={props.onMoveStopUp} onRemove={props.onRemoveStop} />
-      )}
-      {props.onAddStop && (
-        <button type="button" className="quiet-link add-stop" onClick={props.onAddStop}>
+      <PointList {...props.points} />
+      {props.onAdd && (
+        <button type="button" className="quiet-link add-stop" onClick={props.onAdd}>
           + {t.addStop}
         </button>
       )}

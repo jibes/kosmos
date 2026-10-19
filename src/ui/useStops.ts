@@ -11,7 +11,9 @@ import type { LngLat } from '../core/geo';
 import { track, type NavState } from '../core/nav';
 import type { Mode, Route } from '../core/route';
 import type { Place } from '../core/search';
-import { MAX_STOPS, moveStopUp, stopsReached } from '../core/stops';
+import { endsOf, movePoint, pointsOf, removePoint, type Point } from '../core/points';
+import { MAX_STOPS, stopsReached } from '../core/stops';
+import type { PointListProps } from './PointList';
 import { fill, t } from '../i18n';
 import { logEvent } from './usageLog';
 import { viaOf, type Trip } from './useRoute';
@@ -27,8 +29,8 @@ interface Options {
   navigating: boolean;
   state: ReturnType<typeof useStopState>;
   showToast: (text: string, actions?: { label: string; run: () => void }[], ms?: number) => void;
-  /** Opens the name-only picker for a stop. */
-  pickStop: () => void;
+  /** Opens the name-only picker for the point at `at`, or a new stop (`'add'`). */
+  pick: (at: number | 'add') => void;
   /** For asking whether to skip a stop left behind (`useStopSkip`). */
   skip: {
     fix: LngLat | null;
@@ -47,14 +49,17 @@ interface Options {
 export function useStopState() {
   const [behind, setBehind] = useState(0);
   const addStopRef = useRef<(p: Place) => void>(() => undefined);
-  return { behind, setBehind, addStopRef };
+  /** A place picked by name for a point of the route (`useStops`): whether it is the end. */
+  const pickRef = useRef<(p: Place, at: number | 'add') => boolean>(() => false);
+  return { behind, setBehind, addStopRef, pickRef };
 }
 
 /**
- * Stops on the way: added from the route card, a label or a point on the map (also while
- * guiding: fuel, a coffee), moved earlier or taken off on the card and, guiding, in the
- * steps panel (each change asks one route from here). Guidance counts those passed, so a reroute
- * goes on to the rest only.
+ * A route's points: start, stops, destination as one list (`PointList`), dragged into another
+ * order, changed or taken off on the route card; guiding, those ahead in the banner's panel
+ * (each change asks one route from here). Stops come from the card, a label or a point on the
+ * map, also while guiding (fuel, a coffee). Guidance counts those passed, so a reroute goes on
+ * to the rest only.
  */
 export function useStops({
   trip,
@@ -64,10 +69,10 @@ export function useStops({
   navigating,
   state,
   showToast,
-  pickStop,
+  pick,
   skip,
 }: Options) {
-  const { behind, setBehind, addStopRef } = state;
+  const { behind, setBehind, addStopRef, pickRef } = state;
   // Each drive starts with every stop ahead.
   useEffect(() => {
     if (navigating) setBehind(0);
@@ -89,23 +94,79 @@ export function useStops({
     },
     [setTrip, showToast, navigating],
   );
-  const removeStop = useCallback(
-    (i: number) => {
-      logEvent('stop.remove');
-      setTrip((tr) => (tr ? { ...tr, via: viaOf(tr).filter((_, j) => j !== i) } : tr));
+
+  /** "My location" anywhere but first: the position now. */
+  const here: Place | null = skip.fix
+    ? { name: t.myLocation, detail: '', lng: skip.fix.lng, lat: skip.fix.lat, here: true }
+    : null;
+  /** The route card's list as the trip's ends; public transport keeps its stops for later. */
+  const setPoints = (points: Point[]) =>
+    setTrip((tr) => {
+      if (!tr) return tr;
+      const ends = endsOf(points, here);
+      if (!ends) return tr;
+      return tr.mode === 'transit' ? { ...tr, from: ends.from, to: ends.to } : { ...tr, ...ends };
+    });
+  const cardPoints: Point[] = trip
+    ? trip.mode === 'transit'
+      ? [trip.from, trip.to]
+      : pointsOf(trip)
+    : [];
+  /** Guiding: the stops not yet reached and the destination, after "my location". */
+  const ahead: Place[] = trip ? [...viaOf(trip).slice(behind), trip.to] : [];
+  const setAhead = (next: Place[]) =>
+    setTrip((tr) =>
+      tr && next.length
+        ? { ...tr, via: [...viaOf(tr).slice(0, behind), ...next.slice(0, -1)], to: next.at(-1)! }
+        : tr,
+    );
+
+  /** The route card's list of points. */
+  const card = {
+    points: cardPoints,
+    onMove: (from: number, to: number) => {
+      logEvent('point.move', { navigating: false });
+      setPoints(movePoint(cardPoints, from, to));
     },
-    [setTrip],
-  );
-  /** A place earlier on the way; guiding, never before one already reached. */
-  const moveUp = useCallback(
-    (i: number) => {
-      logEvent('stop.move', { navigating });
-      setTrip((tr) =>
-        tr ? { ...tr, via: moveStopUp(viaOf(tr), i, navigating ? behind : 0) } : tr,
-      );
+    onRemove:
+      cardPoints.length > 2
+        ? (i: number) => {
+            logEvent('point.remove', { navigating: false });
+            setPoints(removePoint(cardPoints, i));
+          }
+        : undefined,
+    onPick: pick,
+    onAdd: canAdd ? () => pick('add') : undefined,
+  };
+  /** The points ahead while guiding: moved or taken off, each a route from here. */
+  const ahead_: PointListProps = {
+    points: [null, ...ahead],
+    locked: 1,
+    numberFrom: behind,
+    onMove: (from, to) => {
+      logEvent('point.move', { navigating: true });
+      setAhead(movePoint(ahead, from - 1, to - 1));
     },
-    [setTrip, navigating, behind],
-  );
+    onRemove:
+      ahead.length > 1
+        ? (i) => {
+            logEvent('point.remove', { navigating: true });
+            setAhead(ahead.filter((_, j) => j !== i - 1));
+          }
+        : undefined,
+  };
+  /** A place picked for the point at `i` (a new stop for `'add'`): whether it is the end. */
+  const pickPoint = (place: Place, at: number | 'add'): boolean => {
+    if (at === 'add') {
+      addStop(place);
+      return false;
+    }
+    const next = [...cardPoints];
+    next[at] = place;
+    setPoints(next);
+    return at === cardPoints.length - 1;
+  };
+
   const { voice, muted, ...rest } = skip;
   useStopSkip({
     ...rest,
@@ -122,22 +183,9 @@ export function useStops({
     },
   });
 
-  /** For `StopList`: the stops still ahead, to move or take off. */
-  const list = {
-    via: viaOf(trip),
-    first: navigating ? behind : 0,
-    onMoveUp: moveUp,
-    onRemove: removeStop,
-  };
   useEffect(() => {
     addStopRef.current = addStop;
+    pickRef.current = pickPoint;
   });
-  /** The route card's stop props. */
-  const card = {
-    via: list.via,
-    onAddStop: canAdd ? pickStop : undefined,
-    onRemoveStop: removeStop,
-    onMoveStopUp: moveUp,
-  };
-  return { list, card };
+  return { card, ahead: ahead_ };
 }

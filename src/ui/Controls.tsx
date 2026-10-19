@@ -19,32 +19,23 @@ interface Props {
   canTurn: boolean;
   /** Guiding: heading-up turns the map with the way, not the phone. */
   guiding?: boolean;
-  /** Guiding: the rest of the way on screen, a toggle beside the location button. */
+  /**
+   * A route is open or guided: following, the location button's next tap shows the whole of
+   * it (and the one after comes back to the user).
+   */
+  route?: boolean;
+  /** Guiding: the rest of the way is on screen. */
   overview?: boolean;
-  onOverview?: () => void;
-  /** A route open, not yet guiding: the whole of it on screen again, once. */
-  onWholeRoute?: () => void;
 }
 
 /**
- * The map's buttons, one job each, the same on the map and while guiding: the location button
- * follows the user (pressed while it does); the needle says which way is up and switches north
- * up and heading-up; guiding adds the whole route. Zoom and tilt never stop following; a drag
- * does.
+ * The map's two buttons, one job each, the same on the map and while guiding: the location
+ * button says what the camera tracks (the user, pressed while it does; with a route, the user or
+ * the whole route in turn); the needle says which way is up and switches north up and
+ * heading-up. Zoom and tilt never stop following; a drag does.
  */
 export function Controls(props: Props) {
-  const {
-    map,
-    status,
-    follow,
-    onLocate,
-    onTurn,
-    canTurn,
-    guiding,
-    overview,
-    onOverview,
-    onWholeRoute,
-  } = props;
+  const { map, status, follow, onLocate, onTurn, canTurn, guiding, route, overview } = props;
   const [camera, setCamera] = useState({ bearing: 0, pitch: 0 });
 
   useEffect(() => {
@@ -67,12 +58,16 @@ export function Controls(props: Props) {
   const heading = follow === 'compass';
   const following = follow !== 'off' && !overview;
   const blocked = status === 'denied' || status === 'unavailable';
+  // With a route, the button names its next step: following, the whole route; else the user.
+  const toRoute = !!route && following && !blocked;
   const locateLabel =
     status === 'denied'
       ? t.locationDenied
       : status === 'unavailable'
         ? t.locationUnavailable
-        : t.locate;
+        : toRoute
+          ? t.wholeRoute
+          : t.locate;
   // The needle names what a tap does: north up from heading-up or a hand's turn, else heading-up.
   const toNorth = heading || turned;
   const turnLabel = toNorth ? t.northUp : guiding ? t.followHeading : t.followCompass;
@@ -85,38 +80,20 @@ export function Controls(props: Props) {
         className="ctl surface"
         aria-label={locateLabel}
         title={locateLabel}
-        aria-pressed={blocked ? undefined : following}
+        aria-pressed={blocked || route ? undefined : following}
         data-state={status}
         data-following={following || undefined}
         data-follow={follow}
         onClick={onLocate}
       >
-        {blocked ? <NoLocationIcon /> : <LocateIcon filled={following} />}
+        {blocked ? (
+          <NoLocationIcon />
+        ) : toRoute ? (
+          <WholeRouteIcon />
+        ) : (
+          <LocateIcon filled={following && !route} />
+        )}
       </button>
-      {overview !== undefined && (
-        <button
-          type="button"
-          className="ctl surface overview"
-          aria-label={t.overview}
-          title={t.overview}
-          aria-pressed={overview}
-          onClick={onOverview}
-        >
-          <WholeRouteIcon />
-        </button>
-      )}
-      {/* An action, not a toggle: the map is the user's again after it. */}
-      {onWholeRoute && (
-        <button
-          type="button"
-          className="ctl surface overview"
-          aria-label={t.wholeRoute}
-          title={t.wholeRoute}
-          onClick={onWholeRoute}
-        >
-          <WholeRouteIcon />
-        </button>
-      )}
       <button
         type="button"
         className="ctl surface compass"

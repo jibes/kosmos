@@ -32,21 +32,17 @@ export function useNavControls({ map, follow, setFollow, view, canTurn, recenter
     [setFollow, canTurn],
   );
 
-  /** Follow the user again: out of the overview, or after looking around; always back to them. */
+  /**
+   * The location button: following, the rest of the way (the overview); in it, or after looking
+   * around, the user again.
+   */
   const locate = useCallback(() => {
+    const showRoute = follow !== 'off' && !overviewRef.current;
     logEvent('cam.locate', { from: overviewRef.current ? 'overview' : follow });
-    if (overviewRef.current) setOverview(false);
+    setOverview(showRoute);
     if (follow === 'off') resume();
     recenter();
   }, [follow, overviewRef, setOverview, resume, recenter]);
-
-  const toggleOverview = useCallback(() => {
-    const on = !overviewRef.current;
-    logEvent('cam.overview', { on });
-    setOverview(on);
-    if (!on && follow === 'off') resume();
-    recenter();
-  }, [overviewRef, setOverview, follow, resume, recenter]);
 
   /**
    * The needle: north up and flat from heading-up or a hand's turn; else heading-up again, at
@@ -87,5 +83,5 @@ export function useNavControls({ map, follow, setFollow, view, canTurn, recenter
     [map, follow, setFollow],
   );
 
-  return { locate, toggleOverview, turn, turnMap };
+  return { locate, turn, turnMap };
 }

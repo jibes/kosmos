@@ -31,7 +31,7 @@ import { useFavouriteLayer } from './ui/useFavourites';
 import { useContactLayer, useContactsRow } from './ui/useContacts';
 import { logEvent } from './ui/usageLog';
 import { useMapGestures } from './ui/useMapGestures';
-import { swapEnds, useRoute, viaOf, type Trip } from './ui/useRoute';
+import { useRoute, viaOf, type Trip } from './ui/useRoute';
 import { useStopState, useStops } from './ui/useStops';
 import { useGuidance } from './ui/useGuidance';
 import { FRESH_MS } from './ui/useNav';
@@ -94,7 +94,7 @@ export function App() {
   const { toast, showToast, dismiss, dismissText } = useToast();
   const [active, setActive] = useState(0);
   /** Which end of the route the search bar is choosing, if any. */
-  const [picking, setPicking] = useState<'start' | 'end' | 'stop' | null>(null);
+  const [picking, setPicking] = useState<number | 'add' | null>(null);
   const pickingRef = useRef(picking);
   useEffect(() => {
     pickingRef.current = picking;
@@ -205,17 +205,11 @@ export function App() {
     (place: Place) => {
       if (!map) return;
       if (tripRef.current) {
-        const end = pickingRef.current;
+        const at = pickingRef.current ?? 'add';
         setPicking(null);
         setActive(0);
-        if (end === 'end') {
-          setTrip({ ...tripRef.current, to: place });
-          select(place);
-        } else if (end === 'stop') {
-          stopState.addStopRef.current(place);
-        } else {
-          setTrip({ ...tripRef.current, from: place });
-        }
+        // A new destination is the selected place too: its pin and, on closing, its card.
+        if (stopState.pickRef.current(place, at)) select(place);
         return;
       }
       setFollow('off');
@@ -246,7 +240,7 @@ export function App() {
         });
       }
     },
-    [map, select, setFollow, stopState.addStopRef],
+    [map, select, setFollow, stopState.pickRef],
   );
 
   /** The ride's whole trip, open under its banner: a step of its own for Back. */
@@ -365,7 +359,7 @@ export function App() {
     navigating,
     state: stopState,
     showToast,
-    pickStop: () => setPicking('stop'),
+    pick: setPicking,
     skip: { fix, mode: roadMode, voice, muted, reroute: route.retry, dismissText },
   });
   const navControls = useNavControls({
@@ -503,6 +497,11 @@ export function App() {
     start();
     void compass.start();
     if (navigating) return navControls.locate();
+    // A route open: following, the next tap shows all of it; the one after, the user again.
+    if (trip && route.status === 'ready' && follow !== 'off') {
+      setFollow('off');
+      return routeLayer.fit();
+    }
     // Following already: only back to the user when the map shows somewhere else (a fit to
     // results); which way is up is the needle's.
     if (follow !== 'off') {
@@ -550,7 +549,7 @@ export function App() {
         backAt.current = Date.now();
         showToast(via === 'escape' ? t.escToEnd : t.backToEnd);
       }
-    } else if (picking) setPicking(null);
+    } else if (picking !== null) setPicking(null);
     else if (trip) closeRoute();
     else if (selection) clear();
     else if (search.query) search.clear();
@@ -605,7 +604,7 @@ export function App() {
             reroute={rerouteState}
             onMute={toggleMute}
             destination={trip?.to.name ?? ''}
-            stops={stops.list}
+            points={stops.ahead}
             onEnd={endNav}
           />
         )}
@@ -624,11 +623,17 @@ export function App() {
           {/* Nothing in it renders while guiding: every fix would redraw it for nobody. */}
           {!navigating && (
             <>
-              {trip && !picking && (
+              {trip && picking === null && (
                 <RouteCard
                   to={trip.to}
-                  from={trip.from}
-                  {...stops.card}
+                  points={{
+                    ...stops.card,
+                    onUseMyLocation: () => {
+                      start();
+                      setTrip({ ...trip, from: null });
+                    },
+                  }}
+                  onAdd={stops.card.onAdd}
                   mode={trip.mode}
                   routes={shown}
                   active={chosen}
@@ -637,22 +642,7 @@ export function App() {
                   lang={locale}
                   onMode={setMode}
                   onActive={setActive}
-                  onChangeStart={() => setPicking('start')}
-                  onChangeEnd={() => setPicking('end')}
-                  onUseMyLocation={() => {
-                    start();
-                    setTrip({ ...trip, from: null });
-                  }}
-                  onSwap={
-                    trip.from || fix
-                      ? () => {
-                          const next = swapEnds(trip, fix);
-                          if (!next) return;
-                          setActive(0);
-                          setTrip(next);
-                        }
-                      : undefined
-                  }
+                  onChangeStart={() => setPicking(0)}
                   onRetry={route.retry}
                   onClose={closeRoute}
                   // Guidance starts from where the user is: not to there.
@@ -717,7 +707,7 @@ export function App() {
                 onFocus={clear}
               />
               {/* A route's start or destination: by name only, its own field. */}
-              {picking && (
+              {picking !== null && (
                 <SearchBar
                   key={picking}
                   lang={lang}
@@ -726,9 +716,9 @@ export function App() {
                   collapsed={false}
                   onFocus={() => undefined}
                   placeholder={
-                    picking === 'start'
+                    picking === 0
                       ? t.searchStart
-                      : picking === 'stop'
+                      : picking === 'add' || picking < viaOf(trip).length + 1
                         ? t.searchStop
                         : t.searchEnd
                   }
@@ -755,16 +745,8 @@ export function App() {
                   if (follow === 'off') flyToMe();
                 })
           }
-          overview={navigating ? overview : undefined}
-          onOverview={navControls.toggleOverview}
-          onWholeRoute={
-            trip && !navigating && route.status === 'ready'
-              ? () => {
-                  setFollow('off');
-                  routeLayer.fit();
-                }
-              : undefined
-          }
+          route={navigating || (!!trip && route.status === 'ready' && picking === null)}
+          overview={navigating && overview}
         />
         <button
           type="button"

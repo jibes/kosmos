@@ -52,22 +52,6 @@ const EXIT_WORDS: ExitWords = {
   heading: (way) => fill(t.exitHeading, { way: t[`way_${way}`] }),
 };
 
-/**
- * The trip the other way round, its stops too. "My location" as the destination is the position
- * now; swapped back, it is the live position again. `null` without a position to start from.
- */
-export function swapEnds(trip: Trip, here: LngLat | null): Trip | null {
-  const me = here && { name: t.myLocation, detail: '', lng: here.lng, lat: here.lat, here: true };
-  const from = trip.from ?? me;
-  if (!from) return null;
-  return {
-    ...trip,
-    from: trip.to.here ? null : trip.to,
-    to: from,
-    via: [...viaOf(trip)].reverse(),
-  };
-}
-
 /** A stop said by its name. */
 const STOP_WORDS: StopWords = {
   instruction: (name) => fill(t.stopAt, { name }),

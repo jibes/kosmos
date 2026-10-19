@@ -12,12 +12,11 @@ import {
   type Mode,
   type Route,
 } from '../core/route';
-import { stepsAhead } from '../core/navView';
 import { limitAt, limitIn, overLimit } from '../core/speedLimit';
 import { capital, fill, ordinal, t, units } from '../i18n';
 import { LaneIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
-import { StopList, type StopListProps } from './StopList';
+import { PointList, type PointListProps } from './PointList';
 import { TripDetails } from './TripDetails';
 import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
@@ -34,11 +33,11 @@ interface Props {
   /** Asking the router for a new route, or it failed and the old one is followed. */
   reroute: 'idle' | 'asking' | 'failed';
   destination: string;
-  /** The stops still ahead, to move or take off on the way. */
-  stops: StopListProps;
+  /** The points still ahead (stops, destination), to drag or take off on the way. */
+  points: PointListProps;
   onMute: () => void;
   onEnd: () => void;
-  /** The steps ahead, open under the banner (a tap on it; Back closes them). */
+  /** The points ahead, open under the banner (a tap on it; Back closes them). */
   open: boolean;
   onOpen: (open: boolean) => void;
 }
@@ -62,41 +61,6 @@ const short = (m: Step) => {
 /** The road itself, under a way shown by where it leads. */
 const road = (m: Step) => (m.wayOut ? (roadOf(m) ?? null) : null);
 
-interface StepsProps {
-  route: Route;
-  /** The first step after the one in the banner. */
-  from: number;
-  /** Metres to the step in the banner. */
-  toNext: number;
-  lang: string;
-  destination: string;
-}
-
-/** The steps after the one in the banner, each with how far it is from here. */
-function Steps({ route, from, toNext, lang, destination }: StepsProps) {
-  const ms = route.maneuvers;
-  const at = stepsAhead(
-    ms.map((m) => m.distance),
-    from,
-    toNext,
-  );
-  const rows = ms.slice(from).map((m, k) => ({ m, at: at[k], last: from + k === ms.length - 1 }));
-  return (
-    <ol className="nav-steps">
-      {rows.map(({ m, at, last }, k) => (
-        <li key={k}>
-          <TurnIcon turn={turnOf(m.type)} size={22} />
-          <span>
-            {last ? destination : short(m)}
-            {!last && road(m) && <small>{road(m)}</small>}
-          </span>
-          <small>{formatDistance(at, lang, units)}</small>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 /** Valhalla's maneuver type for entering a roundabout. */
 const ROUNDABOUT = 26;
 
@@ -108,7 +72,7 @@ const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
 export function NavView(props: Props) {
-  const { route, mode, nav, lang, muted, reroute, destination, open, stops, ...on } = props;
+  const { route, mode, nav, lang, muted, reroute, destination, open, points, ...on } = props;
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
@@ -188,7 +152,7 @@ export function NavView(props: Props) {
               type="button"
               className="ride-toggle"
               aria-expanded={open}
-              aria-label={t.showSteps}
+              aria-label={t.showPoints}
               onClick={() => on.onOpen(!open)}
             />
           )}
@@ -228,14 +192,7 @@ export function NavView(props: Props) {
         </section>
         {open && guiding && (
           <TripDetails onClose={() => on.onOpen(false)}>
-            <StopList {...stops} />
-            <Steps
-              route={route}
-              from={started ? nav.next + 1 : 1}
-              toNext={toNext ?? 0}
-              lang={lang}
-              destination={destination}
-            />
+            <PointList {...points} />
           </TripDetails>
         )}
       </div>

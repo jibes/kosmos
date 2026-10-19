@@ -437,7 +437,8 @@ test.describe('guidance', () => {
       m.on('move', () => w.frames.push([m.getZoom(), m.getPitch()]));
     });
     const before = await page.evaluate(() => window.kosmos!.getZoom());
-    await page.getByRole('button', { name: 'Overview' }).click();
+    // Following, the location button's next step is the rest of the way.
+    await page.getByRole('button', { name: 'Show the whole route' }).click();
     await idle(page);
     // Flat before zooming out: tilted, it would show far past the route and seem to zoom back in.
     const frames = await page.evaluate(() => (window as unknown as { frames: number[][] }).frames);
@@ -471,16 +472,9 @@ test.describe('guidance', () => {
     await page.waitForTimeout(1500);
     expect(await inView(to)).toBe(true);
     // And back to following close behind, by the location button as on the map.
-    await expect(page.getByRole('button', { name: 'Overview' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
     await page.getByRole('button', { name: 'Show my location' }).click();
     await expect.poll(pitch).toBe(55);
-    await expect(page.getByRole('button', { name: 'Overview' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    await expect(page.getByRole('button', { name: 'Show the whole route' })).toBeVisible();
   });
 
   test('moves the dot on a coarse fix, where guidance waits for a better one', async ({
@@ -654,11 +648,11 @@ test.describe('guidance', () => {
         return { zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() };
       });
     await expect.poll(async () => Math.round((await cam()).pitch)).toBe(55);
-    // Heading-up from the start, following: the location button pressed, the needle's next
-    // step north up.
+    // Heading-up from the start, following (the location button's next step the whole route),
+    // the needle's next step north up.
     const locate = page.locator('.controls .ctl[data-follow]');
     const needle = page.locator('.controls .compass');
-    await expect(locate).toHaveAttribute('aria-pressed', 'true');
+    await expect(locate).toHaveAttribute('data-following', 'true');
     await expect(needle).toHaveAttribute('aria-label', 'North up');
     // Zooming out by hand does not stop following: the next fix keeps the zoom and moves on.
     const before = (await cam()).zoom;
@@ -679,7 +673,7 @@ test.describe('guidance', () => {
     // A few metres on, slowly: the speed's own zoom stays as it was.
     await go(from.lng, from.lat - 0.00004);
     await page.waitForTimeout(1600);
-    await expect(locate).toHaveAttribute('aria-pressed', 'true');
+    await expect(locate).toHaveAttribute('data-following', 'true');
     expect(Math.abs((await cam()).zoom - zoomed)).toBeLessThan(0.3);
     // The needle: north up and flat, still following.
     await needle.click();
@@ -689,7 +683,7 @@ test.describe('guidance', () => {
     await go(from.lng, from.lat - 0.003);
     await page.waitForTimeout(1600);
     expect(Math.round((await cam()).pitch)).toBe(0);
-    await expect(locate).toHaveAttribute('aria-pressed', 'true');
+    await expect(locate).toHaveAttribute('data-following', 'true');
     // And heading-up again, at the drive's own tilt.
     await needle.click();
     await expect.poll(async () => Math.round((await cam()).pitch)).toBe(55);
@@ -699,9 +693,9 @@ test.describe('guidance', () => {
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2 + 60, { steps: 6 });
     await page.mouse.up();
-    await expect(locate).toHaveAttribute('aria-pressed', 'false');
+    await expect(locate).not.toHaveAttribute('data-following');
     await locate.click();
-    await expect(locate).toHaveAttribute('aria-pressed', 'true');
+    await expect(locate).toHaveAttribute('data-following', 'true');
     await expect(locate).toHaveAttribute('data-follow', 'compass');
   });
 
@@ -735,19 +729,18 @@ test.describe('guidance', () => {
     // The step after always shows under the next one, here its arrival.
     await expect(banner.locator('.nav-then')).toContainText('Then');
     await expect(banner.locator('.nav-then')).toContainText('Brandenburger Tor');
-    // A tap opens the steps ahead, each with how far it is; Back closes them, guidance goes on.
-    const steps = page.locator('.nav-steps li');
-    await expect(steps).toHaveCount(0);
-    await page.getByRole('button', { name: 'Show the steps ahead' }).click();
-    await expect(steps).toHaveCount(1);
-    await expect(steps.first()).toContainText('Brandenburger Tor');
-    await expect(steps.first()).toContainText(/\d+ m$|km$/);
-    // The same distance from here in both.
-    const far = await banner.locator('.nav-then-far').textContent();
-    await expect(steps.first()).toContainText(far!);
-    await shot(page, info, 'steps');
+    // A tap opens the points ahead: the user now, then the destination (the only one left, so
+    // it does not come off); Back closes them, guidance goes on.
+    const points = page.locator('.ride-details .point-list li');
+    await expect(points).toHaveCount(0);
+    await page.getByRole('button', { name: 'Show the route' }).click();
+    await expect(points).toHaveText(['My location', 'Brandenburger Tor']);
+    await expect(
+      page.locator('.ride-details').getByRole('button', { name: /^Remove/ }),
+    ).toHaveCount(0);
+    await shot(page, info, 'points');
     await page.keyboard.press('Escape');
-    await expect(steps).toHaveCount(0);
+    await expect(points).toHaveCount(0);
     await expect(banner).toBeVisible();
     await expect(page.getByRole('button', { name: /^End$/ })).toBeVisible();
   });
