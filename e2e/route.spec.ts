@@ -711,6 +711,8 @@ test.describe('routes', () => {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     const banner = page.locator('.nav-banner');
     await expect(banner).toBeVisible();
+    // Once the camera has followed the first fix (its glide over), the map is looked around.
+    await page.waitForTimeout(1600);
     // Looking around the map: the café on the way.
     const cafe = { lng: CENTER.lng + 140 / 67800, lat: CENTER.lat - 170 / 111200 };
     await jump(page, { ...cafe, zoom: 17 });

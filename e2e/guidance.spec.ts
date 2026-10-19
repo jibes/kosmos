@@ -477,6 +477,63 @@ test.describe('guidance', () => {
     await expect(page.getByRole('button', { name: 'Show the whole route' })).toBeVisible();
   });
 
+  test('glides the arrow along the road between fixes, the camera with it', async ({
+    page,
+    context,
+  }) => {
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lng: number, lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
+    await context.grantPermissions(['geolocation']);
+    await go(from.lng, from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(page.locator('.me.nav')).toHaveCount(1);
+    await page.waitForTimeout(1500);
+    // Every frame of the next fix's move: where the arrow is on the map and on the screen.
+    await page.evaluate(() => {
+      const w = window as unknown as { frames: number[][]; watching: boolean };
+      w.frames = [];
+      w.watching = true;
+      const tick = () => {
+        const el = document.querySelector('.me.nav')!.getBoundingClientRect();
+        const c = window.kosmos!.getCenter();
+        w.frames.push([c.lat, el.x + el.width / 2, el.y + el.height / 2]);
+        if (w.watching) requestAnimationFrame(tick);
+      };
+      tick();
+    });
+    // 60 m on down the first street.
+    await go(from.lng, from.lat - 0.00055);
+    await page.waitForTimeout(1600);
+    const frames = await page.evaluate(() => {
+      const w = window as unknown as { frames: number[][]; watching: boolean };
+      w.watching = false;
+      return w.frames;
+    });
+    // Through the metres in between, not in one jump: frames on the way, however few a busy
+    // machine draws.
+    const lats = frames.map(([lat]) => lat);
+    const [a, b] = [lats[0], lats.at(-1)!];
+    expect(Math.abs(b - a)).toBeGreaterThan(0.0002);
+    const between = lats.filter((lat) => {
+      const k = (lat - a) / (b - a);
+      return k > 0.15 && k < 0.85;
+    });
+    expect(between.length).toBeGreaterThan(0);
+    // On screen the arrow stays where it is: the map moves under it.
+    const xs = frames.map(([, x]) => x);
+    const ys = frames.map(([, , y]) => y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(3);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(3);
+  });
+
   test('moves the dot on a coarse fix, where guidance waits for a better one', async ({
     page,
     context,

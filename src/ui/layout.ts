@@ -66,6 +66,8 @@ export interface NavCamera {
   /** The user's own zoom on top of the automatic one, and tilt (`useNavView`'s `Adjust`). */
   zoomBy?: number;
   pitch?: number | null;
+  /** Metres to the next turn, which the camera comes closer for; none, or far, is `Infinity`. */
+  toTurn?: number;
 }
 
 const RAD = Math.PI / 180;
@@ -163,18 +165,23 @@ export function fitNav(
   });
 }
 
-/** Behind the user, looking ahead; linear, so one fix's move runs into the next. */
-export function followNav(map: maplibregl.Map, v: NavCamera, duration: number) {
-  fits.set(map, (fits.get(map) ?? 0) + 1);
-  map.easeTo({
-    center: v.center,
+/** The follow camera's zoom, tilt and room for a view, its bearing as given or as it is. */
+export function followCamera(map: maplibregl.Map, v: NavCamera) {
+  return {
     bearing: v.bearing ?? map.getBearing(),
     pitch: v.pitch ?? navPitch(v.mode),
-    zoom: Math.min(19, Math.max(3, navZoomFor(v.mode, v.speed) + (v.zoomBy ?? 0))),
+    zoom: Math.min(19, Math.max(3, navZoomFor(v.mode, v.speed, v.toTurn) + (v.zoomBy ?? 0))),
     padding: navPadding(),
-    duration,
-    easing: (x) => x,
-  });
+  };
+}
+
+/** The camera is the follow camera's now: an overview's fit still to come is called off. */
+export const followTakes = (map: maplibregl.Map) => fits.set(map, (fits.get(map) ?? 0) + 1);
+
+/** Behind the user, looking ahead; linear, so one fix's move runs into the next. */
+export function followNav(map: maplibregl.Map, v: NavCamera, duration: number) {
+  followTakes(map);
+  map.easeTo({ center: v.center, ...followCamera(map, v), duration, easing: (x) => x });
 }
 
 /** The map's centre is more than a thumb's width from `p`. */

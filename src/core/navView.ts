@@ -1,5 +1,5 @@
 import { distance } from './geo';
-import { navZoom } from './nav';
+import { between, navZoom } from './nav';
 import type { Mode } from './route';
 import type { RideState } from './ride';
 import type { Transit } from './transit';
@@ -13,8 +13,29 @@ export function navPitch(mode: Mode): number {
   return mode === 'car' ? 55 : mode === 'bike' ? 30 : 0;
 }
 
-export function navZoomFor(mode: Mode, speed: number): number {
-  return mode === 'car' ? navZoom(speed) : mode === 'bike' ? 17.5 : 18;
+/** By bike: close, a little further out at speed. */
+const BIKE_ZOOM: [number, number][] = [
+  [8, 17.6],
+  [30, 17],
+];
+
+/** A turn this many seconds ahead at the speed driven (and never less than this far) is
+ * approached closer in, so the junction is seen as it comes. */
+const TURN_S = 12;
+const TURN_MIN_M = 150;
+/** At most this many zoom levels closer, right at the turn. */
+const TURN_ZOOM: Record<Mode, number> = { car: 0.8, bike: 0.5, foot: 0 };
+
+/**
+ * The guidance camera's zoom: by speed, a line rather than steps so it never jumps, and closer
+ * as a turn comes (`toTurn` metres ahead; `Infinity` when the next step is no turn).
+ */
+export function navZoomFor(mode: Mode, speed: number, toTurn = Infinity): number {
+  const base =
+    mode === 'car' ? navZoom(speed) : mode === 'bike' ? between(BIKE_ZOOM, speed * 3.6) : 18;
+  const near = Math.max(TURN_MIN_M, speed * TURN_S);
+  const close = toTurn < near ? 1 - toTurn / near : 0;
+  return base + TURN_ZOOM[mode] * close;
 }
 
 type Pt = [number, number];

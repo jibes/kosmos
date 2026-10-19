@@ -6,6 +6,7 @@ import {
   markReroute,
   markSpoken,
   navZoom,
+  pointAt,
   prompt,
   rerouteDue,
   snap,
@@ -170,6 +171,20 @@ describe('guidance', () => {
     st = step(tr, st, { ...fixAt(m(0, 140), 2000), speed: null });
     expect(st.speed).toBeGreaterThan(10);
     expect(st.speed).toBeLessThan(25);
+  });
+
+  it('finds the point along the route, round its corner', () => {
+    const at = (a: number) => pointAt(tr, a);
+    expect(at(0).point).toEqual(m(0, 0));
+    expect(at(500).point[1]).toBeCloseTo(m(0, 500)[1], 7);
+    expect(at(500).bearing).toBeCloseTo(0, 0);
+    // 1000 m north, then east: 1200 m in is 200 m east of the corner, not across it.
+    expect(at(1200).point[0]).toBeCloseTo(m(200, 1000)[0], 6);
+    expect(at(1200).point[1]).toBeCloseTo(m(200, 1000)[1], 6);
+    expect(at(1200).bearing).toBeCloseTo(90, 0);
+    // Beyond either end: held at the end.
+    expect(at(-5).point).toEqual(m(0, 0));
+    expect(at(9999).point[0]).toBeCloseTo(m(500, 1000)[0], 7);
   });
 
   it('zooms out with speed', () => {

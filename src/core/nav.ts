@@ -109,6 +109,31 @@ export function snap(
   };
 }
 
+/**
+ * The point `along` metres into the route, and the way it runs there: where the arrow is drawn
+ * between fixes, gliding along the road instead of cutting its corners.
+ */
+export function pointAt(tr: Track, along: number): { point: [number, number]; bearing: number } {
+  const last = tr.along.length - 1;
+  const a = Math.max(0, Math.min(along, tr.along[last]));
+  let lo = 0;
+  let hi = last;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (tr.along[mid] <= a) lo = mid;
+    else hi = mid;
+  }
+  const len = tr.along[hi] - tr.along[lo];
+  const f = len > 0 ? (a - tr.along[lo]) / len : 0;
+  const [p, q] = [tr.route.coords[lo], tr.route.coords[hi]];
+  const [ax, ay] = tr.xy[lo];
+  const [bx, by] = tr.xy[hi];
+  return {
+    point: [p[0] + f * (q[0] - p[0]), p[1] + f * (q[1] - p[1])],
+    bearing: (Math.atan2(bx - ax, by - ay) / RAD + 360) % 360,
+  };
+}
+
 export interface Fix extends LngLat {
   accuracy: number;
   /** m/s, when the device reports it. */
@@ -442,12 +467,29 @@ export const markSpoken = (st: NavState, key: string): NavState => ({
 
 /** Camera zoom for the speed: close in a town, farther ahead on a motorway. */
 export function navZoom(speed: number): number {
-  const kmh = speed * 3.6;
-  if (kmh < 15) return 17.5;
-  if (kmh < 40) return 17;
-  if (kmh < 70) return 16.2;
-  if (kmh < 100) return 15.5;
-  return 14.8;
+  return between(CAR_ZOOM, speed * 3.6);
+}
+
+/** Car zoom by speed (km/h): close in town, further ahead on a motorway; between, a line. */
+const CAR_ZOOM: [number, number][] = [
+  [10, 17.5],
+  [30, 17],
+  [55, 16.2],
+  [85, 15.5],
+  [120, 14.8],
+];
+
+/** The value for `x` on a polyline of [x, y] points, held flat beyond its ends. */
+export function between(points: [number, number][], x: number): number {
+  if (x <= points[0][0]) return points[0][1];
+  for (let i = 1; i < points.length; i++) {
+    const [x1, y1] = points[i];
+    if (x <= x1) {
+      const [x0, y0] = points[i - 1];
+      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+    }
+  }
+  return points.at(-1)![1];
 }
 
 /**

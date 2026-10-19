@@ -1,11 +1,19 @@
 import type * as maplibregl from 'maplibre-gl';
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { travelHeading } from '../core/compass';
 import { distance } from '../core/geo';
-import { offRouteLimit, type NavState, type Snap } from '../core/nav';
-import type { Mode, Route } from '../core/route';
+import { offRouteLimit, track, type NavState, type Snap } from '../core/nav';
+import { turnOf, type Mode, type Route } from '../core/route';
 import { routeRest } from '../core/navView';
-import { fitNav, followNav, overviewNav, type NavCamera } from './layout';
+import { createGlide } from './glide';
+import {
+  fitNav,
+  followCamera,
+  followNav,
+  followTakes,
+  overviewNav,
+  type NavCamera,
+} from './layout';
 import type { userMarker } from './markers';
 import { motion } from './motion';
 import type { Fix } from './useLocation';
@@ -87,10 +95,21 @@ export function useGuidance(o: Options) {
     [adjustRef, cameraBearing],
   );
 
+  /** The arrow and the follow camera between fixes (`glide.ts`). */
+  const glide = useMemo(() => (map ? createGlide(map) : null), [map]);
+  /** The route as guidance measures it, for the arrow to glide along. */
+  const line = useMemo(() => (o.route ? track(o.route, o.mode) : null), [o.route, o.mode]);
+  const lastFix = useRef(0);
+  useEffect(() => {
+    if (!o.active) glide?.reset();
+  }, [o.active, glide]);
+  useEffect(() => () => glide?.stop(), [glide]);
+
   const onStep = useCallback(
     (nav: NavState, f: Fix) => {
       // Too coarse to guide by (network, tunnels): the dot shows it, guidance and camera wait.
       if (nav.weak) {
+        glide?.reset();
         meRef.current?.update({ lng: f.lng, lat: f.lat, accuracy: f.accuracy });
         return;
       }
@@ -103,25 +122,49 @@ export function useGuidance(o: Options) {
       const bearing = onLine
         ? travelHeading(s.bearing, compass.current(), nav.moving)
         : (course ?? compass.current());
-      meRef.current?.update({ lng: center[0], lat: center[1], accuracy: f.accuracy });
       movingRef.current = nav.moving;
       meRef.current?.heading(bearing);
       if (s && map) updateTheme(map, s, nav.time);
-      lastView.current = { center, bearing, speed: nav.speed, mode: ways.current.mode };
+      // Closer in as a turn comes (not for going straight on or setting off).
+      const m = ways.current.route?.maneuvers[nav.next];
+      const turn = !!m && onLine && !['straight', 'depart'].includes(turnOf(m.type));
+      lastView.current = {
+        center,
+        bearing,
+        speed: nav.speed,
+        mode: ways.current.mode,
+        toTurn: turn ? nav.toNext : Infinity,
+      };
       const coords = ways.current.route?.coords;
       rest.current = s && coords ? routeRest(coords, s.segment, center) : [center];
-      if (!map || touchingRef.current.size) return;
+
+      // About the time to the next fix, so the arrow is never still and never jumps.
+      const gap = lastFix.current ? f.time - lastFix.current : 1000;
+      lastFix.current = f.time;
+      const ms = motion(Math.max(300, Math.min(1500, gap)));
+      const glideTo = (cam: ReturnType<typeof followCamera> | null) =>
+        glide?.to(
+          { point: center, along: onLine ? s.along : null },
+          ms,
+          line,
+          cam,
+          (p) => meRef.current?.update({ lng: p[0], lat: p[1], accuracy: f.accuracy }),
+          () => !touchingRef.current.size && !lookedRef.current && !overviewRef.current,
+        );
+
+      if (!map || touchingRef.current.size || followRef.current === 'off') return glideTo(null);
       if (overviewRef.current) {
+        glideTo(null);
         fitNav(map, rest.current, motion(1000));
         return;
       }
-      if (followRef.current === 'off') return;
       // A pinch or tilt by hand: kept from now on, once the map has come to rest.
       if (lookedRef.current) {
-        if (map.isMoving()) return;
+        if (map.isMoving()) return glideTo(null);
         lookedRef.current = false;
         adjustRef.current = {
-          zoomBy: map.getZoom() - navZoomFor(lastView.current.mode, nav.speed),
+          zoomBy:
+            map.getZoom() - navZoomFor(lastView.current.mode, nav.speed, lastView.current.toTurn),
           pitch: map.getPitch(),
         };
       }
@@ -131,13 +174,23 @@ export function useGuidance(o: Options) {
       if (far !== autoRef.current) logEvent('nav.autoOverview', { on: far });
       autoRef.current = far;
       if (away && far) {
+        glideTo(null);
         overviewNav(map, center, away, cameraBearing(map, bearing), motion(1000));
-      } else {
-        follow(map, motion(1000));
+        return;
       }
+      followTakes(map);
+      glideTo(
+        followCamera(map, {
+          ...lastView.current,
+          ...adjustRef.current,
+          bearing: cameraBearing(map, bearing),
+        }),
+      );
     },
     [
       map,
+      glide,
+      line,
       compass,
       meRef,
       movingRef,
@@ -148,7 +201,6 @@ export function useGuidance(o: Options) {
       lookedRef,
       updateTheme,
       cameraBearing,
-      follow,
     ],
   );
 
@@ -181,10 +233,11 @@ export function useGuidance(o: Options) {
   const recenter = useCallback(
     (bearing?: number) => {
       if (!map) return;
+      glide?.release();
       if (overviewRef.current) fitNav(map, rest.current, motion(600));
       else if (followRef.current !== 'off') follow(map, motion(600), bearing);
     },
-    [map, overviewRef, followRef, follow],
+    [map, glide, overviewRef, followRef, follow],
   );
 
   return { nav, tracking: !!tr, rerouteState, recenter } as const;

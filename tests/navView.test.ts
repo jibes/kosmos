@@ -44,6 +44,24 @@ describe('navigation views', () => {
     expect(navZoomFor('car', 35)).toBeLessThan(navZoomFor('car', 5));
   });
 
+  it('zooms with speed as a line, never by a jump, and closer as a turn comes', () => {
+    // Every km/h from 0 to 150: no step bigger than a hair.
+    for (let kmh = 0; kmh < 150; kmh++) {
+      const step = navZoomFor('car', (kmh + 1) / 3.6) - navZoomFor('car', kmh / 3.6);
+      expect(step).toBeLessThanOrEqual(0);
+      expect(step).toBeGreaterThan(-0.05);
+    }
+    expect(navZoomFor('bike', 7)).toBeLessThan(navZoomFor('bike', 2));
+    // At 50 km/h a turn 12 s ahead (167 m) starts to pull in, by 0.8 at the turn itself.
+    const v = 50 / 3.6;
+    expect(navZoomFor('car', v, 400)).toBe(navZoomFor('car', v));
+    expect(navZoomFor('car', v, 80)).toBeGreaterThan(navZoomFor('car', v));
+    expect(navZoomFor('car', v, 0) - navZoomFor('car', v)).toBeCloseTo(0.8);
+    // Slow, a turn still counts from 150 m; on foot the view stays as it is.
+    expect(navZoomFor('car', 2, 100)).toBeGreaterThan(navZoomFor('car', 2));
+    expect(navZoomFor('foot', 1, 10)).toBe(navZoomFor('foot', 1));
+  });
+
   it('keeps what is left of a road route from the user on', () => {
     const coords: Pt[] = [
       [0, 0],
