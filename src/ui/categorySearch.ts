@@ -77,6 +77,12 @@ export function seen(map: maplibregl.Map) {
   return { view, inView, middle: { lng: c.lng, lat: c.lat } };
 }
 
+/** Where distances count from: the user when in view, else the middle of the map they see. */
+export function distanceFrom(map: maplibregl.Map, me: LngLat | null): LngLat {
+  const { inView, middle } = seen(map);
+  return me && inView(me) ? me : middle;
+}
+
 /** The map's tile URL template, once its source has loaded. */
 const templateOf = (map: maplibregl.Map) =>
   (map.getSource(MAP_SOURCE) as maplibregl.VectorTileSource | undefined)?.tiles?.[0];

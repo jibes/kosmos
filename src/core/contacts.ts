@@ -15,6 +15,13 @@ export interface Contact {
   missed?: true;
 }
 
+/** Back in the app after this long: the address book is read again (moves, new contacts). */
+export const REREAD_AFTER_MS = 10 * 60_000;
+
+/** The app was put away at `hiddenAt` and is back `now`: time to read the address book again. */
+export const rereadDue = (hiddenAt: number | null, now: number) =>
+  hiddenAt !== null && now - hiddenAt >= REREAD_AFTER_MS;
+
 /** A phone's address book can be long; this many addresses are placed at most. */
 export const CONTACTS_MAX = 500;
 

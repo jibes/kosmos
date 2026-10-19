@@ -482,7 +482,7 @@ test.describe('map', () => {
     await expect(page.getByRole('button', { name: /OpenStreetMap/ })).toBeFocused();
   });
 
-  test('stars a favourite: marked on the map, first in the empty search, kept', async ({
+  test('stars a favourite: marked on the map, in its list and found by name, kept', async ({
     page,
   }, info) => {
     const input = page.getByRole('combobox');
@@ -521,13 +521,23 @@ test.describe('map', () => {
     await page.mouse.click(at.x, at.y);
     await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
     await card.getByRole('button', { name: 'Close' }).click();
-    // Kept: after a reload, first in the empty search field.
+    // Kept: after a reload, its list first in the empty search field, and found by name.
     await page.reload();
     await input.click();
     const first = page.getByRole('option').first();
-    await expect(first).toContainText(SEARCH_HIT.name);
-    await expect(first).toHaveClass(/r-fav/);
+    await expect(first).toHaveAccessibleName('Favourites, 1, opens a list');
     await first.click();
+    const fav = page.getByRole('option').nth(1);
+    await expect(fav).toContainText(SEARCH_HIT.name);
+    await expect(fav).toHaveClass(/r-fav/);
+    await input.fill('brandenb');
+    await expect(page.getByRole('option')).toHaveCount(2);
+    await input.fill('');
+    await input.press('Escape');
+    await input.fill('brandenburger');
+    await expect(page.getByRole('option').first()).toHaveClass(/r-fav/);
+    await expect(page.locator('.r-fav')).toHaveCount(1);
+    await page.getByRole('option').first().click();
     await card.getByRole('button', { name: 'Favourite' }).click();
     await expect(card.getByRole('button', { name: 'Favourite' })).toHaveAttribute(
       'aria-pressed',
@@ -607,11 +617,16 @@ test.describe('map', () => {
     await field.press('Enter');
     await expect(card.getByRole('heading')).toHaveText('Gate');
     await card.getByRole('button', { name: 'Close' }).click();
-    // Listed by its new name, the place's own after it.
+    // Listed by its new name, the place's own after it; found by either.
     await input.fill('');
-    const first = page.getByRole('option').first();
+    await page.getByRole('option').first().click();
+    const first = page.getByRole('option').nth(1);
     await expect(first).toContainText('Gate');
     await expect(first).toContainText(SEARCH_HIT.name);
+    await input.fill('gat');
+    await expect(page.getByRole('option')).toHaveCount(2);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
 
     // Saved as a file, then gone, and back from the file.
@@ -632,7 +647,8 @@ test.describe('map', () => {
     );
     await page.keyboard.press('Escape');
     await input.click();
-    await expect(page.getByRole('option').first()).toContainText('Gate');
+    await page.getByRole('option').first().click();
+    await expect(page.getByRole('option').nth(1)).toContainText('Gate');
   });
 
   test('puts contacts on the map, found by name, and takes them off again', async ({
@@ -687,10 +703,15 @@ test.describe('map', () => {
         [SEARCH_HIT.lng, SEARCH_HIT.lat],
       );
     await expect.poll(onMap).toBeGreaterThan(0);
-    // Taken off again from the empty field.
+    // In a list of their own in the empty field, nearest first; taken off again from there.
     await input.fill('');
     await input.click();
+    const list = page.getByRole('option').filter({ hasText: 'Contacts' });
+    await expect(list).toHaveAccessibleName('Contacts, 1, opens a list');
+    await list.click();
+    await expect(page.locator('.r-place')).toHaveText([/Anna Müller/]);
     await page.getByRole('button', { name: 'Remove contacts from the map' }).click();
+    await page.keyboard.press('Escape');
     await expect(
       page.getByRole('option').filter({ hasText: "Show contacts' addresses" }),
     ).toBeVisible();

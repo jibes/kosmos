@@ -32,6 +32,7 @@ import { useContactLayer, useContactsRow } from './ui/useContacts';
 import { logEvent } from './ui/usageLog';
 import { useMapGestures } from './ui/useMapGestures';
 import { useDotInView } from './ui/useDotInView';
+import { distanceFrom } from './ui/categorySearch';
 import { useRoute, viaOf, type Trip } from './ui/useRoute';
 import { useStopState, useStops } from './ui/useStops';
 import { useGuidance } from './ui/useGuidance';
@@ -260,6 +261,7 @@ export function App() {
     const c = map.getCenter().wrap();
     return { lng: c.lng, lat: c.lat, zoom: map.getZoom() };
   }, [map]);
+  const from = useCallback(() => (map ? distanceFrom(map, fix) : undefined), [map, fix]);
 
   // Location: the dot, and the camera while following.
   const me = useRef<ReturnType<typeof userMarker> | null>(null);
@@ -554,6 +556,7 @@ export function App() {
     } else if (picking !== null) setPicking(null);
     else if (trip) closeRoute();
     else if (selection) clear();
+    else if (search.folder) search.setFolder(null);
     else if (search.query) search.clear();
     else return false;
     return true;
@@ -667,7 +670,8 @@ export function App() {
                   onNearby={() => {
                     const p = selection.place;
                     logEvent('place.nearby');
-                    search.clear();
+                    // Open on the kinds of place: what is near here.
+                    search.setFolder('kinds');
                     map?.easeTo({
                       center: [p.lng, p.lat],
                       zoom: Math.max(map.getZoom(), 15),
@@ -700,6 +704,7 @@ export function App() {
                 hidden={!!trip}
                 lang={lang}
                 bias={bias}
+                from={from}
                 onPick={pick}
                 onCategory={category.onCategory}
                 categoryRun={category.run}
@@ -714,6 +719,7 @@ export function App() {
                   key={picking}
                   lang={lang}
                   bias={bias}
+                  from={from}
                   onPick={pick}
                   collapsed={false}
                   onFocus={() => undefined}

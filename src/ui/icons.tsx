@@ -75,6 +75,13 @@ export const UpIcon = ({ size = 16 }: { size?: number }) => (
   </Svg>
 );
 
+/** Opens a list (right), or goes back out of it (left). */
+export const ChevronIcon = ({ back = false, size = 18 }: { back?: boolean; size?: number }) => (
+  <Svg size={size}>
+    <path d={back ? 'm15 6-6 6 6 6' : 'm9 6 6 6-6 6'} />
+  </Svg>
+);
+
 /** A search taken before. */
 export const ClockIcon = () => (
   <Svg>

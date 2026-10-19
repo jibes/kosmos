@@ -381,16 +381,24 @@ test.describe('search', () => {
     await expect(page.getByRole('button', { name: 'Search this area' })).toBeVisible();
   });
 
-  test('offers recent searches and common kinds in an empty field, kept on the device', async ({
+  test('offers the kinds of place and recent searches in an empty field, kept on the device', async ({
     page,
   }) => {
     await jump(page, { ...CENTER, zoom: 14 });
     const input = page.getByRole('combobox');
     const options = page.getByRole('option');
-    // Nothing yet: what people look for most, none preselected.
+    const recents = page.locator('.r-recent');
+    // Nothing yet: the kinds of place, a list of its own, none preselected.
     await input.focus();
-    await expect(options.first()).toContainText('Restaurants');
+    await expect(options.first()).toContainText('Kinds of place');
     await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
+    await options.first().click();
+    // In it: back first, then what people look for most; Escape goes back out.
+    await expect(options.first()).toHaveAccessibleName('Back: Kinds of place');
+    await expect(options.nth(1)).toContainText('Restaurants');
+    await expect(page.locator('.search [role=status]')).toContainText('Kinds of place:');
+    await input.press('Escape');
+    await expect(options.first()).toContainText('Kinds of place');
 
     await input.fill('brandenburger');
     await options.filter({ hasText: SEARCH_HIT.name }).click();
@@ -402,23 +410,23 @@ test.describe('search', () => {
     await input.fill('');
     await page.mouse.move(1, 1);
 
-    // Newest first, a tap from either.
-    await expect(options.nth(0)).toContainText('Restaurants');
-    await expect(options.nth(1)).toContainText(SEARCH_HIT.name);
-    await expect(options.nth(1)).toContainText('Pariser Platz');
+    // Newest first, below the lists, a tap from either.
+    await expect(recents.nth(0)).toContainText('Restaurants');
+    await expect(recents.nth(1)).toContainText(SEARCH_HIT.name);
+    await expect(recents.nth(1)).toContainText('Pariser Platz');
     // Kept across a reload, on the device only.
     await page.reload();
     await idle(page);
     await input.focus();
-    await expect(options.nth(1)).toContainText(SEARCH_HIT.name);
-    await options.nth(1).click();
+    await expect(recents.nth(1)).toContainText(SEARCH_HIT.name);
+    await recents.nth(1).click();
     await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
     await page.locator('.card').getByRole('button', { name: 'Close' }).click();
 
     // Taken again, it is the newest; forgotten on request (the cross, or Delete).
     await input.focus();
-    await expect(options.nth(0)).toContainText(SEARCH_HIT.name);
-    await options
+    await expect(recents.nth(0)).toContainText(SEARCH_HIT.name);
+    await recents
       .nth(0)
       .getByRole('button', { name: /Remove .* from recent searches/ })
       .click();

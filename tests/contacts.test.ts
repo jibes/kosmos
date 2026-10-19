@@ -5,6 +5,8 @@ import {
   matchContacts,
   mergeContacts,
   parseContacts,
+  REREAD_AFTER_MS,
+  rereadDue,
 } from '../src/core/contacts';
 
 const anna = { name: 'Anna Müller', address: 'Unter den Linden 5\n10117 Berlin' };
@@ -50,5 +52,11 @@ describe('contacts', () => {
     expect(contactFeatures(list).features).toHaveLength(1);
     expect(contactFeatures(list).features[0].properties).toEqual({ name: 'A', contact: 0 });
     expect(parseContacts('{')).toEqual([]);
+  });
+
+  it('reads the address book again on coming back after a while', () => {
+    expect(rereadDue(null, 1e9)).toBe(false);
+    expect(rereadDue(0, REREAD_AFTER_MS - 1)).toBe(false);
+    expect(rereadDue(0, REREAD_AFTER_MS)).toBe(true);
   });
 });

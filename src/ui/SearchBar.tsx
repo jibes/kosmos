@@ -1,20 +1,28 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { categoriesFor, foundFor, foundOf, type Category, type Kind } from '../core/categories';
-import { formatDistance } from '../core/route';
+import { categoriesFor, foundFor, foundOf, type Kind } from '../core/categories';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
-import type { Recent } from '../core/recent';
+import type { LngLat } from '../core/geo';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
+import {
+  blankItems,
+  folderItems,
+  matchFavourites,
+  type Folder,
+  type Item,
+  type ListInput,
+} from '../core/searchList';
 import { getJson, nominatimSlot } from './http';
 import { logEvent } from './usageLog';
-import { fill, t, units } from '../i18n';
+import { fill, t } from '../i18n';
 import { touch } from './layout';
 import { useSwipe } from './useSwipe';
-import { ClockIcon, CloseIcon, KindIcon, SearchIcon, StarIcon } from './icons';
+import { CloseIcon, SearchIcon } from './icons';
 import { placeOf, useFavourites } from './useFavourites';
-import { onMapText, placeOfContact } from './useContacts';
+import { placeOfContact } from './useContacts';
 import { matchContacts, type Contact } from '../core/contacts';
 import { isFavourite } from '../core/favourites';
 import { forgetRecent, rememberRecent, useRecent } from './useRecent';
+import { folderName, labelOf as label, rowClass, rowKey, rowLabel, SearchRow } from './SearchRow';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
 
@@ -24,6 +32,10 @@ export interface SearchState {
   setQuery: (q: string) => void;
   category: Kind | null;
   setCategory: (c: Kind | null) => void;
+  /** A list of the user's own, or the kinds of place, open in the field's place. */
+  folder: Folder | null;
+  /** Into a list or out of it; the text was for the other, so it goes. */
+  setFolder: (f: Folder | null) => void;
   /** Empties the field and ends the category (its dots go with it). */
   clear: () => void;
 }
@@ -32,18 +44,26 @@ export interface SearchState {
 export function useSearch(): SearchState {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Kind | null>(null);
+  const [folder, setFolderState] = useState<Folder | null>(null);
   return useMemo(
     () => ({
       query,
       setQuery,
       category,
       setCategory,
-      clear: () => {
+      folder,
+      setFolder: (f: Folder | null) => {
+        setFolderState(f);
         setQuery('');
         setCategory(null);
       },
+      clear: () => {
+        setQuery('');
+        setCategory(null);
+        setFolderState(null);
+      },
     }),
-    [query, category],
+    [query, category, folder],
   );
 }
 
@@ -75,9 +95,9 @@ interface Props {
   onShowAll?: () => void;
   /** The user's contacts on the map: found by name, added or removed from the empty field. */
   contacts?: { list: Contact[]; busy: boolean; onAdd: () => void; onForget: () => void };
+  /** Where distances in the lists count from: the user in view, else the map's middle. */
+  from?: () => LngLat | undefined;
 }
-
-const label = (k: Kind) => foundOf(k) ?? t[`cat_${k as Category}`];
 
 const DEBOUNCE_MS = 200;
 /** A pull down the list this far, or a quick flick, puts it away. */
@@ -95,27 +115,6 @@ const cache = new Map<string, Place[]>();
 /** About 50 km across, and four zoom steps: the same search there gets the same answer. */
 const area = (b: SearchBias | undefined) =>
   b ? `${Math.round(b.lat * 2)},${Math.round(b.lng * 2)},${Math.floor(b.zoom / 4)}` : '';
-
-/**
- * A row of the list: a kind of place (or a chain, with how many are in view) to search the map
- * for, or a place found by name.
- */
-type Item =
-  | { cat: Kind; place?: undefined; recent?: undefined; act?: undefined }
-  | {
-      place: Place;
-      fav?: boolean;
-      contact?: boolean;
-      cat?: undefined;
-      recent?: undefined;
-      act?: undefined;
-    }
-  | { recent: Recent; cat?: undefined; place?: undefined; act?: undefined }
-  /** The user's contacts: put on the map, or how many there are, with a way to remove them. */
-  | { act: 'contacts'; cat?: undefined; place?: undefined; recent?: undefined };
-
-/** Offered in an empty field (after the recent ones): what people look for most. */
-const COMMON: Kind[] = ['restaurant', 'cafe', 'groceries', 'pharmacy', 'toilets', 'parking'];
 
 interface Response {
   key: string;
@@ -140,10 +139,17 @@ export function SearchBar({
   categoryRun,
   onShowAll,
   contacts,
+  from,
 }: Props) {
   const own = useSearch();
   /** A kind of place chosen from the suggestions: its places come from the map, not by name. */
-  const { query, setQuery, category, setCategory } = search ?? own;
+  const { query, setQuery, category, setCategory, folder, setFolder } = search ?? own;
+  /** Which way the list slides: into a list from the right, back out from the left. */
+  const [slide, setSlide] = useState<'in' | 'out' | null>(null);
+  const openFolder = (f: Folder | null) => {
+    setSlide(f ? 'in' : 'out');
+    setFolder(f);
+  };
   const [response, setResponse] = useState<Response | null>(null);
   const [cursor, setCursor] = useState({ key: '', index: 0 });
   const [focused, setFocused] = useState(false);
@@ -182,53 +188,76 @@ export function SearchBar({
   });
 
   const q = query.trim();
-  const key = category ? `cat|${category}` : `${lang}|${q}|${area(bias())}`;
-  const cached = category ? undefined : cache.get(key);
+  const key = folder
+    ? `dir|${folder}|${q}`
+    : category
+      ? `cat|${category}`
+      : `${lang}|${q}|${area(bias())}`;
+  const cached = category || folder ? undefined : cache.get(key);
   const current: Omit<Response, 'key'> | null = cached
     ? { places: cached, status: 'done' }
     : response?.key === key
       ? response
       : null;
-  const status: Status = q.length < 2 ? 'idle' : (current?.status ?? 'loading');
+  // An open list is searched on the device only.
+  const status: Status = folder || q.length < 2 ? 'idle' : (current?.status ?? 'loading');
   // While a new query loads, the previous names stay put instead of flickering away. A category
   // shows only its own places: never names, nor the last category's places, to be tapped.
-  const sameKind = !!response && !category && !response.key.startsWith('cat|');
+  const sameKind = !!response && !category && !folder && !response.key.startsWith('cat|');
   /** "museum", "Lebensm…": the kinds of place the text may mean, offered above the names. */
   const kinds = category || !onCategory ? [] : categoriesFor(q);
-  const suggestions: Item[] = kinds.map((cat) => ({ cat }));
+  const suggestions: Item[] = kinds.map((cat) => ({ type: 'cat', cat }));
   const results = current?.places ?? (sameKind ? response.places : []);
   /** None of the kind in view: the nearest around it, said so above them. */
   const beyond = !!category && results.length > 0 && results.every((p) => p.beyond);
-  /** An empty field: the recent searches (places only when choosing a route's end), then the
-   * kinds of place people look for most. Nothing is taken until chosen. */
-  const blank = q.length < 2 && !category;
+  /** An empty field: the lists of the user's own and the kinds of place, then the recent
+   * searches (places only when choosing a route's end). Nothing is taken until chosen. */
+  const blank = q.length < 2 && !category && !folder;
   const recent = useRecent();
-  const placed = contacts?.list.filter((c) => c.lng !== undefined).length ?? 0;
   const favourites = useFavourites();
-  const items: Item[] = blank
-    ? [
-        // Favourites first, then what was searched lately (a favourite not twice).
-        ...favourites.map((f) => ({ place: placeOf(f), fav: true })),
-        ...recent
-          .filter((r) => onCategory || 'place' in r)
-          .filter((r) => !('place' in r) || !isFavourite(favourites, r.place))
-          .map((r) => ({ recent: r })),
-        ...(contacts ? [{ act: 'contacts' as const }] : []),
-        ...(onCategory ? COMMON.map((cat) => ({ cat })) : []),
-      ]
-    : [
-        ...suggestions,
-        // The user's own contacts by name, before the world's places.
-        ...(contacts && !category ? matchContacts(contacts.list, q) : []).map((c) => ({
-          place: placeOfContact(c),
-          contact: true,
-        })),
-        ...results.map((place) => ({ place })),
-      ];
+  const list: ListInput = {
+    query: q,
+    folder,
+    favourites,
+    contacts: contacts?.list,
+    recent,
+    kinds: !!onCategory,
+    labelOf: label,
+    placeOf,
+    placeOfContact,
+    from: folder ? from?.() : undefined,
+  };
+  /** Typed: the user's own favourites and contacts by name, before the world's places. */
+  const favs = blank || folder || category ? [] : matchFavourites(favourites, q);
+  const items: Item[] = folder
+    ? folderItems({ ...list, folder })
+    : blank
+      ? blankItems(list)
+      : [
+          ...suggestions,
+          ...favs.map((f): Item => ({ type: 'place', place: placeOf(f), fav: true })),
+          ...(contacts && !category ? matchContacts(contacts.list, q) : []).map((c): Item => ({
+            type: 'place',
+            place: placeOfContact(c),
+            contact: true,
+          })),
+          ...results
+            .filter((p) => !isFavourite(favs, p))
+            .map((place): Item => ({ type: 'place', place })),
+        ];
+  const placed = contacts?.list.filter((c) => c.lng !== undefined).length ?? 0;
   // A name search offers its top row for Enter; a category, or an empty field, picks nothing
   // until asked.
   const active =
-    cursor.key === key ? Math.min(cursor.index, items.length - 1) : category || blank ? -1 : 0;
+    cursor.key === key
+      ? Math.min(cursor.index, items.length - 1)
+      : folder
+        ? q && items.length > 1
+          ? 1
+          : -1
+        : category || blank
+          ? -1
+          : 0;
   const setActive = (index: number) => setCursor({ key, index });
 
   // A category asks the map, never the search server; leaving it clears its dots.
@@ -266,7 +295,7 @@ export function SearchBar({
   }, [key, ready, q, setCategory]);
 
   useEffect(() => {
-    if (category || q.length < 2 || cache.has(key)) return;
+    if (category || folder || q.length < 2 || cache.has(key)) return;
     const ctrl = new AbortController();
     const fallback = new AbortController();
     let timedOut = false;
@@ -333,7 +362,7 @@ export function SearchBar({
       ctrl.abort();
       fallback.abort();
     };
-  }, [q, key, lang, bias, category, retry, setCategory]);
+  }, [q, key, lang, bias, category, folder, retry, setCategory]);
 
   // "/" focuses search from anywhere, like most of the web.
   useEffect(() => {
@@ -362,6 +391,7 @@ export function SearchBar({
         },
       });
     }
+    if (folder) setFolder(null);
     onPick(place);
     input.current?.blur();
   };
@@ -369,6 +399,7 @@ export function SearchBar({
   /** Search the map for a kind of place; the field shows its name, the map its places. */
   const choose = (c: Kind) => {
     rememberRecent({ kind: c, label: label(c) });
+    if (folder) setFolder(null);
     setCategory(c);
     setQuery(label(c));
     input.current?.blur();
@@ -384,18 +415,27 @@ export function SearchBar({
 
   /** Which kind of row was taken, for the usage log: never the text or the place. */
   const rowOf = (it: Item) => {
-    if (it.act) return 'contacts';
-    if (it.recent) return 'recent';
-    if (it.place) return it.fav ? 'favourite' : it.contact ? 'contact' : 'name';
-    if (blank) return 'common';
-    return 'kind';
+    if (it.type === 'place') return it.fav ? 'favourite' : it.contact ? 'contact' : 'name';
+    if (it.type === 'cat') return folder ? 'kinds' : 'kind';
+    if (it.type === 'folder') return `list:${it.folder}`;
+    return it.type;
   };
   const choice = (it: Item) => {
     logEvent('search.pick', { row: rowOf(it), at: items.indexOf(it) });
-    if (it.act) return contacts?.onAdd();
-    if (it.recent)
-      return 'place' in it.recent ? pick(it.recent.place) : choose(it.recent.kind as Kind);
-    return it.cat ? choose(it.cat) : pick(it.place);
+    switch (it.type) {
+      case 'contacts':
+        return contacts?.onAdd();
+      case 'folder':
+        return openFolder(it.folder);
+      case 'up':
+        return openFolder(null);
+      case 'recent':
+        return 'place' in it.recent ? pick(it.recent.place) : choose(it.recent.kind as Kind);
+      case 'cat':
+        return choose(it.cat);
+      case 'place':
+        return pick(it.place);
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -428,17 +468,26 @@ export function SearchBar({
       setRetry((n) => n + 1);
     } else if (e.key === 'Enter') {
       // Only rows for exactly this query; stale names from the last query would jump wrong.
-      const fresh = blank || current || active < suggestions.length;
+      const fresh = blank || folder || current || active < suggestions.length;
       const it = fresh ? items[active] : undefined;
       // The top row was not chosen, only offered: with several names, Enter shows them all.
-      const all = !!onCategory && !!it?.place && cursor.key !== key && results.length > 1;
+      const all =
+        !folder &&
+        !!onCategory &&
+        it?.type === 'place' &&
+        !it.fav &&
+        !it.contact &&
+        cursor.key !== key &&
+        results.length > 1;
       if (all) showFound(results);
       else if (it) choice(it);
       else if (q.length >= 2 && status === 'loading') jumpFor.current = key;
-    } else if (e.key === 'Delete' && items[active]?.recent) {
-      forgetRecent(items[active].recent);
+    } else if (e.key === 'Delete' && items[active]?.type === 'recent') {
+      const it = items[active];
+      if (it.type === 'recent') forgetRecent(it.recent);
     } else if (e.key === 'Escape') {
-      if (query) {
+      if (folder && !query) openFolder(null);
+      else if (query) {
         setQuery('');
         setCategory(null);
       } else if (onCancel) onCancel();
@@ -448,20 +497,23 @@ export function SearchBar({
 
   /** What the list has to say instead of results; also read out to a screen reader. */
   const note =
-    status === 'done' && !items.length
-      ? category
-        ? t.noneHere
-        : t.noResults
-      : status === 'error'
-        ? navigator.onLine
-          ? t.searchSlow
-          : t.searchOffline
-        : status === 'slow'
-          ? t.searchSlow
-          : '';
+    folder && q && items.length < 2
+      ? t.noResults
+      : status === 'done' && !items.length
+        ? category
+          ? t.noneHere
+          : t.noResults
+        : status === 'error'
+          ? navigator.onLine
+            ? t.searchSlow
+            : t.searchOffline
+          : status === 'slow'
+            ? t.searchSlow
+            : '';
   const open = !collapsed && focused;
   const showList =
-    open && (status !== 'idle' || suggestions.length > 0 || (blank && items.length > 0));
+    open &&
+    (status !== 'idle' || suggestions.length > 0 || ((blank || !!folder) && items.length > 0));
   useEffect(() => {
     listShown.current = showList;
   });
@@ -470,7 +522,9 @@ export function SearchBar({
     <div ref={box} className="search" data-open={showList || undefined} hidden={hidden}>
       {showList && (
         <ul
+          key={folder ?? ''}
           className="results surface"
+          data-slide={slide ?? undefined}
           id={listId}
           role="listbox"
           style={
@@ -484,102 +538,23 @@ export function SearchBar({
           )}
           {items.map((it, i) => (
             <li
-              key={
-                it.act
-                  ? 'act|contacts'
-                  : it.recent
-                    ? `recent|${'place' in it.recent ? `${it.recent.place.name}${it.recent.place.lat}` : it.recent.kind}`
-                    : it.cat
-                      ? `cat|${it.cat}`
-                      : `${it.place.name}${it.place.lat}${it.place.lng}`
-              }
+              key={rowKey(it)}
               role="option"
               id={`${listId}-${i}`}
-              className={
-                it.recent || it.act
-                  ? 'r-recent'
-                  : it.cat
-                    ? 'r-cat'
-                    : it.fav
-                      ? 'r-place r-fav'
-                      : 'r-place'
-              }
+              className={rowClass(it)}
               aria-selected={i === active}
+              aria-label={rowLabel(it)}
               onPointerDown={(e) => e.preventDefault()}
               onClick={() => choice(it)}
               onPointerEnter={() => setActive(i)}
             >
-              {it.act ? (
-                <>
-                  <KindIcon kind="person" />
-                  <span className="r-name">
-                    {placed
-                      ? onMapText(placed)
-                      : contacts?.busy
-                        ? t.contactsPlacing
-                        : t.contactsAdd}
-                  </span>
-                  <span className="r-detail">{t.contactsHint}</span>
-                  {!!placed && (
-                    <button
-                      type="button"
-                      className="r-forget icon-btn"
-                      aria-label={t.contactsForget}
-                      tabIndex={-1}
-                      onPointerDown={(e) => e.preventDefault()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        contacts?.onForget();
-                      }}
-                    >
-                      <CloseIcon />
-                    </button>
-                  )}
-                </>
-              ) : it.recent ? (
-                <>
-                  <ClockIcon />
-                  <span className="r-name">
-                    {'place' in it.recent ? it.recent.place.name : it.recent.label}
-                  </span>
-                  <span className="r-detail">
-                    {'place' in it.recent ? it.recent.place.detail : t.catHint}
-                  </span>
-                  <button
-                    type="button"
-                    className="r-forget icon-btn"
-                    aria-label={fill(t.forgetRecent, {
-                      name: 'place' in it.recent ? it.recent.place.name : it.recent.label,
-                    })}
-                    tabIndex={-1}
-                    onPointerDown={(e) => e.preventDefault()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (it.recent) forgetRecent(it.recent);
-                    }}
-                  >
-                    <CloseIcon />
-                  </button>
-                </>
-              ) : it.cat ? (
-                <>
-                  <SearchIcon />
-                  <span className="r-name">{label(it.cat)}</span>
-                  <span className="r-detail">{t.catHint}</span>
-                </>
-              ) : (
-                <>
-                  {it.fav ? <StarIcon filled /> : <KindIcon kind={it.place.kind ?? 'place'} />}
-                  <span className="r-name">{it.place.name}</span>
-                  {it.place.distance !== undefined ? (
-                    <span className="r-detail">
-                      {formatDistance(it.place.distance, lang, units)}
-                    </span>
-                  ) : (
-                    it.place.detail && <span className="r-detail">{it.place.detail}</span>
-                  )}
-                </>
-              )}
+              <SearchRow
+                it={it}
+                lang={lang}
+                placed={placed}
+                busy={contacts?.busy}
+                onForgetContacts={contacts?.onForget}
+              />
             </li>
           ))}
           {note && (
@@ -598,6 +573,9 @@ export function SearchBar({
       <p className="sr-only" role="status">
         {showList
           ? note ||
+            (folder && !q
+              ? fill(t.inList, { name: folderName(folder), n: items.length - 1 })
+              : '') ||
             `${beyond ? `${t.beyondView} ` : ''}${
               results.length === 1
                 ? t.oneResult

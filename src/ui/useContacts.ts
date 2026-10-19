@@ -5,12 +5,13 @@ import {
   contactFeatures,
   mergeContacts,
   parseContacts,
+  rereadDue,
   type Contact,
 } from '../core/contacts';
 import { parsePhoton, searchUrl, type Place } from '../core/search';
 import { CONTACT_ICON, CONTACT_SOURCE } from '../core/style';
 import { fill, lang, t } from '../i18n';
-import { isNative, readContacts } from './native';
+import { isNative, openAppSettings, readContacts } from './native';
 import { CONTACTS_KEY, store, stored } from './prefs';
 import { logEvent } from './usageLog';
 
@@ -72,15 +73,18 @@ let running = false;
 /**
  * Reads the contacts (asking for the address book, or opening the picker, when `ask`) and
  * places each new address, one lookup at a time; what was placed before keeps its point.
- * Returns how many contacts have a place, or `null` when nothing could be read.
+ * Returns how many contacts have a place, `'denied'` when the app may not read them, or `null`
+ * when nothing was read (the picker closed, already reading).
  */
-export async function importContacts(ask: boolean): Promise<number | null> {
+export async function importContacts(ask: boolean): Promise<number | 'denied' | null> {
   if (running) return null;
   running = true;
   try {
     let read: { name: string; address: string }[] | null;
-    if (isNative) read = await readContacts(ask);
-    else {
+    if (isNative) {
+      read = await readContacts(ask);
+      if (!read) return 'denied';
+    } else {
       const p = picker();
       if (!p || !ask) return null;
       const picked = await p.select(['name', 'address'], { multiple: true }).catch(() => null);
@@ -178,9 +182,19 @@ export function useContactLayer(map: maplibregl.Map | null) {
       map.off('load', apply);
     };
   }, [map, contacts]);
-  // Added in the app before: the address book again, never asking (moves, new contacts).
+  // Added in the app before: the address book again, never asking (moves, new contacts), on
+  // opening and on coming back after a while.
   useEffect(() => {
-    if (isNative && list.length) void importContacts(false);
+    if (!isNative) return;
+    if (list.length) void importContacts(false);
+    let hiddenAt: number | null = null;
+    const onVisible = () => {
+      if (document.hidden) hiddenAt = Date.now();
+      else if (rereadDue(hiddenAt, Date.now()) && list.length) void importContacts(false);
+      if (!document.hidden) hiddenAt = null;
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 }
 
@@ -192,14 +206,22 @@ export const onMapText = (n: number) =>
  * The search's contacts row, where contacts can be added here at all: adding (said when done,
  * as it takes a moment per address), removing, and the list to find them in.
  */
-export function useContactsRow(say: (text: string) => void) {
+export function useContactsRow(
+  say: (text: string, actions?: { label: string; run: () => void }[]) => void,
+) {
   const contacts = useContacts();
   const [busy, setBusy] = useState(false);
   const onAdd = useCallback(() => {
     setBusy(true);
     void importContacts(true)
       .then((n) => {
-        if (n !== null) say(onMapText(n));
+        // Refused before: only the system's settings can allow it now.
+        if (n === 'denied') {
+          say(
+            t.contactsDenied,
+            openAppSettings ? [{ label: t.settings, run: openAppSettings }] : undefined,
+          );
+        } else if (n !== null) say(onMapText(n));
       })
       .finally(() => setBusy(false));
   }, [say]);

@@ -58,7 +58,9 @@ export function createGlide(map: maplibregl.Map) {
     frame = 0;
     if (!aim) return;
     const now = performance.now();
-    const dt = shown ? Math.max(0, Math.min(0.25, (now - shown.at) / 1000)) : 0;
+    // The camera eases by the time that passed, up to a second: a slow phone's few frames
+    // still get it there in about the same time. (The arrow keeps its own, shorter cap.)
+    const dt = shown ? Math.max(0, Math.min(1, (now - shown.at) / 1000)) : 0;
     shown = instant
       ? { along: aim.along, point: aim.point, heading: aim.bearing ?? shown?.heading ?? 0, at: now }
       : glideStep(shown, aim, now, track);

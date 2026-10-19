@@ -458,6 +458,69 @@ h2[tabindex='-1']:focus-visible {
   color: var(--accent);
 }
 
+/* A list of the user's own, or the kinds of place: opened in the field's place. */
+.results li.r-folder {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  column-gap: 10px;
+  align-items: center;
+}
+
+.r-folder > svg:first-child {
+  grid-row: span 2;
+  color: var(--muted);
+}
+
+.r-folder > svg:last-child {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  color: var(--muted);
+}
+
+.r-folder.r-fav > svg:first-child {
+  color: var(--fav);
+}
+
+.r-count {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Back out of the open list: its name as the list's heading. */
+.results li.r-up {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  column-gap: 10px;
+  align-items: center;
+  font-weight: 600;
+}
+
+.r-up > svg {
+  color: var(--accent);
+}
+
+.results[data-slide='in'] {
+  animation: slide-in 0.22s var(--ease);
+}
+
+.results[data-slide='out'] {
+  animation: slide-out 0.22s var(--ease);
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(24%);
+    opacity: 0;
+  }
+}
+
+@keyframes slide-out {
+  from {
+    transform: translateX(-24%);
+    opacity: 0;
+  }
+}
+
 .hint {
   margin: 0 auto;
   padding: 6px 14px;
