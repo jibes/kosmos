@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   TRAVEL_MODES,
   formatClock,
@@ -65,7 +66,14 @@ export function RouteCard(props: Props) {
     : status === 'none'
       ? t[`noRoute_${mode}`]
       : MESSAGE[status];
-  const route = status === 'ready' ? routes[active] : undefined;
+  // While a changed trip is asked for, the last ways found stay, dimmed, so nothing below the
+  // points jumps (a road route for a road one: public transport is laid out otherwise).
+  const [last, setLast] = useState({ routes, transit: mode === 'transit' });
+  if (status === 'ready' && routes !== last.routes)
+    setLast({ routes, transit: mode === 'transit' });
+  const stale = status === 'loading' && last.transit === (mode === 'transit');
+  const ways = status === 'ready' ? routes : stale ? last.routes : [];
+  const route = ways[Math.min(active, ways.length - 1)];
   // Start only for a route, or in its place while one is coming: never a dead button.
   const startable = route || status === 'loading' || (status === 'locating' && !stuck);
   const now = useNow();
@@ -186,9 +194,9 @@ export function RouteCard(props: Props) {
         </p>
       )}
 
-      {route && routes.length > 1 && (
+      {route && ways.length > 1 && (
         <div className="alts" role="radiogroup" aria-label={t.alternatives} onKeyDown={arrowRadios}>
-          {routes.map((r, i) => (
+          {ways.map((r, i) => (
             <button
               key={i}
               type="button"
@@ -217,7 +225,8 @@ export function RouteCard(props: Props) {
       {transit && <TransitLegs transit={transit} lang={lang} />}
 
       {route && !transit && (
-        <details className="steps">
+        // Closed again for another way of travel: its steps are another list.
+        <details className="steps" key={mode}>
           <summary>
             {t.steps} <small>{route.maneuvers.length}</small>
           </summary>
@@ -243,7 +252,7 @@ export function RouteCard(props: Props) {
           <button
             type="button"
             className="action primary"
-            disabled={!route}
+            disabled={!route || stale}
             onClick={props.onStart}
           >
             <TurnIcon turn="depart" size={18} />

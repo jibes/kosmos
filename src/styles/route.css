@@ -64,6 +64,7 @@
   transition: transform 0.15s;
 }
 
+.point-list[data-settling] li,
 .point-list li[data-dragging] {
   z-index: 1;
   transition: none;
@@ -546,4 +547,9 @@ span.end-btn {
 
 .departures [data-cancelled] time {
   text-decoration: line-through;
+}
+
+/* The last ways found, kept while a changed trip is asked for: there, but not current. */
+.card.route[aria-busy='true'] :is(.summary, .alts, .steps) {
+  opacity: 0.5;
 }

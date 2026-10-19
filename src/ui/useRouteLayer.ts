@@ -8,6 +8,29 @@ import { startMarker, stopMarker } from './markers';
 
 const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
 
+/** At least this much of the map stays for the route, whatever covers the rest. */
+const MIN_FREE_PX = 120;
+
+/**
+ * Padding that leaves some map: a card grown tall (its steps open) would cover all of it, and
+ * MapLibre drops a fit that has no room left without a word.
+ */
+function within(
+  { top = 0, bottom = 0, left = 0, right = 0 }: maplibregl.PaddingOptions,
+  el: HTMLElement,
+): maplibregl.PaddingOptions {
+  const p = { top, bottom, left, right };
+  const over = (side: number, a: number, b: number) => Math.max(0, a + b + MIN_FREE_PX - side);
+  const v = over(el.clientHeight, p.top, p.bottom);
+  const h = over(el.clientWidth, p.left, p.right);
+  return {
+    top: p.top - Math.min(p.top, v / 2),
+    bottom: Math.max(0, p.bottom - Math.max(v / 2, v - p.top)),
+    left: p.left - Math.min(p.left, h / 2),
+    right: Math.max(0, p.right - Math.max(h / 2, h - p.left)),
+  };
+}
+
 /** One route as map features: a road route is one line; public transport draws each ride in
  * its line colour, the walks dotted, and marks the stops where you get on and off. */
 function routeFeatures(routes: Route[], i: number, chosen: number): GeoJSON.Feature[] {
@@ -95,7 +118,7 @@ export function useRouteLayer(map: maplibregl.Map | null, o: Options) {
     map.setPadding(NO_PADDING);
     // Flat and north up: guidance may have just ended, tilted and turned (its own ease is stopped).
     map.fitBounds([w, s, e, n], {
-      padding: padding(),
+      padding: within(padding(), map.getContainer()),
       pitch: 0,
       bearing: 0,
       maxZoom: 17,

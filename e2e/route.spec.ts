@@ -629,6 +629,71 @@ test.describe('routes', () => {
     await expect(page.locator('.stop-dot')).toHaveCount(0);
   });
 
+  test('reorders without the card shifting, the last ways kept while the new one comes', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await card.getByRole('button', { name: /Add stop/ }).click();
+    await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+    await page.getByRole('option').filter({ hasText: 'Havel' }).click();
+    await expect(card.locator('.summary strong')).toHaveText(/min|h/);
+    await idle(page);
+    // A router as slow as a real one.
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, async (r) => {
+      await new Promise((go) => setTimeout(go, 1500));
+      await r.fallback();
+    });
+    // Every frame from the drop on: where the card and the first row are.
+    const watch = () =>
+      page.evaluate(() => {
+        const w = window as unknown as { frames: number[][]; watching: boolean };
+        w.frames = [];
+        w.watching = true;
+        const tick = () => {
+          const top = (q: string) =>
+            Math.round(document.querySelector(q)!.getBoundingClientRect().top);
+          w.frames.push([top('.card.route'), top('.point-list li'), top('.point-list')]);
+          if (w.watching) requestAnimationFrame(tick);
+        };
+        tick();
+      });
+    const frames = () =>
+      page.evaluate(() => {
+        const w = window as unknown as { frames: number[][]; watching: boolean };
+        w.watching = false;
+        return w.frames;
+      });
+    const grip = card.getByRole('button', { name: /^Move Brandenburger Tor/ });
+    const first = (await card
+      .getByRole('button', { name: 'Move My location', exact: true })
+      .boundingBox())!;
+    const box = (await grip.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, first.y + first.height / 2, { steps: 10 });
+    await watch();
+    await page.mouse.up();
+    await expect(card.locator('.point-list li').first()).toContainText('Brandenburger Tor');
+    // Dimmed, not gone, while the new way is asked for; Start waits for it.
+    await expect(card).toHaveAttribute('aria-busy', 'true');
+    await expect(card.locator('.summary strong')).toHaveText(/min|h/);
+    await expect(card.getByRole('button', { name: 'Start', exact: true })).toBeDisabled();
+    await expect(card).not.toHaveAttribute('aria-busy', 'true', { timeout: 5000 });
+    const seen = await frames();
+    // The card stays put, and the row dropped first is in its place at once, not sliding in.
+    expect(new Set(seen.map(([c]) => c)).size).toBe(1);
+    expect(seen.filter(([, row, list]) => row !== list)).toEqual([]);
+  });
+
   test('adds a stop while guiding: a label tapped, a new route by way of it', async ({
     page,
     context,

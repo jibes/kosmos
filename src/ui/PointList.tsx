@@ -69,7 +69,15 @@ export function PointList({
     const dy = e.clientY - startY.current;
     setDrag({ ...drag, dy, to: clamp(drag.from + Math.round(dy / drag.h)) });
   };
+  /** Just dropped: the rows take their new places at once, not sliding from the old. */
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    if (!settling) return;
+    const id = requestAnimationFrame(() => setSettling(false));
+    return () => cancelAnimationFrame(id);
+  }, [settling]);
   const up = () => {
+    setSettling(true);
     if (drag && drag.to !== drag.from) onMove(drag.from, drag.to);
     setDrag(null);
   };
@@ -93,7 +101,12 @@ export function PointList({
   };
 
   return (
-    <ol className="point-list" ref={list} aria-label={t.routePoints}>
+    <ol
+      className="point-list"
+      ref={list}
+      aria-label={t.routePoints}
+      data-settling={settling || undefined}
+    >
       {points.map((p, i) => {
         const name = p && !p.here ? p.name : t.myLocation;
         const k = keyOf(p, i, points);
