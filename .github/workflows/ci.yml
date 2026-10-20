@@ -20,7 +20,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       # Build and e2e must agree on the base path, or Playwright opens a 404.
       VITE_BASE: ${{ inputs.base || './' }}

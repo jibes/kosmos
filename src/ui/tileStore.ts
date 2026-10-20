@@ -138,23 +138,32 @@ export async function isKept(url: string) {
   return n > 0;
 }
 
-/** The TileJSON: asked first, the kept one offline or when the network is slow. */
+/**
+ * The TileJSON: asked first; the kept one offline or when the network is slow. With none kept,
+ * the network is waited for however long it takes, or a slow first start had no map at all.
+ */
 async function source(url: string, signal: AbortSignal) {
   const k = `source|${url}`;
-  const late = new AbortController();
-  signal.addEventListener('abort', () => late.abort());
-  const timer = setTimeout(() => late.abort(), SOURCE_MS);
-  try {
-    const data = await network(url, late.signal);
+  const asked = network(url, signal).then((data) => {
     void write(k, data, true).catch(() => undefined);
     return data;
-  } catch (e) {
-    const hit = await read(k).catch(() => null);
-    if (hit) return hit.data;
-    throw e;
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((ok) => (timer = setTimeout(() => ok(null), SOURCE_MS)));
+  try {
+    const first = await Promise.race([asked, late]);
+    if (first) return first;
+  } catch {
+    // Offline or refused: the kept one, below.
   } finally {
     clearTimeout(timer);
   }
+  const hit = await read(k).catch(() => null);
+  if (hit) {
+    asked.catch(() => undefined);
+    return hit.data;
+  }
+  return asked;
 }
 
 /**

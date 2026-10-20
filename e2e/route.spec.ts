@@ -237,6 +237,8 @@ test.describe('routes', () => {
     page,
     context,
   }, info) => {
+    // The whole trip, minute by minute: past 30 s on a slow runner.
+    test.slow();
     await page.evaluate(() => {
       const w = window as unknown as { spoken: string[]; offset: number };
       w.spoken = [];
@@ -658,7 +660,12 @@ test.describe('routes', () => {
         const w = window as unknown as { frames: number[][]; watching: boolean };
         w.frames = [];
         w.watching = true;
+        // From the drop on: before it, the rows are still making room (and slower runners
+        // are still sliding them there).
+        let dropped = false;
+        window.addEventListener('pointerup', () => (dropped = true), { capture: true, once: true });
         const tick = () => {
+          if (!dropped) return void requestAnimationFrame(tick);
           const top = (q: string) =>
             Math.round(document.querySelector(q)!.getBoundingClientRect().top);
           w.frames.push([top('.card.route'), top('.point-list li'), top('.point-list')]);
@@ -690,6 +697,7 @@ test.describe('routes', () => {
     await expect(card).not.toHaveAttribute('aria-busy', 'true', { timeout: 5000 });
     const seen = await frames();
     // The card stays put, and the row dropped first is in its place at once, not sliding in.
+    expect(seen.length).toBeGreaterThan(0);
     expect(new Set(seen.map(([c]) => c)).size).toBe(1);
     expect(seen.filter(([, row, list]) => row !== list)).toEqual([]);
   });
