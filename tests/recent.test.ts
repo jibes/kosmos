@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { forget, fresh, parseRecent, remember, RECENT_MAX, type Recent } from '../src/core/recent';
+import {
+  forget,
+  fresh,
+  parseRecent,
+  recentPlaceOf,
+  remember,
+  RECENT_MAX,
+  type Recent,
+} from '../src/core/recent';
 
 const DAY = 86_400_000;
 const place = (name: string, dx = 0, at = 0): Recent => ({
@@ -59,5 +67,26 @@ describe('recent searches', () => {
       'cafe',
       'found:Rewe',
     ]);
+  });
+
+  it('keeps a place from the map by its name, a dropped pin by its address, never a bare point', () => {
+    const at = { lng: 13.4, lat: 52.5 };
+    expect(
+      recentPlaceOf({ name: 'Café Einstein', detail: 'Unter den Linden', ...at, osm: 'N1' }, 'Pin'),
+    ).toEqual({
+      name: 'Café Einstein',
+      detail: 'Unter den Linden',
+      ...at,
+      osm: 'N1',
+    });
+    // A pin whose address came, and one still without.
+    expect(recentPlaceOf({ name: 'Pin', detail: 'Unter den Linden 5', ...at }, 'Pin')).toEqual({
+      name: 'Unter den Linden 5',
+      detail: '',
+      ...at,
+    });
+    expect(recentPlaceOf({ name: 'Pin', detail: '', ...at }, 'Pin')).toBeNull();
+    // The user's own position is no place to find again.
+    expect(recentPlaceOf({ name: 'My location', detail: '', ...at, here: true }, 'Pin')).toBeNull();
   });
 });

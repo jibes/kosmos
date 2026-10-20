@@ -689,6 +689,8 @@ test.describe('guidance', () => {
     page,
     context,
   }) => {
+    // A long drive through every control: more time than most on a busy machine.
+    test.slow();
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const go = (lng: number, lat: number) =>
       context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });

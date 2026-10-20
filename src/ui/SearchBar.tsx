@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { categoriesFor, foundFor, foundOf, type Kind } from '../core/categories';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
 import type { LngLat } from '../core/geo';
@@ -21,7 +21,7 @@ import { placeOf, useFavourites } from './useFavourites';
 import { placeOfContact } from './useContacts';
 import { matchContacts, type Contact } from '../core/contacts';
 import { isFavourite } from '../core/favourites';
-import { forgetRecent, rememberRecent, useRecent } from './useRecent';
+import { forgetRecent, rememberPlace, rememberRecent, useRecent } from './useRecent';
 import { folderName, labelOf as label, rowClass, rowKey, rowLabel, SearchRow } from './SearchRow';
 
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
@@ -377,20 +377,7 @@ export function SearchBar({
 
   const pick = (place: Place) => {
     // Found by name (not a dot from the map): worth finding again without typing.
-    if (place.distance === undefined) {
-      const { name, detail, lng, lat, osm, bbox, kind } = place;
-      rememberRecent({
-        place: {
-          name,
-          detail,
-          lng,
-          lat,
-          ...(osm ? { osm } : {}),
-          ...(bbox ? { bbox } : {}),
-          ...(kind ? { kind } : {}),
-        },
-      });
-    }
+    if (place.distance === undefined) rememberPlace(place);
     if (folder) setFolder(null);
     onPick(place);
     input.current?.blur();
@@ -518,6 +505,29 @@ export function SearchBar({
     listShown.current = showList;
   });
 
+  /** One row: a line of the list, or a pill in the strip of lists. */
+  const option = (it: Item, i: number, Tag: 'li' | 'div') => (
+    <Tag
+      key={rowKey(it)}
+      role="option"
+      id={`${listId}-${i}`}
+      className={rowClass(it)}
+      aria-selected={i === active}
+      aria-label={rowLabel(it)}
+      onPointerDown={(e) => e.preventDefault()}
+      onClick={() => choice(it)}
+      onPointerEnter={() => setActive(i)}
+    >
+      <SearchRow
+        it={it}
+        lang={lang}
+        placed={placed}
+        busy={contacts?.busy}
+        onForgetContacts={contacts?.onForget}
+      />
+    </Tag>
+  );
+
   return (
     <div ref={box} className="search" data-open={showList || undefined} hidden={hidden}>
       {showList && (
@@ -536,27 +546,30 @@ export function SearchBar({
               {t.beyondView}
             </li>
           )}
-          {items.map((it, i) => (
-            <li
-              key={rowKey(it)}
-              role="option"
-              id={`${listId}-${i}`}
-              className={rowClass(it)}
-              aria-selected={i === active}
-              aria-label={rowLabel(it)}
-              onPointerDown={(e) => e.preventDefault()}
-              onClick={() => choice(it)}
-              onPointerEnter={() => setActive(i)}
-            >
-              <SearchRow
-                it={it}
-                lang={lang}
-                placed={placed}
-                busy={contacts?.busy}
-                onForgetContacts={contacts?.onForget}
-              />
-            </li>
-          ))}
+          {items.map((it, i) => {
+            // The lists side by side, a strip of their own above the recent searches.
+            if (it.type === 'folder') {
+              if (items[i - 1]?.type === 'folder') return null;
+              const run: number[] = [];
+              for (let j = i; items[j]?.type === 'folder'; j++) run.push(j);
+              return (
+                <li key="strip" role="group" aria-label={t.yourLists} className="r-strip">
+                  {run.map((j) => option(items[j], j, 'div'))}
+                </li>
+              );
+            }
+            const heading = it.type === 'recent' && items[i - 1]?.type !== 'recent';
+            return (
+              <Fragment key={rowKey(it)}>
+                {heading && (
+                  <li role="presentation" className="r-heading" aria-hidden="true">
+                    {t.recentHeading}
+                  </li>
+                )}
+                {option(it, i, 'li')}
+              </Fragment>
+            );
+          })}
           {note && (
             <li className="r-empty" role="presentation">
               {note}

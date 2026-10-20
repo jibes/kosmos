@@ -13,6 +13,7 @@ import {
   StarIcon,
 } from './icons';
 import { renameFavouritePlace, toggleFavouritePlace, useFavourites } from './useFavourites';
+import { rememberPlace } from './useRecent';
 import { favouriteOf, LABEL_MAX, titleOf } from '../core/favourites';
 import { copy, share } from './native';
 import { Departures } from './Departures';
@@ -45,6 +46,7 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
     setNaming(false);
   };
   const onShare = async () => {
+    rememberPlace(place);
     const result = await share({
       title: place.name,
       text: [place.name, place.detail, plainLngLat(place)].filter(Boolean).join('\n'),
@@ -98,7 +100,10 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
           aria-label={t.favourite}
           title={t.favourite}
           aria-pressed={starred}
-          onClick={() => toggleFavouritePlace(place)}
+          onClick={() => {
+            if (!starred) rememberPlace(place);
+            toggleFavouritePlace(place);
+          }}
         >
           <StarIcon filled={starred} />
         </button>
@@ -134,11 +139,25 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
         <span className="sr-only">, {t.copy}</span>
       </button>
       <div className="actions">
-        <button type="button" className="action primary" onClick={onRoute}>
+        <button
+          type="button"
+          className="action primary"
+          onClick={() => {
+            rememberPlace(place);
+            onRoute();
+          }}
+        >
           <RouteIcon />
           {t.route}
         </button>
-        <button type="button" className="action" onClick={onNearby}>
+        <button
+          type="button"
+          className="action"
+          onClick={() => {
+            rememberPlace(place);
+            onNearby();
+          }}
+        >
           <NearbyIcon />
           {t.nearby}
         </button>

@@ -390,7 +390,8 @@ test.describe('search', () => {
     const recents = page.locator('.r-recent');
     // Nothing yet: the kinds of place, a list of its own, none preselected.
     await input.focus();
-    await expect(options.first()).toContainText('Kinds of place');
+    await expect(options.first()).toHaveAccessibleName('Kinds of place, opens a list');
+    await expect(options.first()).toHaveText('Categories');
     await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
     await options.first().click();
     // In it: back first, then what people look for most; Escape goes back out.
@@ -398,7 +399,7 @@ test.describe('search', () => {
     await expect(options.nth(1)).toContainText('Restaurants');
     await expect(page.locator('.search [role=status]')).toContainText('Kinds of place:');
     await input.press('Escape');
-    await expect(options.first()).toContainText('Kinds of place');
+    await expect(options.first()).toHaveAccessibleName('Kinds of place, opens a list');
 
     await input.fill('brandenburger');
     await options.filter({ hasText: SEARCH_HIT.name }).click();
@@ -437,6 +438,31 @@ test.describe('search', () => {
     }
     await input.press('Delete');
     await expect(page.locator('.r-recent')).toHaveCount(0);
+  });
+
+  test('keeps a place from the map among the recent ones once something is done with it', async ({
+    page,
+  }) => {
+    await jump(page, { ...CENTER, zoom: 16 });
+    const box = page.viewportSize()!;
+    const card = page.locator('.card');
+    const input = page.getByRole('combobox');
+    const recents = page.locator('.r-recent');
+    // Only looked at: not kept, every tap would push out the searches.
+    await page.mouse.click(box.width / 2, box.height / 3, { button: 'right' });
+    await expect(card.getByRole('heading')).toHaveText('Unter den Linden 5');
+    await card.getByRole('button', { name: 'Close' }).click();
+    await input.focus();
+    await expect(page.locator('.r-strip')).toBeVisible();
+    await expect(recents).toHaveCount(0);
+    await input.blur();
+    // Something done with it (here, what is nearby): kept by its address, under "Recent".
+    await page.mouse.click(box.width / 2, box.height / 3, { button: 'right' });
+    await expect(card.getByRole('heading')).toHaveText('Unter den Linden 5');
+    await card.getByRole('button', { name: 'Nearby' }).click();
+    await input.press('Escape');
+    await expect(page.locator('.r-heading')).toHaveText('Recent');
+    await expect(recents).toHaveText([/Unter den Linden 5/]);
   });
 
   test('searches around a place from its card', async ({ page }) => {

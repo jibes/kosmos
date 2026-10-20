@@ -46,6 +46,41 @@ export function remember(list: Recent[], r: Recent, now: number): Recent[] {
   return [r, ...fresh(list, now).filter((x) => !same(x, r))].slice(0, RECENT_MAX);
 }
 
+type RecentPlace = Extract<Recent, { place: unknown }>['place'];
+
+/**
+ * A place as kept among the recent ones, or `null` for none worth finding again: the user's
+ * own position, or a dropped pin with nothing but its point (`pinName` is what such a pin is
+ * called); a pin whose address came is kept by it.
+ */
+export function recentPlaceOf(
+  p: {
+    name: string;
+    detail: string;
+    lng: number;
+    lat: number;
+    osm?: string;
+    bbox?: [number, number, number, number];
+    kind?: RecentPlace['kind'];
+    here?: boolean;
+  },
+  pinName: string,
+): RecentPlace | null {
+  if (p.here) return null;
+  const pin = p.name === pinName;
+  const name = pin ? p.detail : p.name;
+  if (!name.trim()) return null;
+  return {
+    name,
+    detail: pin ? '' : p.detail,
+    lng: p.lng,
+    lat: p.lat,
+    ...(p.osm ? { osm: p.osm } : {}),
+    ...(p.bbox ? { bbox: p.bbox } : {}),
+    ...(p.kind ? { kind: p.kind } : {}),
+  };
+}
+
 export function forget(list: Recent[], r: Recent): Recent[] {
   return list.filter((x) => !same(x, r));
 }

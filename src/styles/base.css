@@ -458,32 +458,52 @@ h2[tabindex='-1']:focus-visible {
   color: var(--accent);
 }
 
-/* A list of the user's own, or the kinds of place: opened in the field's place. */
-.results li.r-folder {
-  display: grid;
-  grid-template-columns: 20px 1fr auto;
-  column-gap: 10px;
+/* The lists of the user's own and the kinds of place: pills side by side, each opening in the
+   list's place, apart from the recent searches below. */
+.results li.r-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 6px 10px;
+}
+
+.r-folder {
+  display: inline-flex;
   align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 16px 0 12px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  cursor: pointer;
 }
 
-.r-folder > svg:first-child {
-  grid-row: span 2;
+.r-folder[aria-selected='true'] {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.r-folder > svg {
   color: var(--muted);
 }
 
-.r-folder > svg:last-child {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-  color: var(--muted);
-}
-
-.r-folder.r-fav > svg:first-child {
+.r-folder.r-fav > svg {
   color: var(--fav);
 }
 
 .r-count {
   color: var(--muted);
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Above the recent searches: what they are. */
+.results li.r-heading {
+  padding: 6px 14px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 /* Back out of the open list: its name as the list's heading. */

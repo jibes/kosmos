@@ -60,23 +60,20 @@ const noFocus = (e: { preventDefault: () => void }) => e.preventDefault();
 export function SearchRow({ it, lang, placed, busy, onForgetContacts }: RowProps) {
   switch (it.type) {
     case 'folder':
+      // A pill: what the list is and how many it holds; it opens in the list's place.
       return (
         <>
           {it.folder === 'favourites' ? (
-            <StarIcon filled />
+            <StarIcon filled size={18} />
           ) : it.folder === 'contacts' ? (
             <KindIcon kind="person" />
           ) : (
             <SearchIcon />
           )}
           <span className="r-name">
-            {folderName(it.folder)}
-            {it.folder !== 'kinds' && <span className="r-count"> {it.n}</span>}
+            {it.folder === 'kinds' ? t.kindsShort : folderName(it.folder)}
           </span>
-          <span className="r-detail">
-            {it.folder === 'kinds' ? t.kindsHint : it.folder === 'contacts' ? onMapText(it.n) : ''}
-          </span>
-          <ChevronIcon />
+          {it.folder !== 'kinds' && <span className="r-count">{it.n}</span>}
         </>
       );
     case 'up':
