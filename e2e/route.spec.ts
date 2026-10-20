@@ -496,6 +496,8 @@ test.describe('routes', () => {
   });
 
   test('keeps the chosen route when a reroute fails', async ({ page, context }) => {
+    // Twelve seconds off the route alone, then the failed reroute: past 30 s on a slow runner.
+    test.slow();
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const go = (lng: number, lat: number) =>
       context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
