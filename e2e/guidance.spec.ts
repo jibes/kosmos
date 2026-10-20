@@ -739,9 +739,12 @@ test.describe('guidance', () => {
     await page.waitForTimeout(1600);
     await expect(locate).toHaveAttribute('data-following', 'true');
     expect(Math.abs((await cam()).zoom - zoomed)).toBeLessThan(0.3);
-    // The needle: north up and flat, still following.
+    // The needle: north up and flat, still following, though a fix comes mid-turn.
     await needle.click();
-    await expect.poll(async () => Math.round((await cam()).bearing)).toBe(0);
+    await page.waitForTimeout(150);
+    await go(from.lng, from.lat - 0.00008);
+    await page.waitForTimeout(1200);
+    await expect.poll(async () => Math.abs(Math.round((await cam()).bearing))).toBe(0);
     await expect.poll(async () => Math.round((await cam()).pitch)).toBe(0);
     await expect(needle).toHaveAttribute('aria-label', 'Turn map with your way');
     await go(from.lng, from.lat - 0.003);

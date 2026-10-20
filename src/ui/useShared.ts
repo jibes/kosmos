@@ -33,6 +33,10 @@ const KEYS = ['geo', 'title', 'text', 'url'] as const;
  * target. A point opens its card (its address looked up as for a dropped pin, or by the name
  * that came with it); words go to the search.
  */
+/** The app's own way of showing a shared place, for an OSM link pasted into the search. */
+let opener: ((s: Shared) => void) | null = null;
+export const openShared = (s: Shared) => opener?.(s);
+
 export function useShared(
   map: maplibregl.Map | null,
   select: (place: Place, enrich?: Enrich) => void,
@@ -78,6 +82,7 @@ export function useShared(
       });
     };
     if (map && pending.current) show.current(pending.current);
+    opener = (s) => show.current(s);
   });
 
   useEffect(() => {

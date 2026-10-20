@@ -42,6 +42,11 @@ test.describe('search', () => {
     expect(Math.abs(tip.dx)).toBeLessThan(2);
     expect(Math.abs(tip.dy)).toBeLessThan(5);
     await shot(page, info, 'selected');
+    // The text stays in the field behind the card; the map moved far away asks nothing anew.
+    const asked = photonSearches.length;
+    await jump(page, { lng: CENTER.lng + 2, lat: CENTER.lat + 1, zoom: 9 });
+    await page.waitForTimeout(800);
+    expect(photonSearches.length).toBe(asked);
     await card.getByRole('button', { name: /close|schließen/i }).click();
     await expect(card).toHaveCount(0);
     await expect(page.locator('.pin')).toHaveCount(0);
@@ -624,6 +629,25 @@ test.describe('search', () => {
     await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
   });
 
+  test('takes a slow Photon answer when it comes, though another was asked', async ({
+    page,
+    context,
+  }) => {
+    test.slow();
+    // Photon answers after 7 s; Nominatim, asked at 5 s, finds nothing.
+    await context.route(/photon\.komoot\.io\/api\//, async (route) => {
+      await new Promise((go) => setTimeout(go, 7000));
+      await route.fallback();
+    });
+    await context.route(/nominatim\.openstreetmap\.org\/search/, (route) =>
+      route.fulfill({ contentType: 'application/json', body: '[]' }),
+    );
+    await page.getByRole('combobox').fill('brandenburger');
+    await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name, {
+      timeout: 15_000,
+    });
+  });
+
   test('says so when no search answers, and Enter asks again', async ({ page, context }) => {
     test.slow();
     let answer = false;
@@ -765,6 +789,18 @@ test.describe('search', () => {
     await rows.first().click();
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Toilet');
     await expect(page.locator('.card')).toContainText('Unter den Linden 5');
+    // Its dot on the map opens the same, never asking the search for the word "Toilet".
+    await page.locator('.card').getByRole('button', { name: /close/i }).click();
+    await idle(page);
+    const dot = await page.evaluate(() => {
+      const [f] = window.kosmos!.queryRenderedFeatures({ layers: ['search-dots'] });
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      return window.kosmos!.project([lng, lat]);
+    });
+    const asked = photonSearches.length;
+    await page.mouse.click(dot.x, dot.y);
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Toilet');
+    expect(photonSearches.slice(asked).filter((q) => /toilet/i.test(q))).toEqual([]);
   });
 
   test('asks the search again for the same words somewhere else', async ({ page }) => {

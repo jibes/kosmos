@@ -27,6 +27,8 @@ export const FONT = {
 export const LABEL_LAYERS = [
   'search-names',
   'search-dots',
+  'along-names',
+  'along-dots',
   'fav-names',
   'fav-stars',
   'fav-groups',
@@ -49,6 +51,8 @@ export const MAP_SOURCE = 'omt';
 export const ROUTE_SOURCE = 'route';
 /** Places found by category, drawn as dots until the search is cleared. */
 export const SEARCH_SOURCE = 'search';
+/** Places found along a route (`ui/AlongRoute.tsx`), drawn like search results. */
+export const ALONG_SOURCE = 'along';
 export const ROUTE_ALT_LAYER = 'route-alt';
 /** The user's favourite places (`core/favourites.ts`), starred on the map. */
 export const FAV_SOURCE = 'favourites';
@@ -448,12 +452,12 @@ function route(p: Palette): LayerSpecification[] {
 }
 
 /** Category results: a dot and its name, above the map's own labels so neither hides. */
-function searchDots(p: Palette): LayerSpecification[] {
+function searchDots(p: Palette, source = SEARCH_SOURCE): LayerSpecification[] {
   return [
     {
-      id: 'search-dots',
+      id: `${source}-dots`,
       type: 'circle',
-      source: SEARCH_SOURCE,
+      source,
       paint: {
         // A row held or hovered in the results list, or the one last opened, stands out.
         'circle-radius': [
@@ -471,9 +475,9 @@ function searchDots(p: Palette): LayerSpecification[] {
       },
     },
     {
-      id: 'search-names',
+      id: `${source}-names`,
       type: 'symbol',
-      source: SEARCH_SOURCE,
+      source,
       layout: {
         'text-field': ['get', 'name'],
         'text-font': [FONT.bold],
@@ -688,6 +692,7 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
       },
       [ROUTE_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       [SEARCH_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      [ALONG_SOURCE]: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
       [FAV_SOURCE]: {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -722,6 +727,7 @@ export function buildStyle({ theme, lang, fontFaces }: StyleOptions): StyleSpeci
       ...contacts(p),
       ...favourites(p),
       ...searchDots(p),
+      ...searchDots(p, ALONG_SOURCE),
     ],
   };
 }

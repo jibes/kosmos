@@ -269,7 +269,7 @@ export function RouteCard(props: Props) {
                 <TurnIcon turn={turnOf(m.type)} size={18} />
                 {/* The router's "You have arrived" reads as done; the list reads ahead. */}
                 <span>
-                  {turnOf(m.type) === 'arrive'
+                  {turnOf(m.type) === 'arrive' && m.via === undefined
                     ? fill(t.arriveAtName, { name: to.name })
                     : m.instruction}
                 </span>

@@ -18,7 +18,8 @@ import type { Voice } from './voice';
 
 /** Underground there are no fixes; the timetable moves the rider on at this pace instead. */
 const TICK_MS = 3000;
-/** A connection planned this recently is as live as a check would make it. */
+/** A connection planned this recently is as live as a check would make it (from the plan's
+ * own time, not Start's: a plan made long before is checked even when Start comes late). */
 const FRESH_PLAN_MS = 3 * 60_000;
 
 interface Options {
@@ -78,7 +79,11 @@ export function useRide(o: Options) {
       const i = live.legs[st.leg]?.ride ? st.leg : st.leg + 1;
       const leg = live.legs[i];
       if (!leg?.ride || checked.has(i) || st.phase === 'ride') return;
-      if (now < leg.start - DEPARTURE_CHECK_MS || now - started < FRESH_PLAN_MS) return;
+      if (
+        now < leg.start - DEPARTURE_CHECK_MS ||
+        now - (planned.planned ?? started) < FRESH_PLAN_MS
+      )
+        return;
       const url = tripUrl(leg, opts.current.lang);
       if (!url) return;
       checked.add(i);

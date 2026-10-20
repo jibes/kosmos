@@ -71,6 +71,21 @@ export function toggleFavourite(
   return [kept, ...list].slice(0, FAVOURITES_MAX);
 }
 
+/**
+ * A favourite starred before its card's lookup came: the address and OSM id it lacks, from
+ * that place now. Nothing it has is changed.
+ */
+export function completeFavourite(
+  list: Favourite[],
+  p: Pick<Favourite, 'name' | 'lng' | 'lat' | 'detail' | 'osm'>,
+): Favourite[] {
+  return list.map((f) =>
+    sameFavourite(f, p) && ((!f.detail && p.detail) || (!f.osm && p.osm))
+      ? { ...f, detail: f.detail || p.detail, ...(f.osm || !p.osm ? {} : { osm: p.osm }) }
+      : f,
+  );
+}
+
 /** What storage holds, anything malformed dropped. */
 export function parseFavourites(raw: string | null): Favourite[] {
   if (!raw) return [];

@@ -13,6 +13,8 @@ import { isStopPoi } from '../core/departures';
 import { LABEL_LAYERS, ROUTE_ALT_LAYER } from '../core/style';
 import { lang, t } from '../i18n';
 import { onLongPress } from './gestures';
+import { logEvent } from './usageLog';
+import { searchResultAt } from './useCategory';
 import { motion } from './motion';
 import type { Trip } from './useRoute';
 import { MAX_STOPS } from '../core/stops';
@@ -112,7 +114,11 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
     const offerStop = (x: number, y: number) => {
       const { showToast, addStopRef, labelLang } = opts.current;
       const tr = tripRef.current;
-      if (!tr || tr.mode === 'transit' || (tr.via?.length ?? 0) >= MAX_STOPS) return;
+      if (!tr) return;
+      const canStop = tr.mode !== 'transit' && (tr.via?.length ?? 0) < MAX_STOPS;
+      // A ride is guided by its timetable: its end changes on the route card, not on the way.
+      const canEnd = !(navRef.current && tr.mode === 'transit');
+      if (!canStop && !canEnd) return;
       const layers = LABEL_LAYERS.filter((id) => map.getLayer(id));
       const [f] = map.queryRenderedFeatures(
         [
@@ -138,8 +144,19 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
                 lat: f.geometry.coordinates[1],
               }
             : null;
-      if (place)
-        showToast(place.name, [{ label: t.addStop, run: () => addStopRef.current(place) }]);
+      if (!place) return;
+      const { setTrip, select, setActive } = opts.current;
+      const goHere = () => {
+        logEvent('route.end', { navigating: navRef.current });
+        setActive(0);
+        setTrip((now) => (now ? { ...now, to: place } : now));
+        // A new destination is the selected place too: its pin and, on closing, its card.
+        if (!navRef.current) select(place);
+      };
+      showToast(place.name, [
+        ...(canStop ? [{ label: t.addStop, run: () => addStopRef.current(place) }] : []),
+        ...(canEnd ? [{ label: t.goHere, run: goHere }] : []),
+      ]);
     };
     const onClick = (e: maplibregl.MapMouseEvent) => {
       const { select, clear, setActive, labelLang } = opts.current;
@@ -182,6 +199,17 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
         : undefined;
       if (contact) {
         select(placeOfContact(contact));
+        return;
+      }
+      // A search result's dot: that result, as its row would open it, not a fresh lookup.
+      const found = f?.layer.id.startsWith('search-') ? searchResultAt(Number(f.id)) : undefined;
+      if (found) {
+        select(
+          found,
+          found.distance === undefined || found.detail
+            ? undefined
+            : () => addressOf(found.unnamed ? '' : found.name, found),
+        );
         return;
       }
       const name = (props[`name:${labelLang}`] ?? props.name) as string | undefined;

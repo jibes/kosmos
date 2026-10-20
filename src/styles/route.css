@@ -601,9 +601,37 @@ span.end-btn {
   inset: -4px 0;
 }
 
-.chip[aria-pressed='true'] {
+.chip[aria-pressed='true'],
+.chip[data-chosen] {
   background: var(--accent);
   color: #fff;
+}
+
+/* Any other kind: a chip that opens the list of them. */
+select.chip {
+  border: 0;
+  font: inherit;
+  font-size: 14px;
+  appearance: none;
+  padding-right: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 55%,
+    calc(100% - 10px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  background-color: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+select.chip[data-chosen] {
+  background-color: var(--accent);
+}
+
+select.chip option {
+  color: var(--text);
+  background: var(--surface);
 }
 
 .along-list {

@@ -60,6 +60,25 @@ test.describe('the map kept on the device', () => {
     const about = page.locator('.offline-map');
     await expect(about).toContainText('kept on this device');
     await expect(about).toContainText('The whole world (zoom 0–1) kept on');
+    // Areas viewed can go, on a second tap; the world stays and serves offline still.
+    const clear = about.getByRole('button', { name: 'Remove areas viewed' });
+    await clear.click();
+    await about.getByRole('button', { name: /Tap again to remove/ }).click();
+    await expect(clear).toBeVisible();
+    await expect(about).toContainText('The whole world (zoom 0–1) kept on');
+    const left = await page.evaluate(
+      () =>
+        new Promise<string[]>((ok) => {
+          const req = indexedDB.open('kosmos-tiles');
+          req.onsuccess = () => {
+            const all = req.result.transaction('meta').objectStore('meta').getAll();
+            all.onsuccess = () =>
+              ok((all.result as { k: string; keep?: boolean }[]).map((m) => String(!!m.keep)));
+          };
+        }),
+    );
+    expect(left.length).toBeGreaterThan(0);
+    expect(left).not.toContain('false');
   });
 });
 

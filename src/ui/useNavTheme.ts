@@ -3,6 +3,7 @@ import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Theme } from '../core/palette';
 import { inTunnel, isNight, TUNNEL_HOLD_MS } from '../core/daylight';
+import { isAway } from './native';
 import type { Snap } from '../core/nav';
 import { MAP_SOURCE } from '../core/style';
 import { isNative } from './native';
@@ -66,29 +67,41 @@ export function useNavTheme(active: boolean) {
     setDark(null);
   }
 
+  /** New tiles mark the tunnels read as stale; heard only while guiding. */
+  const onTiles = useRef((e: maplibregl.MapSourceDataEvent) => {
+    if (e.sourceId === MAP_SOURCE && e.tile) tunnels.current.stale = true;
+  });
   useEffect(() => {
     if (active) return;
     lastTunnel.current = -Infinity;
     tunnels.current = { at: -Infinity, lines: [] };
     sun.current = null;
+    watched.current?.off('sourcedata', onTiles.current);
+    watched.current = null;
   }, [active]);
 
   const update = useCallback(
     (map: maplibregl.Map, s: Snap, time: number) => {
-      if (watched.current !== map) {
-        watched.current = map;
-        map.on('sourcedata', (e) => {
-          if (e.sourceId === MAP_SOURCE && e.tile) tunnels.current.stale = true;
-        });
-      }
       const [lng, lat] = s.point;
+      const night = isNight(lat, lng, time);
+      // Dark already, or nobody looking: no tunnel would change anything, so none is read.
+      if (night || isAway()) {
+        sun.current = night || lastTunnel.current + TUNNEL_HOLD_MS > time;
+        decide();
+        return;
+      }
+      if (watched.current !== map) {
+        watched.current?.off('sourcedata', onTiles.current);
+        watched.current = map;
+        map.on('sourcedata', onTiles.current);
+      }
       const since = time - tunnels.current.at;
       if (since > TUNNEL_READ_MS || (tunnels.current.stale && since > TUNNEL_NEW_TILES_MS)) {
         tunnels.current = { at: time, lines: tunnelLines(map) };
       }
       if (inTunnel(s.point, s.bearing, tunnels.current.lines)) lastTunnel.current = time;
       // Inside a tunnel GPS often stops altogether: dark holds until a fix outside says otherwise.
-      sun.current = isNight(lat, lng, time) || lastTunnel.current + TUNNEL_HOLD_MS > time;
+      sun.current = lastTunnel.current + TUNNEL_HOLD_MS > time;
       decide();
     },
     [decide],

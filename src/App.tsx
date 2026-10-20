@@ -362,6 +362,7 @@ export function App() {
     trip,
     setTrip,
     guided,
+    way: riding ? undefined : shown[chosen],
     nav,
     navigating,
     state: stopState,
@@ -446,6 +447,8 @@ export function App() {
     if (!isNative) start();
     void compass.start();
     if (trip.from) setTrip({ ...trip, from: null });
+    // Every stop ahead, before the route from here is asked (the last drive's count lingers).
+    stopState.setBehind(0);
     setNavigating(true);
     view.reset();
     // Heading-up behind the user, as drivers expect; the location button cycles from there.
@@ -572,7 +575,7 @@ export function App() {
   useAutoLocate(map, start, flyOnFix);
 
   useHint(map, showToast, dismissText, !!selection || !!trip || navigating);
-  useShared(map, select, search.setQuery);
+  useShared(map, select, search.searchFor);
 
   const panelRef = usePanel(map, sel && !trip && !navigating ? sel : null, selection?.loading);
 
@@ -729,6 +732,7 @@ export function App() {
                   bias={bias}
                   from={from}
                   onPick={pick}
+                  people={contacts?.list}
                   collapsed={false}
                   onFocus={() => undefined}
                   placeholder={

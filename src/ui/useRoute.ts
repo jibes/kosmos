@@ -199,7 +199,11 @@ export function useRoute(
       trip.mode === 'transit'
         ? getJson(transitUrl(from, trip.to, lang, trip.at ?? null), ctrl.signal).then((r) => ({
             ...r,
-            routes: r.ok ? parseMotis(r.json) : [],
+            routes: r.ok
+              ? parseMotis(r.json).map((x) =>
+                  x.transit ? { ...x, transit: { ...x.transit, planned: Date.now() } } : x,
+                )
+              : [],
           }))
         : pinned
           ? road(0, trip.mode === 'car' && tollFreeRef.current)
@@ -238,8 +242,12 @@ export function useRoute(
   } else if (trip && !trip.from && !here) {
     status = 'locating';
   }
-  // A new connection asked for while riding: the one followed stays until the answer comes.
-  const waiting = pinned && trip?.mode === 'transit' && !!result?.routes.length;
+  // A new connection asked for while riding, or a stop or destination changed while guiding
+  // from here: the way followed stays until the new one comes, so guidance never blanks.
+  const waiting =
+    pinned &&
+    !!result?.routes.length &&
+    (trip?.mode === 'transit' || (key.endsWith('|me') && result.key.endsWith('|me')));
   const routes = current && result ? result.routes : waiting ? result!.routes : NO_ROUTES;
   return {
     routes,

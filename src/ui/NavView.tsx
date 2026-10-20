@@ -126,7 +126,9 @@ export function NavView(props: Props) {
     turn = 'arrive';
   } else if (rerouting) {
     // Not the old route's arrow: while asking it says nothing about where to turn.
-    title = shown = reroute === 'failed' ? t.rerouteFailed : t.rerouting;
+    // Off the route but nothing asked (standing in a car park, the next ask backed off).
+    title = shown =
+      reroute === 'failed' ? t.rerouteFailed : reroute === 'asking' ? t.rerouting : t.offRoute;
     turn = reroute === 'failed' ? 'uturn' : 'depart';
   }
   const big = heading ? nav.toRoute : toNext;

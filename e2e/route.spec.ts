@@ -584,6 +584,11 @@ test.describe('routes', () => {
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(1);
     await expect(card.locator('.summary strong')).toHaveText(/min|h/);
     await expect(page.locator('.stop-dot')).toHaveText(['1']);
+    // The steps say the stop by its name, and arrive only at the end.
+    await card.locator('.steps summary').click();
+    await expect(card.locator('.steps')).toContainText('Stop at Brandenburg');
+    await expect(card.locator('.steps li').filter({ hasText: /^Arrive at/ })).toHaveCount(1);
+    await card.locator('.steps summary').click();
     // From the map: a point held there.
     await idle(page);
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
@@ -591,11 +596,13 @@ test.describe('routes', () => {
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
     await expect(card.locator('.point-list li')).toHaveCount(4);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(2);
-    // Where it was held, give or take the map settling under the pointer.
-    expect(routeRequests.at(-1)!.via[1][0]).toBeCloseTo(CENTER.lng, 2);
+    // Where it was held, give or take the map settling under the pointer; nearer along the way
+    // than the first stop, so before it.
+    expect(routeRequests.at(-1)!.via[0][0]).toBeCloseTo(CENTER.lng, 2);
+    await expect(card.locator('.point-list li').nth(1)).toContainText('Dropped pin');
     await expect(page.locator('.stop-dot')).toHaveText(['1', '2']);
     // The second dragged above the first by its grip: the router asked in the new order.
-    const grip = card.getByRole('button', { name: 'Move Dropped pin', exact: true });
+    const grip = card.getByRole('button', { name: /^Move Brandenburg an/ });
     // Measured once the card has settled: it grows as the stops come in.
     await expect
       .poll(async () => {
@@ -604,14 +611,16 @@ test.describe('routes', () => {
         return Math.abs((await grip.boundingBox())!.y - y);
       })
       .toBeLessThan(1);
-    const above = (await card.getByRole('button', { name: /^Move Brandenburg an/ }).boundingBox())!;
+    const above = (await card
+      .getByRole('button', { name: 'Move Dropped pin', exact: true })
+      .boundingBox())!;
     const box = (await grip.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2, above.y + above.height / 2, { steps: 8 });
     await page.mouse.up();
-    await expect(card.locator('.point-list li').nth(1)).toContainText('Dropped pin');
-    await expect.poll(() => routeRequests.at(-1)?.via[0][0]).toBeCloseTo(CENTER.lng, 2);
+    await expect(card.locator('.point-list li').nth(1)).toContainText('Brandenburg an');
+    await expect.poll(() => routeRequests.at(-1)?.via[1][0]).toBeCloseTo(CENTER.lng, 2);
     // Public transport goes straight there: no stops asked, none offered.
     await card.getByRole('radio', { name: 'Public transport' }).click();
     await expect(card.getByRole('radio', { name: 'Public transport' })).toHaveAttribute(
@@ -702,7 +711,7 @@ test.describe('routes', () => {
     expect(seen.filter(([, row, list]) => row !== list)).toEqual([]);
   });
 
-  test('adds a stop while guiding: a label tapped, a new route by way of it', async ({
+  test('adds a stop while guiding, or ends there instead: a label tapped, one route', async ({
     page,
     context,
   }) => {
@@ -724,25 +733,27 @@ test.describe('routes', () => {
     await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getPitch()))).toBe(55);
     const cafe = { lng: CENTER.lng + 140 / 67800, lat: CENTER.lat - 170 / 111200 };
     let at = { x: 0, y: 0 };
-    await expect
-      .poll(
-        async () => {
-          await jump(page, { ...cafe, zoom: 17 });
-          at = await screenAt(page, cafe.lng, cafe.lat);
-          return page.evaluate(
-            ({ x, y }) =>
-              window
-                .kosmos!.queryRenderedFeatures([
-                  [x - 10, y - 10],
-                  [x + 10, y + 10],
-                ])
-                .some((f) => f.properties.name === 'Café Einstein'),
-            at,
-          );
-        },
-        { timeout: 15_000 },
-      )
-      .toBe(true);
+    const seeCafe = () =>
+      expect
+        .poll(
+          async () => {
+            await jump(page, { ...cafe, zoom: 17 });
+            at = await screenAt(page, cafe.lng, cafe.lat);
+            return page.evaluate(
+              ({ x, y }) =>
+                window
+                  .kosmos!.queryRenderedFeatures([
+                    [x - 10, y - 10],
+                    [x + 10, y + 10],
+                  ])
+                  .some((f) => f.properties.name === 'Café Einstein'),
+              at,
+            );
+          },
+          { timeout: 15_000 },
+        )
+        .toBe(true);
+    await seeCafe();
     const asked = routeRequests.length;
     await page.mouse.click(at.x, at.y);
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
@@ -760,6 +771,16 @@ test.describe('routes', () => {
     await list.getByRole('button', { name: /^Remove Café/ }).click();
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(0);
     await expect(page.locator('.stop-dot')).toHaveCount(0);
+    await expect(banner).toBeVisible();
+    // Changed plans: the café is where the trip now ends, one route there from here.
+    await banner.getByRole('button', { name: 'Show the route' }).click();
+    await seeCafe();
+    const before = routeRequests.length;
+    await page.mouse.click(at.x, at.y);
+    await page.locator('.toast').getByRole('button', { name: 'Go here' }).click();
+    await expect.poll(() => routeRequests.length).toBe(before + 1);
+    expect(routeRequests.at(-1)!.to[0]).toBeCloseTo(cafe.lng, 4);
+    expect(routeRequests.at(-1)!.via).toEqual([]);
     await expect(banner).toBeVisible();
   });
 

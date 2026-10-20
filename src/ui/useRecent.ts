@@ -29,6 +29,9 @@ export const rememberPlace = (p: Place) => {
   if (place) rememberRecent({ place });
 };
 export const forgetRecent = (r: Recent) => set(forget(list, r));
+/** Every person among them: the contacts taken off the device take their traces too. */
+export const forgetPeople = () =>
+  set(list.filter((r) => !('place' in r) || r.place.kind !== 'person'));
 
 const subscribe = (l: () => void) => {
   listeners.add(l);

@@ -14,6 +14,7 @@ import { fill, lang, t } from '../i18n';
 import { isNative, openAppSettings, readContacts } from './native';
 import { CONTACTS_KEY, store, stored } from './prefs';
 import { logEvent } from './usageLog';
+import { forgetPeople } from './useRecent';
 
 let list: Contact[] = parseContacts(stored(CONTACTS_KEY));
 const listeners = new Set<() => void>();
@@ -62,7 +63,10 @@ export const contactsAvailable = () => isNative || !!picker();
 const LOOKUP_GAP_MS = 1100;
 
 async function lookUp(address: string): Promise<{ lng: number; lat: number } | null> {
-  const res = await fetch(searchUrl(address, lang, undefined, 1));
+  // A hung request would hold the import, and every later "Add contacts", for good.
+  const res = await fetch(searchUrl(address, lang, undefined, 1), {
+    signal: AbortSignal.timeout(20_000),
+  });
   if (!res.ok) throw new Error(String(res.status));
   const [hit] = parsePhoton(await res.json());
   return hit ? { lng: hit.lng, lat: hit.lat } : null;
@@ -107,11 +111,15 @@ export async function importContacts(ask: boolean): Promise<number | 'denied' | 
     if (!read) return null;
     const { contacts, todo } = mergeContacts(list, read);
     set(contacts);
+    let failed = 0;
     for (const c of todo) {
+      // Taken off meanwhile: the rest is not looked up.
+      if (!list.includes(c)) continue;
       const at = await lookUp(c.address).catch(() => undefined);
       // A failed request (offline) is tried again next time; a lookup that found nothing is not.
-      if (at === undefined) continue;
-      set(list.map((x) => (x === c ? (at ? { ...c, ...at } : { ...c, missed: true }) : x)));
+      if (at !== undefined) {
+        set(list.map((x) => (x === c ? (at ? { ...c, ...at } : { ...c, missed: true }) : x)));
+      } else if (++failed >= 3) break; // Photon down: the rest another time, not all at once.
       await new Promise((go) => setTimeout(go, LOOKUP_GAP_MS));
     }
     const placed = list.filter((c) => c.lng !== undefined).length;
@@ -122,8 +130,11 @@ export async function importContacts(ask: boolean): Promise<number | 'denied' | 
   }
 }
 
-/** Takes them all off the map and off the device. */
-export const forgetContacts = () => set([]);
+/** Takes them all off the map and off the device, recent searches of them too. */
+export const forgetContacts = () => {
+  set([]);
+  forgetPeople();
+};
 
 /** A contact's place, its card opened from the search or the map. */
 export const placeOfContact = (c: Contact): Place => ({

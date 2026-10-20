@@ -5,6 +5,7 @@ import {
   isFavourite,
   mergeFavourites,
   parseFavourites,
+  completeFavourite,
   renameFavourite,
   titleOf,
   toggleFavourite,
@@ -13,6 +14,26 @@ import {
 const cafe = { name: 'Café Einstein', detail: 'Berlin', lng: 13.35, lat: 52.5 };
 
 describe('favourites', () => {
+  it('gets the address and id it lacked when starred too soon, nothing else changed', () => {
+    const early = toggleFavourite(
+      [],
+      { name: 'Café Einstein', detail: '', lng: 13.4, lat: 52.5 },
+      1,
+    );
+    const named = renameFavourite(early, early[0], 'Coffee');
+    const [f] = completeFavourite(named, {
+      name: 'Café Einstein',
+      detail: 'Kurfürstenstraße 58',
+      lng: 13.4,
+      lat: 52.5,
+      osm: 'N7',
+    });
+    expect(f).toMatchObject({ detail: 'Kurfürstenstraße 58', osm: 'N7', label: 'Coffee', at: 1 });
+    // Already complete: the same list back.
+    const again = completeFavourite([f], { ...f, detail: 'Elsewhere', osm: 'N8' });
+    expect(again[0]).toBe(f);
+  });
+
   it('stars and unstars a place, newest first', () => {
     let list = toggleFavourite([], cafe, 1);
     expect(list).toEqual([{ ...cafe, at: 1 }]);

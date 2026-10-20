@@ -20,6 +20,8 @@ export type Recent =
         osm?: string;
         bbox?: [number, number, number, number];
         kind?: PlaceKind;
+        /** A stop or station: its card shows departures. */
+        stop?: true;
       };
       at: number;
     }
@@ -62,6 +64,7 @@ export function recentPlaceOf(
     osm?: string;
     bbox?: [number, number, number, number];
     kind?: RecentPlace['kind'];
+    stop?: boolean;
     here?: boolean;
   },
   pinName: string,
@@ -78,6 +81,7 @@ export function recentPlaceOf(
     ...(p.osm ? { osm: p.osm } : {}),
     ...(p.bbox ? { bbox: p.bbox } : {}),
     ...(p.kind ? { kind: p.kind } : {}),
+    ...(p.stop ? { stop: true as const } : {}),
   };
 }
 

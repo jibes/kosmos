@@ -38,6 +38,9 @@ describe('postcodes', () => {
     expect(postcodeOf('1012ab')).toEqual({ code: '1012 AB', area: '1012' });
     expect(postcodeOf('1000-001')).toEqual({ code: '1000 001', area: '1000' });
     expect(postcodeOf('Main Street')).toBeNull();
+    // A house number and a street, a line and its number: no postcodes.
+    expect(postcodeOf('12 Main')).toBeNull();
+    expect(postcodeOf('Linie 12')).toBeNull();
     expect(postcodeOf('10117')).toBeNull();
   });
 });

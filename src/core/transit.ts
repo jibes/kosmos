@@ -66,6 +66,8 @@ export interface Transit {
   start: number;
   end: number;
   transfers: number;
+  /** When the plan came (ms): one this fresh needs no live check. */
+  planned?: number;
 }
 
 /** Leg modes that are not a vehicle someone else drives. */

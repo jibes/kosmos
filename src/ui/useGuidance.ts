@@ -79,10 +79,30 @@ export function useGuidance(o: Options) {
     if (!o.active) setRerouteAt(null);
   }
 
+  /**
+   * A rotation the controls asked for (north up: 0) until the map is there: a fix arriving
+   * mid-ease would otherwise keep the bearing it had got to and stop it part-way round.
+   */
+  const aimRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!map) return;
+    const own = (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent) aimRef.current = null;
+    };
+    map.on('rotatestart', own);
+    return () => {
+      map.off('rotatestart', own);
+    };
+  }, [map]);
   /** Heading-up turns the map with the way; else it keeps the rotation the user gave it. */
   const cameraBearing = useCallback(
-    (m: maplibregl.Map, heading: number | null) =>
-      followRef.current === 'compass' ? heading : m.getBearing(),
+    (m: maplibregl.Map, heading: number | null) => {
+      if (followRef.current === 'compass') return heading;
+      const aim = aimRef.current;
+      if (aim !== null && Math.abs(m.getBearing() - aim) > 0.5) return aim;
+      aimRef.current = null;
+      return m.getBearing();
+    },
     [followRef],
   );
   const follow = useCallback(
@@ -244,6 +264,7 @@ export function useGuidance(o: Options) {
     (bearing?: number) => {
       if (!map) return;
       glide?.release();
+      aimRef.current = bearing ?? null;
       if (overviewRef.current) fitNav(map, rest.current, motion(600));
       else if (followRef.current !== 'off') follow(map, motion(600), bearing);
     },

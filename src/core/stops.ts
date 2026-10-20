@@ -1,4 +1,5 @@
-import { ARRIVE_M, type NavState, type Track } from './nav';
+import type { LngLat } from './geo';
+import { ARRIVE_M, snap, type NavState, type Track } from './nav';
 import type { Mode, Route } from './route';
 
 /**
@@ -15,6 +16,16 @@ export function moveStopUp<T>(via: readonly T[], i: number, first = 0): T[] {
   const next = [...via];
   [next[i - 1], next[i]] = [next[i], next[i - 1]];
   return next;
+}
+
+/**
+ * Where a new stop goes among those ahead (from `first`, those reached before it): in its
+ * order along the way, so a café 5 km on comes before a stop 80 km on, not after it.
+ */
+export function stopIndex(tr: Track, via: readonly LngLat[], place: LngLat, first = 0): number {
+  const at = snap(tr, place).along;
+  for (let i = first; i < via.length; i++) if (snap(tr, via[i]).along > at) return i;
+  return via.length;
 }
 
 /** The words for a stop by its name: banner, early alert ("In 300 m, stop at …"), arrival. */

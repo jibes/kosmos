@@ -1,3 +1,4 @@
+import { isAway } from './native';
 import type * as maplibregl from 'maplibre-gl';
 import { useEffect, type RefObject } from 'react';
 import { tripRest } from '../core/navView';
@@ -24,7 +25,8 @@ interface Options {
  */
 export function useRideCamera({ map, ride, follow, overview, touchingRef }: Options) {
   useEffect(() => {
-    if (!map || !ride || touchingRef.current.size) return;
+    // Out of sight a camera move is a full render for nobody; the next step after puts it right.
+    if (!map || !ride || touchingRef.current.size || isAway()) return;
     if (!overview && follow === 'off') return;
     const { transit, st } = ride;
     const at: [number, number] | null = st.fix ? [st.fix.lng, st.fix.lat] : null;

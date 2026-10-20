@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { lang, locale, t } from '../i18n';
@@ -12,7 +12,13 @@ import {
   ShareIcon,
   StarIcon,
 } from './icons';
-import { renameFavouritePlace, toggleFavouritePlace, useFavourites } from './useFavourites';
+import {
+  completeFavouritePlace,
+  putBackFavourite,
+  renameFavouritePlace,
+  toggleFavouritePlace,
+  useFavourites,
+} from './useFavourites';
 import { rememberPlace } from './useRecent';
 import { favouriteOf, LABEL_MAX, titleOf } from '../core/favourites';
 import { copy, share } from './native';
@@ -25,7 +31,7 @@ interface Props {
   place: Place;
   loading: boolean;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, actions?: { label: string; run: () => void }[]) => void;
   onRoute: () => void;
   /** Search around this place: the map goes there and the search field opens. */
   onNearby: () => void;
@@ -38,6 +44,12 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
 
   const fav = favouriteOf(useFavourites(), place);
   const starred = !!fav;
+  // Starred while its address was still coming: kept with it once it is here.
+  useEffect(() => {
+    if (!loading && fav && ((!fav.detail && place.detail) || (!fav.osm && place.osm))) {
+      completeFavouritePlace(place);
+    }
+  }, [loading, fav, place]);
   // A renamed favourite goes by the user's name, however its card was opened.
   const name = fav ? titleOf(fav) : place.name;
   const [naming, setNaming] = useState(false);
@@ -103,6 +115,9 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
           onClick={() => {
             if (!starred) rememberPlace(place);
             toggleFavouritePlace(place);
+            // Off by mistake: back in one tap, with its own name.
+            if (fav)
+              onToast(t.favouriteRemoved, [{ label: t.undo, run: () => putBackFavourite(fav) }]);
           }}
         >
           <StarIcon filled={starred} />

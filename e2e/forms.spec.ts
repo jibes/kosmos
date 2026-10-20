@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { CENTER } from './fixtures/scene';
+import { photonSearches } from './fixtures/offline-world';
 import { inWorld, jump, watchPages } from './helpers';
 
 watchPages();
@@ -7,7 +8,9 @@ watchPages();
 test.describe('more ways to search', () => {
   inWorld();
 
-  test('coordinates, a map link and a Plus Code are the point itself', async ({ page }) => {
+  test('coordinates (decimal or in degrees), a map link and a Plus Code are the point itself', async ({
+    page,
+  }) => {
     await jump(page, { ...CENTER, zoom: 14 });
     const input = page.getByRole('combobox');
     const first = page.getByRole('option').first();
@@ -15,6 +18,18 @@ test.describe('more ways to search', () => {
     await expect(first).toContainText('52.52000° N, 13.40500° E');
     await input.fill('https://www.openstreetmap.org/#map=17/52.5163/13.3777');
     await expect(first).toContainText('52.51630° N');
+    // Degrees, minutes and seconds, as written on signs and in old guidebooks.
+    await input.fill(`52°30'58.7"N 13°22'39.7"E`);
+    await expect(first).toContainText('52.51631° N, 13.37769° E');
+    // An OpenStreetMap object's link pasted: the object, by one lookup, as when shared.
+    await input.fill('https://www.openstreetmap.org/way/518071791');
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Brandenburger Tor');
+    await page.locator('.card').getByRole('button', { name: /close/i }).click();
+    await expect(page.locator('.card')).toHaveCount(0);
+    // A message with a link pasted: its words are what is searched.
+    await input.fill('Brandenburger Tor https://maps.app.goo.gl/AbC1');
+    await expect(first).toContainText('Brandenburger Tor');
+    expect(photonSearches.at(-1)).toBe('Brandenburger Tor');
     // A short Plus Code, near where the map looks.
     await input.fill('GCP3+');
     await expect(first).toContainText('° N');

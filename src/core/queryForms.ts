@@ -113,9 +113,10 @@ export function postcodeOf(text: string): { code: string; area: string } | null 
   // The Netherlands: four digits, two letters.
   m = /^(\d{4})([A-Z]{2})$/.exec(c);
   if (m) return { code: `${m[1]} ${m[2]}`, area: m[1] };
-  // Elsewhere written with a space or a dash between its parts: the first part names the area.
+  // Elsewhere written with a space or a dash between its parts (113 51, 1000-001): the first
+  // part names the area. Both have a digit: "12 Main" is a house number, "Linie 12" a line.
   m = /^([A-Z0-9]{2,5})[\s-]([A-Z0-9]{2,4})$/.exec(raw);
-  if (m && /\d/.test(m[1])) return { code: `${m[1]} ${m[2]}`, area: m[1] };
+  if (m && /\d/.test(m[1]) && /\d/.test(m[2])) return { code: `${m[1]} ${m[2]}`, area: m[1] };
   return null;
 }
 

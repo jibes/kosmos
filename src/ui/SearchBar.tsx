@@ -4,6 +4,7 @@ import { nominatimSearchUrl, parseNominatim } from '../core/details';
 import { formatLngLat, type LngLat } from '../core/geo';
 import { otherForms, plusCode } from '../core/queryForms';
 import { parseShared } from '../core/shared';
+import { openShared } from './useShared';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
 import {
   blankItems,
@@ -40,6 +41,8 @@ export interface SearchState {
   setFolder: (f: Folder | null) => void;
   /** Empties the field and ends the category (its dots go with it). */
   clear: () => void;
+  /** The text to search for, out of any category or list. */
+  searchFor: (q: string) => void;
 }
 
 /** The search's own state, kept by whoever should outlive the bar (App, across a route). */
@@ -61,6 +64,12 @@ export function useSearch(): SearchState {
       },
       clear: () => {
         setQuery('');
+        setCategory(null);
+        setFolderState(null);
+      },
+      /** Words to search for from elsewhere (a shared message): out of any kind or list first. */
+      searchFor: (q: string) => {
+        setQuery(q);
         setCategory(null);
         setFolderState(null);
       },
@@ -97,6 +106,8 @@ interface Props {
   onShowAll?: () => void;
   /** The user's contacts on the map: found by name, added or removed from the empty field. */
   contacts?: { list: Contact[]; busy: boolean; onAdd: () => void; onForget: () => void };
+  /** Contacts found by name only, without their list or adding them (a route's own field). */
+  people?: Contact[];
   /** Where distances in the lists count from: the user in view, else the map's middle. */
   from?: () => LngLat | undefined;
 }
@@ -105,8 +116,10 @@ const DEBOUNCE_MS = 200;
 /** A pull down the list this far, or a quick flick, puts it away. */
 const PUT_AWAY_PX = 64;
 const FLICK_PX_PER_MS = 0.5;
-/** A search server that has not answered by now is not going to; say so instead of spinning. */
+/** A search server that has not answered by now is slow: another is asked meanwhile. */
 const TIMEOUT_MS = 5000;
+/** Photon is given up at the requests' own limit (`ui/http.ts`); a late answer still counts. */
+const PHOTON_MAX_MS = 20_000;
 /** Nominatim is only asked for text left alone this long (OSMF policy: never as-you-type). */
 const SETTLE_MS = 5000;
 /** A fallback answer that takes longer than this is not coming. */
@@ -157,6 +170,7 @@ export function SearchBar({
   categoryRun,
   onShowAll,
   contacts,
+  people,
   from,
 }: Props) {
   const own = useSearch();
@@ -198,6 +212,8 @@ export function SearchBar({
   /** When the text last changed, and the query Enter asked again for (it may ask at once). */
   const edited = useRef(0);
   const askedFor = useRef<string | null>(null);
+  /** The OSM link text last opened as its object. */
+  const openedFor = useRef<string | null>(null);
   const onPickRef = useRef(onPick);
   const onCategoryRef = useRef(onCategory);
   useEffect(() => {
@@ -206,11 +222,17 @@ export function SearchBar({
   });
 
   const q = query.trim();
+  // Where the names are asked near, as of when the list was last open: text left in a hidden
+  // or closed field is never asked anew just because the map (or the user) moved on.
+  const looking = focused && !collapsed && !hidden;
+  const [areaThen, setAreaThen] = useState(() => area(bias()));
+  const areaNow = looking ? area(bias()) : areaThen;
+  if (areaNow !== areaThen) setAreaThen(areaNow);
   const key = folder
     ? `dir|${folder}|${q}`
     : category
       ? `cat|${category}`
-      : `${lang}|${q}|${area(bias())}`;
+      : `${lang}|${q}|${areaNow}`;
   const cached = category || folder ? undefined : cache.get(key);
   const current: Omit<Response, 'key'> | null = cached
     ? { places: cached, status: 'done', alt: altFor.get(key) }
@@ -254,7 +276,7 @@ export function SearchBar({
       : [
           ...suggestions,
           ...favs.map((f): Item => ({ type: 'place', place: placeOf(f), fav: true })),
-          ...(contacts && !category ? matchContacts(contacts.list, q) : []).map((c): Item => ({
+          ...(category ? [] : matchContacts(contacts?.list ?? people ?? [], q)).map((c): Item => ({
             type: 'place',
             place: placeOfContact(c),
             contact: true,
@@ -307,6 +329,8 @@ export function SearchBar({
       setCategory(foundFor(q));
       input.current?.blur();
     } else if (ready[0]) {
+      // Taken as a tap on it would be: among the recent ones too.
+      if (ready[0].distance === undefined) rememberPlace(ready[0]);
       onPickRef.current(ready[0]);
       input.current?.blur();
     }
@@ -332,6 +356,19 @@ export function SearchBar({
       done([pointPlace(shared.at, lang, shared.name)]);
       return;
     }
+    // An openstreetmap.org object link: opened as a shared one is, by its id.
+    if (shared && 'osm' in shared) {
+      // No names for it (none kept: pasted again after other text, it opens again).
+      done([], true);
+      // Once for the text, however often this runs again.
+      if (openedFor.current === key) return;
+      openedFor.current = key;
+      openShared(shared);
+      return;
+    }
+    openedFor.current = null;
+    // A message with a link in it: its words, without the link.
+    const text = shared && 'query' in shared ? shared.query : q;
     const plus = plusCode(q, bias());
     if (plus?.at && !plus.rest) {
       done([pointPlace(plus.at, lang)]);
@@ -345,17 +382,57 @@ export function SearchBar({
       fallback.signal.addEventListener('abort', () => own.abort());
       const late = setTimeout(() => own.abort(), FALLBACK_MS);
       try {
-        const r = await getJson(nominatimSearchUrl(q, lang, bias()), own.signal);
+        const r = await getJson(nominatimSearchUrl(text, lang, bias()), own.signal);
         return r.ok ? parseNominatim(r.json) : null;
       } finally {
         clearTimeout(late);
       }
     };
     const timer = setTimeout(async () => {
+      /** Photon answered (it wins over Nominatim, whenever it comes), or gave up for good. */
+      const st: {
+        photon: 'asking' | 'in' | 'failed';
+        nominatim: 'none' | 'asking' | 'failed' | 'shown';
+      } = { photon: 'asking', nominatim: 'none' };
+      /** Photon slow or failed: Nominatim once, for this settled query, in its time slot. */
+      const fallBack = async (quick: boolean) => {
+        if (st.nominatim !== 'none') return;
+        st.nominatim = 'asking';
+        const status = quick ? 'error' : 'slow';
+        logEvent('search.photon', { status });
+        // Offline, another server fails as surely: said at once ("needs a connection").
+        if (q.length < 3 || !navigator.onLine) {
+          st.nominatim = 'failed';
+          setResponse({ key, places: [], status: navigator.onLine ? status : 'error' });
+          return;
+        }
+        setResponse({ key, places: [], status, pending: true });
+        // Photon slow means the text has been left alone for 5 s already. A quick failure waits
+        // until the text has settled as long, unless Enter asked.
+        if (quick && askedFor.current !== key) {
+          const wait = edited.current + SETTLE_MS - Date.now();
+          await new Promise((go) => setTimeout(go, Math.max(0, wait)));
+          if (fallback.signal.aborted || st.photon === 'in') return;
+        }
+        const places = await viaNominatim().catch(() => null);
+        if (fallback.signal.aborted || st.photon === 'in') return;
+        logEvent('search.nominatim', { found: places?.length ?? -1 });
+        st.nominatim = places ? 'shown' : 'failed';
+        // Neither has answered: said so (Photon's answer, should it still come, takes over).
+        if (places) done(places, true);
+        else setResponse({ key, places: [], status });
+      };
+      // Slow: Nominatim is asked meanwhile, Photon's answer still taken when it comes; at the
+      // request limit it is given up.
+      const slow = setTimeout(() => void fallBack(false), TIMEOUT_MS);
       const limit = setTimeout(() => {
         timedOut = true;
         ctrl.abort();
-      }, TIMEOUT_MS);
+      }, PHOTON_MAX_MS);
+      const stopTimers = () => {
+        clearTimeout(slow);
+        clearTimeout(limit);
+      };
       try {
         const ask = async (text: string) => {
           const res = await fetch(searchUrl(text, lang, bias()), { signal: ctrl.signal });
@@ -366,48 +443,39 @@ export function SearchBar({
           // "8RJW+Q2 Dublin": the code near the place named.
           const [near] = await ask(plus.rest);
           const at = near ? plusCode(q, near)?.at : null;
-          clearTimeout(limit);
+          stopTimers();
+          st.photon = 'in';
           done(at ? [pointPlace(at, lang)] : []);
           return;
         }
-        let places = await ask(q);
+        let places = await ask(text);
         let alt: string | undefined;
         // Nothing for it as typed: another form of it (a postcode written properly, then the
         // area it names; the house number moved; without a misspelled last word), one by one.
-        for (const form of places.length || q.length < FORMS_MIN ? [] : otherForms(q)) {
+        for (const form of places.length || text.length < FORMS_MIN ? [] : otherForms(text)) {
           places = await ask(form);
           if (places.length) {
             alt = form;
             break;
           }
         }
-        clearTimeout(limit);
+        stopTimers();
+        // Nominatim already answered with places, and Photon found none: those stay.
+        if (!places.length && st.nominatim === 'shown') {
+          st.photon = 'failed';
+          return;
+        }
+        st.photon = 'in';
         done(places, false, alt);
         return;
       } catch (e) {
-        clearTimeout(limit);
+        stopTimers();
         if (ctrl.signal.aborted && !timedOut) return;
         console.warn('search failed', e);
       }
-      const status = timedOut ? 'slow' : 'error';
-      logEvent('search.photon', { status });
-      if (q.length < 3) {
-        setResponse({ key, places: [], status });
-        return;
-      }
-      // Photon's timeout means the text has been left alone for 5 s already. A quick failure
-      // says so at once and waits until the text has settled as long, unless Enter asked.
-      if (!timedOut && askedFor.current !== key) {
-        setResponse({ key, places: [], status, pending: true });
-        const wait = edited.current + SETTLE_MS - Date.now();
-        await new Promise((go) => setTimeout(go, Math.max(0, wait)));
-        if (fallback.signal.aborted) return;
-      } else setResponse({ key, places: [], status, pending: true });
-      const places = await viaNominatim().catch(() => null);
-      if (fallback.signal.aborted) return;
-      logEvent('search.nominatim', { found: places?.length ?? -1 });
-      if (places) done(places, true);
-      else setResponse({ key, places: [], status });
+      st.photon = 'failed';
+      if (st.nominatim === 'failed') setResponse({ key, places: [], status: 'slow' });
+      else void fallBack(!timedOut);
     }, DEBOUNCE_MS);
     return () => {
       clearTimeout(timer);

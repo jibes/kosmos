@@ -12,7 +12,7 @@ import { track, type NavState } from '../core/nav';
 import type { Mode, Route } from '../core/route';
 import type { Place } from '../core/search';
 import { endsOf, movePoint, pointsOf, removePoint, type Point } from '../core/points';
-import { MAX_STOPS, stopsReached } from '../core/stops';
+import { MAX_STOPS, stopIndex, stopsReached } from '../core/stops';
 import type { PointListProps } from './PointList';
 import { fill, t } from '../i18n';
 import { logEvent } from './usageLog';
@@ -25,6 +25,8 @@ interface Options {
   setTrip: Dispatch<SetStateAction<Trip | null>>;
   /** The route being guided along, and the maneuver ahead on it. */
   guided: Route | undefined;
+  /** The road route shown (on the card or guided): a new stop takes its place along it. */
+  way: Route | undefined;
   nav: NavState;
   navigating: boolean;
   state: ReturnType<typeof useStopState>;
@@ -65,6 +67,7 @@ export function useStops({
   trip,
   setTrip,
   guided,
+  way,
   nav,
   navigating,
   state,
@@ -82,17 +85,25 @@ export function useStops({
     if (navigating && tr) setBehind((b) => stopsReached(tr, nav, b));
   }, [navigating, tr, nav, setBehind]);
 
-  const canAdd = !!trip && trip.mode !== 'transit' && viaOf(trip).length < MAX_STOPS;
+  /** Guiding, the stops reached count no more: the router is only asked for those ahead. */
+  const first = navigating ? behind : 0;
+  const canAdd = !!trip && trip.mode !== 'transit' && viaOf(trip).length - first < MAX_STOPS;
+  const wayTrack = useMemo(() => (way && !way.transit ? track(way) : null), [way]);
   const addStop = useCallback(
     (place: Place) => {
       setTrip((tr) => {
-        if (!tr || tr.mode === 'transit' || viaOf(tr).length >= MAX_STOPS) return tr;
-        return { ...tr, via: [...viaOf(tr), place] };
+        const via = viaOf(tr);
+        if (!tr || tr.mode === 'transit' || via.length - first >= MAX_STOPS) return tr;
+        const i = wayTrack ? stopIndex(wayTrack, via, place, first) : via.length;
+        return { ...tr, via: [...via.slice(0, i), place, ...via.slice(i)] };
       });
       logEvent('stop.add', { navigating });
-      showToast(fill(t.stopAdded, { name: place.name }));
+      // A label tapped by mistake while driving: undone in one tap, no list to open.
+      const undo = () =>
+        setTrip((tr) => (tr ? { ...tr, via: viaOf(tr).filter((v) => v !== place) } : tr));
+      showToast(fill(t.stopAdded, { name: place.name }), [{ label: t.undo, run: undo }]);
     },
-    [setTrip, showToast, navigating],
+    [setTrip, showToast, navigating, first, wayTrack],
   );
 
   /** "My location" anywhere but first: the position now. */

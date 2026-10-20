@@ -7,6 +7,7 @@ import {
   moveStopUp,
   nameStops,
   SKIP_AWAY_M,
+  stopIndex,
   stopsReached,
   type StopWords,
 } from '../src/core/stops';
@@ -144,6 +145,20 @@ describe('stops on the way', () => {
     let short = markSpoken(initialNav(), '0:pre');
     for (let n = 0, i = 0; n <= 1450; n += 5, i++) short = step(tr, short, fixAt(n, i * 500));
     expect(short.arrived).toBe(false);
+  });
+});
+
+describe('a stop added on the way', () => {
+  const at = (north: number) => ({ lng: m(0, north)[0], lat: m(0, north)[1] });
+  const tr = track(route);
+  it('goes in its order along the way, after those reached', () => {
+    const via = [at(500), at(1000)];
+    expect(stopIndex(tr, via, at(200))).toBe(0);
+    expect(stopIndex(tr, via, at(700))).toBe(1);
+    expect(stopIndex(tr, via, at(1300))).toBe(2);
+    // Anna's reached: one behind her goes after her still.
+    expect(stopIndex(tr, via, at(200), 1)).toBe(1);
+    expect(stopIndex(tr, [], at(200))).toBe(0);
   });
 });
 
