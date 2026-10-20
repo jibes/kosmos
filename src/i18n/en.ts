@@ -11,6 +11,7 @@ export const en = {
   tripFetching: 'Keeping this trip: {done} of {total} tiles',
   noResults: 'Nothing found',
   searchOffline: 'Search needs a connection',
+  searchElsewhere: 'Search is not answering. Asking another one…',
   searchSlow: 'Search is not answering. Try again in a moment.',
   locate: 'Show my location',
   locationDenied: 'Location is off: allow it for kOSMos in the settings',

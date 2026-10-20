@@ -138,6 +138,8 @@ interface Response {
   fallback?: boolean;
   /** Nothing for the text as typed: what was found for this other form of it instead. */
   alt?: string;
+  /** Photon failed, Nominatim is still to be asked: said so, not "try again". */
+  pending?: boolean;
 }
 
 export function SearchBar({
@@ -396,11 +398,11 @@ export function SearchBar({
       // Photon's timeout means the text has been left alone for 5 s already. A quick failure
       // says so at once and waits until the text has settled as long, unless Enter asked.
       if (!timedOut && askedFor.current !== key) {
-        setResponse({ key, places: [], status });
+        setResponse({ key, places: [], status, pending: true });
         const wait = edited.current + SETTLE_MS - Date.now();
         await new Promise((go) => setTimeout(go, Math.max(0, wait)));
         if (fallback.signal.aborted) return;
-      }
+      } else setResponse({ key, places: [], status, pending: true });
       const places = await viaNominatim().catch(() => null);
       if (fallback.signal.aborted) return;
       logEvent('search.nominatim', { found: places?.length ?? -1 });
@@ -538,8 +540,9 @@ export function SearchBar({
     !category && !folder && current?.alt && results.length
       ? fill(t.foundInstead, { q, alt: current.alt })
       : '';
-  const note =
-    folder && q && items.length < 2
+  const note = current?.pending
+    ? t.searchElsewhere
+    : folder && q && items.length < 2
       ? t.noResults
       : status === 'done' && !items.length
         ? category

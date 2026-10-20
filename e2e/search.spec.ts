@@ -594,6 +594,10 @@ test.describe('search', () => {
       await page.waitForTimeout(800);
     }
     expect(nominatimSearches.length).toBe(asked);
+    // Meanwhile it says another is asked, not to try again.
+    await expect(page.locator('.results .r-empty')).toHaveText(
+      'Search is not answering. Asking another one…',
+    );
     // Left alone, the text is a settled query: one search answers it.
     await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name, {
       timeout: 10_000,

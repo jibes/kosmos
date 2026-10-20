@@ -13,6 +13,7 @@ export const de = {
   tripFetching: 'Diese Fahrt wird gespeichert: {done} von {total} Kacheln',
   noResults: 'Nichts gefunden',
   searchOffline: 'Suche braucht eine Verbindung',
+  searchElsewhere: 'Die Suche antwortet nicht. Ich frage eine andere …',
   searchSlow: 'Die Suche antwortet nicht. Versuch es gleich noch einmal.',
   locate: 'Meinen Standort zeigen',
   locationDenied: 'Standort ist aus: erlaube ihn für kOSMos in den Einstellungen',
