@@ -9,6 +9,7 @@ import {
   type Shown,
 } from '../core/glide';
 import type { Track } from '../core/nav';
+import { isAway } from './native';
 
 export type { Aim } from '../core/glide';
 
@@ -56,7 +57,8 @@ export function createGlide(map: maplibregl.Map) {
 
   const tick = () => {
     frame = 0;
-    if (!aim) return;
+    // Out of sight (guiding, the page kept running): nothing to draw until the next fix back.
+    if (!aim || isAway()) return;
     const now = performance.now();
     // The camera eases by the time that passed, up to a second: a slow phone's few frames
     // still get it there in about the same time. (The arrow keeps its own, shorter cap.)

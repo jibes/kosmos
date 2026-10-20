@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { categoriesFor, foundFor, foundOf, type Kind } from '../core/categories';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
-import type { LngLat } from '../core/geo';
+import { formatLngLat, type LngLat } from '../core/geo';
+import { otherForms, plusCode } from '../core/queryForms';
+import { parseShared } from '../core/shared';
 import { parsePhoton, searchUrl, type Place, type SearchBias } from '../core/search';
 import {
   blankItems,
@@ -111,6 +113,18 @@ const SETTLE_MS = 5000;
 const FALLBACK_MS = 8000;
 /** Answers by query and roughly where the map looked: "Hauptbahnhof" means another one elsewhere. */
 const cache = new Map<string, Place[]>();
+/** The other form an answer in `cache` was found for. */
+const altFor = new Map<string, string>();
+/** Other forms of a text are asked for only from this long (a word being typed finds some). */
+const FORMS_MIN = 4;
+
+/** A point typed or pasted (coordinates, a map link, a Plus Code) as a place of its own. */
+const pointPlace = (at: LngLat, lang: string, name?: string): Place => ({
+  name: name ?? formatLngLat(at, 5, lang),
+  detail: name ? formatLngLat(at, 5, lang) : t.point,
+  lng: at.lng,
+  lat: at.lat,
+});
 
 /** About 50 km across, and four zoom steps: the same search there gets the same answer. */
 const area = (b: SearchBias | undefined) =>
@@ -122,6 +136,8 @@ interface Response {
   status: 'done' | 'error' | 'slow';
   /** Nominatim's answer while Photon was down: not kept, and Enter asks again. */
   fallback?: boolean;
+  /** Nothing for the text as typed: what was found for this other form of it instead. */
+  alt?: string;
 }
 
 export function SearchBar({
@@ -195,7 +211,7 @@ export function SearchBar({
       : `${lang}|${q}|${area(bias())}`;
   const cached = category || folder ? undefined : cache.get(key);
   const current: Omit<Response, 'key'> | null = cached
-    ? { places: cached, status: 'done' }
+    ? { places: cached, status: 'done', alt: altFor.get(key) }
     : response?.key === key
       ? response
       : null;
@@ -299,13 +315,26 @@ export function SearchBar({
     const ctrl = new AbortController();
     const fallback = new AbortController();
     let timedOut = false;
-    const done = (places: Place[], fallback = false) => {
+    const done = (places: Place[], fallback = false, alt?: string) => {
       if (!fallback) {
         if (cache.size > 64) cache.delete(cache.keys().next().value as string);
         cache.set(key, places);
+        if (alt) altFor.set(key, alt);
       }
-      setResponse({ key, places, status: 'done', fallback });
+      setResponse({ key, places, status: 'done', fallback, alt });
     };
+    // Coordinates, a map link or a Plus Code: the point itself, asking no server (a short
+    // code after a place's name is placed near that place, found first).
+    const shared = parseShared(q);
+    if (shared && 'at' in shared) {
+      done([pointPlace(shared.at, lang, shared.name)]);
+      return;
+    }
+    const plus = plusCode(q, bias());
+    if (plus?.at && !plus.rest) {
+      done([pointPlace(plus.at, lang)]);
+      return;
+    }
     /** Photon failed or hung: ask Nominatim once for this settled query, in its time slot. */
     const viaNominatim = async () => {
       await new Promise((go) => setTimeout(go, nominatimSlot()));
@@ -326,11 +355,32 @@ export function SearchBar({
         ctrl.abort();
       }, TIMEOUT_MS);
       try {
-        const res = await fetch(searchUrl(q, lang, bias()), { signal: ctrl.signal });
-        if (!res.ok) throw new Error(String(res.status));
-        const places = parsePhoton(await res.json());
+        const ask = async (text: string) => {
+          const res = await fetch(searchUrl(text, lang, bias()), { signal: ctrl.signal });
+          if (!res.ok) throw new Error(String(res.status));
+          return parsePhoton(await res.json());
+        };
+        if (plus?.rest) {
+          // "8RJW+Q2 Dublin": the code near the place named.
+          const [near] = await ask(plus.rest);
+          const at = near ? plusCode(q, near)?.at : null;
+          clearTimeout(limit);
+          done(at ? [pointPlace(at, lang)] : []);
+          return;
+        }
+        let places = await ask(q);
+        let alt: string | undefined;
+        // Nothing for it as typed: another form of it (a postcode written properly, then the
+        // area it names; the house number moved; without a misspelled last word), one by one.
+        for (const form of places.length || q.length < FORMS_MIN ? [] : otherForms(q)) {
+          places = await ask(form);
+          if (places.length) {
+            alt = form;
+            break;
+          }
+        }
         clearTimeout(limit);
-        done(places);
+        done(places, false, alt);
         return;
       } catch (e) {
         clearTimeout(limit);
@@ -483,6 +533,11 @@ export function SearchBar({
   };
 
   /** What the list has to say instead of results; also read out to a screen reader. */
+  /** Found for another form of the text: said above the names, so none is taken for it. */
+  const instead =
+    !category && !folder && current?.alt && results.length
+      ? fill(t.foundInstead, { q, alt: current.alt })
+      : '';
   const note =
     folder && q && items.length < 2
       ? t.noResults
@@ -546,6 +601,11 @@ export function SearchBar({
               {t.beyondView}
             </li>
           )}
+          {instead && (
+            <li className="r-empty" role="presentation">
+              {instead}
+            </li>
+          )}
           {items.map((it, i) => {
             // The lists side by side, a strip of their own above the recent searches.
             if (it.type === 'folder') {
@@ -589,7 +649,7 @@ export function SearchBar({
             (folder && !q
               ? fill(t.inList, { name: folderName(folder), n: items.length - 1 })
               : '') ||
-            `${beyond ? `${t.beyondView} ` : ''}${
+            `${beyond ? `${t.beyondView} ` : ''}${instead ? `${instead} ` : ''}${
               results.length === 1
                 ? t.oneResult
                 : results.length

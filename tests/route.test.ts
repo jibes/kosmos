@@ -285,6 +285,7 @@ describe('formatting', () => {
     const m = parseValhalla({ trip: t })[0].maneuvers[1];
     expect(m.toward).toBe('Tullamore');
     expect(m.refs).toBe('N52 / M6');
+    expect(m.junction).toBeUndefined();
     // The sign's number wins over the road's own, which the signs may never have carried.
     expect(bannerText(m)).toBe('N52 / M6');
     expect(
@@ -299,6 +300,22 @@ describe('formatting', () => {
         ),
       })[0].maneuvers[1].refs,
     ).toBeUndefined();
+  });
+
+  it("reads a motorway junction's number off its sign", () => {
+    const t = trip(
+      [
+        [13.4, 52.5],
+        [13.4, 52.51],
+      ],
+      1,
+      60,
+    );
+    Object.assign(t.legs[0].maneuvers[1], {
+      type: 20,
+      sign: { exit_number_elements: [{ text: '14a' }], exit_toward_elements: [{ text: 'Galway' }] },
+    });
+    expect(parseValhalla({ trip: t })[0].maneuvers[1].junction).toBe('14a');
   });
 
   it('shows the road as signed: the number on the sign, a name with it', () => {

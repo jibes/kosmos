@@ -72,6 +72,12 @@ if (typeof document !== 'undefined') {
     if (document.hidden) flush();
   });
   addEventListener('pagehide', flush);
+  // Guiding, the page keeps running out of sight and is never hidden: the app says so itself.
+  addEventListener('kosmosaway', (e) => {
+    const away = !!(e as Event & { away?: boolean }).away;
+    logEvent(away ? 'app.away' : 'app.back');
+    if (away) flush();
+  });
   addEventListener('error', (e) => logEvent('error', { msg: String(e.message).slice(0, 200) }));
   logEvent('app.start', { v: __BUILD__.version, native: isNative });
 }

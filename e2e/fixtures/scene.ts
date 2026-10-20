@@ -382,7 +382,7 @@ function city(): Layers {
     }
   }
   layers.poi.push(
-    point(m(140, -170), { class: 'cafe', name: 'Café Einstein', rank: 5 }),
+    point(m(140, -170), { class: 'cafe', subclass: 'cafe', name: 'Café Einstein', rank: 5 }),
     point(m(-320, 520), { class: 'museum', name: 'Museum für Naturkunde', rank: 2 }),
     point(m(60, 230), {
       class: 'railway',

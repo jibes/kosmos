@@ -1,4 +1,5 @@
 import { motion } from './motion';
+import { storedFetch } from './tileStore';
 import { VectorTile } from '@mapbox/vector-tile';
 import type * as maplibregl from 'maplibre-gl';
 import { PbfReader } from 'pbf';
@@ -7,10 +8,13 @@ import { isStopPoi } from '../core/departures';
 import { kindOfPoi } from '../core/placeKind';
 import type { LngLat } from '../core/geo';
 import type { Place } from '../core/search';
-import { t } from '../i18n';
+import { lang as uiLang, t } from '../i18n';
 import { wide } from './layout';
 import { MAP_SOURCE } from '../core/style';
 import { DETAIL_ZOOM, tilePoint, tilesIn, tileUrl, type TileId } from '../core/tiles';
+import { placesAlong, tilesAlong } from '../core/alongRoute';
+import type { Track } from '../core/nav';
+import type { Town } from '../core/towns';
 
 /** A first search from a view wider than this zooms in once, so the results can be told apart. */
 const SEARCH_ZOOM = 12;
@@ -30,29 +34,29 @@ const TILE_MS = 8000;
  */
 const read = new Map<string, Promise<Spot[]>>();
 
-function places(url: string, tile: TileId): Promise<Spot[]> {
-  const hit = read.get(url);
+function places(url: string, tile: TileId, layer = 'poi'): Promise<Spot[]> {
+  const key = `${layer}|${url}`;
+  const hit = read.get(key);
   if (hit) return hit;
-  const got = fetchPlaces(url, tile);
+  const got = fetchPlaces(url, tile, layer);
   if (read.size > 256) read.delete(read.keys().next().value as string);
-  read.set(url, got);
+  read.set(key, got);
   // A tile that failed is asked again next time.
-  got.catch(() => read.get(url) === got && read.delete(url));
+  got.catch(() => read.get(key) === got && read.delete(key));
   return got;
 }
 
-async function fetchPlaces(url: string, tile: TileId): Promise<Spot[]> {
+async function fetchPlaces(url: string, tile: TileId, name: string): Promise<Spot[]> {
   const ctrl = new AbortController();
   const late = setTimeout(() => ctrl.abort(), TILE_MS);
   let body: ArrayBuffer;
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) throw new Error(String(res.status));
-    body = await res.arrayBuffer();
+    // Kept on the device as the map keeps its own: found again offline.
+    body = await storedFetch(url, false, ctrl.signal);
   } finally {
     clearTimeout(late);
   }
-  const layer = new VectorTile(new PbfReader(body)).layers.poi;
+  const layer = new VectorTile(new PbfReader(body)).layers[name];
   const spots: Spot[] = [];
   for (let i = 0; i < (layer?.length ?? 0); i++) {
     const f = layer.feature(i);
@@ -203,5 +207,96 @@ export async function findCategory(
       ...(stop ? { stop } : {}),
       kind,
     }),
+  );
+}
+
+/** A place along a route, how far along the way from here and the detour it makes (s). */
+export interface AlongPlace {
+  place: Place;
+  ahead: number;
+  detour: number;
+}
+
+/**
+ * Places of a kind along the rest of a route (`core/alongRoute.ts`): the zoom-14 tiles under
+ * its band ahead, read as for the map's own search and kept with them. `null` when the map has
+ * no tiles yet; throws when none came back.
+ */
+export async function findAlong(
+  map: maplibregl.Map,
+  tr: Track,
+  from: number,
+  kind: Category,
+  lang: string,
+): Promise<AlongPlace[] | null> {
+  const template = templateOf(map);
+  if (!template) return null;
+  const spots = await spotsIn(template, tilesAlong(tr, from, tr.mode));
+  const pois = spots
+    .filter((s) => isOf(kind, s.props))
+    .map((s) => {
+      const own = s.props[`name:${lang}`] ?? s.props.name;
+      const sort = unnamedKind(s.props.subclass);
+      return {
+        name: own ? String(own) : sort ? t[`poi_${sort}`] : t[`cat_${kind}`],
+        lng: s.lng,
+        lat: s.lat,
+        props: s.props,
+        unnamed: !own,
+      };
+    });
+  return placesAlong(tr, pois, from, tr.mode).map(({ it, ahead, detour }) => ({
+    place: {
+      name: it.name,
+      detail: '',
+      lng: it.lng,
+      lat: it.lat,
+      kind: kindOfPoi(it.props),
+      ...(it.unnamed ? { unnamed: true } : {}),
+      ...(isStopPoi(it.props) ? { stop: true } : {}),
+    },
+    ahead,
+    detour,
+  }));
+}
+
+/** The map's tiles, once known, for reading along a route away from the map (`useRoute`). */
+let tileTemplate: string | undefined;
+export const tilesTemplate = () => tileTemplate;
+export function knowTiles(map: maplibregl.Map) {
+  const set = () => {
+    tileTemplate = templateOf(map) ?? tileTemplate;
+  };
+  set();
+  map.on('sourcedata', set);
+  return () => {
+    map.off('sourcedata', set);
+  };
+}
+
+/** Zoom 10 holds every town and village; a band this wide catches those beside the road. */
+const TOWN_ZOOM = 10;
+const TOWN_BAND = { band: 2_000, reach: 150_000 };
+const TOWN_TILES = 40;
+
+/**
+ * The towns along a route (`core/towns.ts`), from the map's own place labels: what a road sign
+ * there would most likely name. Empty when the map's tiles are not known or do not come.
+ */
+export async function townsAlong(tr: Track): Promise<Town[]> {
+  if (!tileTemplate) return [];
+  const tiles = tilesAlong(tr, 0, TOWN_BAND, TOWN_TILES, TOWN_ZOOM);
+  const got = await Promise.allSettled(
+    tiles.map((tile) => places(tileUrl(tileTemplate!, tile), tile, 'place')),
+  );
+  return got.flatMap((r) =>
+    r.status === 'fulfilled'
+      ? r.value.flatMap((s): Town[] => {
+          const kind = s.props.class;
+          const name = s.props[`name:${uiLang}`] ?? s.props.name;
+          if ((kind !== 'city' && kind !== 'town' && kind !== 'village') || !name) return [];
+          return [{ name: String(name), kind, lng: s.lng, lat: s.lat }];
+        })
+      : [],
   );
 }

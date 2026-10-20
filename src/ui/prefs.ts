@@ -18,6 +18,10 @@ export const FAVOURITES_KEY = 'kosmos.favourites.v1';
  * unless saved. */
 export const LOG_KEY = 'kosmos.log.v1';
 export const LOGGING_KEY = 'kosmos.logging.v1';
+/** When the whole world was last kept at low zoom, and to which zoom. */
+export const WORLD_KEY = 'kosmos.world.v1';
+/** Automated browsers fetch the world only when a test asks, and only to this zoom. */
+export const WORLD_TEST_KEY = 'kosmos.worldtest.v1';
 
 export const stored = (key: string) => {
   try {

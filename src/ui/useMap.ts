@@ -7,10 +7,13 @@ import { DEFAULT_VIEW, VIEW_KEY, parseView, serializeView } from '../core/view';
 import { mapFontFaces } from './fonts';
 import { motion } from './motion';
 import { nativeLog } from './native';
+import { registerTileStore, storeRequests } from './tileStore';
 import { t } from '../i18n';
 
 // MapLibre resolves its worker next to its own module, which bundling moves; point it at the copy.
 maplibregl.setWorkerUrl(new URL(workerUrl, document.baseURI).href);
+// Tiles, TileJSON and fonts through the store on the device (`tileStore.ts`).
+registerTileStore();
 
 function storedView() {
   try {
@@ -52,6 +55,7 @@ export function useMap(
       fadeDuration: motion(180),
       validateStyle: import.meta.env.DEV,
       cancelPendingTileRequestsWhileZooming: true,
+      transformRequest: storeRequests,
     });
     m.keyboard.enable();
     const save = () => {

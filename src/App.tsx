@@ -35,6 +35,7 @@ import { useDotInView } from './ui/useDotInView';
 import { distanceFrom } from './ui/categorySearch';
 import { useRoute, viaOf, type Trip } from './ui/useRoute';
 import { useStopState, useStops } from './ui/useStops';
+import { useAlongSearch } from './ui/useAlongSearch';
 import { useGuidance } from './ui/useGuidance';
 import { FRESH_MS } from './ui/useNav';
 import { useRouteLayer } from './ui/useRouteLayer';
@@ -50,6 +51,8 @@ import { useHint } from './ui/useHint';
 import { useTheme } from './ui/useTheme';
 import { systemVoice, useMuted } from './ui/voice';
 import { keepAwake } from './ui/wakeLock';
+import { usePip } from './ui/usePip';
+import { useKeepMap } from './ui/useKeepMap';
 
 /** Map labels follow the browser language even where the UI falls back to English. */
 const LABEL_LANG = (typeof navigator === 'undefined' ? 'en' : navigator.language)
@@ -366,6 +369,7 @@ export function App() {
     pick: setPicking,
     skip: { fix, mode: roadMode, voice, muted, reroute: route.retry, dismissText },
   });
+  const along = useAlongSearch(map, lang, stopState.addStopRef, !!stops.card.onAdd);
   const navControls = useNavControls({
     map,
     follow,
@@ -487,6 +491,8 @@ export function App() {
       background(false);
     };
   }, [navigating, background, showToast]);
+  usePip(navigating);
+  useKeepMap(guided, roadMode, navigating && !riding);
 
   const locate = () => {
     if (status === 'denied') {
@@ -601,6 +607,7 @@ export function App() {
           <NavView
             route={shown[chosen]}
             mode={roadMode}
+            along={along}
             nav={nav}
             lang={locale}
             muted={muted}
@@ -631,6 +638,7 @@ export function App() {
               {trip && picking === null && (
                 <RouteCard
                   to={trip.to}
+                  along={along}
                   points={{
                     ...stops.card,
                     onUseMyLocation: () => {

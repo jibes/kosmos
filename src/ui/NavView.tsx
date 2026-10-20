@@ -18,6 +18,7 @@ import { LaneIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
 import { PointList, type PointListProps } from './PointList';
 import { TripDetails } from './TripDetails';
+import { AlongRoute, type AlongSearch } from './AlongRoute';
 import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
 import { useNavNotice } from './useNavNotice';
@@ -40,6 +41,8 @@ interface Props {
   /** The points ahead, open under the banner (a tap on it; Back closes them). */
   open: boolean;
   onOpen: (open: boolean) => void;
+  /** Places along the rest of the way, made stops from the panel. */
+  along?: AlongSearch;
 }
 
 type Step = Route['maneuvers'][number];
@@ -55,7 +58,9 @@ const short = (m: Step) => {
       .filter(Boolean)
       .join(' · ');
   }
-  return m.wayOut ? capital(m.wayOut) : bannerText(m);
+  const way = m.wayOut ? capital(m.wayOut) : bannerText(m);
+  // A motorway junction by its number first, as its sign shows it.
+  return m.junction ? `${fill(t.junctionNo, { n: m.junction.split(' / ')[0] })} · ${way}` : way;
 };
 
 /** The road itself, under a way shown by where it leads. */
@@ -72,7 +77,7 @@ const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
 export function NavView(props: Props) {
-  const { route, mode, nav, lang, muted, reroute, destination, open, points, ...on } = props;
+  const { route, mode, nav, lang, muted, reroute, destination, open, points, along, ...on } = props;
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
@@ -193,6 +198,15 @@ export function NavView(props: Props) {
         {open && guiding && (
           <TripDetails onClose={() => on.onOpen(false)}>
             <PointList {...points} />
+            {along && (
+              <AlongRoute
+                route={route}
+                mode={mode}
+                from={nav.snap?.along ?? 0}
+                lang={lang}
+                {...along}
+              />
+            )}
           </TripDetails>
         )}
       </div>

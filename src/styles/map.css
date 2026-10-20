@@ -531,9 +531,17 @@
 
 /* The usage log: kept only when asked, saved as a file to hand on. */
 .usage-log,
-.backup {
+.backup,
+.offline-map {
   display: grid;
   gap: 6px;
+}
+
+/* The map kept for offline: how much, the world, a download's progress. */
+.offline-map progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
 }
 
 .usage-log label {
@@ -550,7 +558,8 @@
 }
 
 .usage-log small,
-.backup small {
+.backup small,
+.offline-map small {
   color: var(--muted);
 }
 

@@ -59,6 +59,8 @@ export interface Maneuver {
   toward?: string;
   /** Route numbers on the signs ("N52"), from OSM `destination:ref`: what to look out for. */
   refs?: string;
+  /** A motorway junction's number on its sign ("12", "14a"), from OSM `junction:ref`. */
+  junction?: string;
   /** Where it leads in words ("towards Tullamore"; a roundabout also "heading north"). */
   wayOut?: string;
   /** Lanes approaching this maneuver, left to right, when the router knows them. */
@@ -197,7 +199,11 @@ interface VManeuver {
   begin_shape_index?: number;
   roundabout_exit_count?: number;
   lanes?: unknown;
-  sign?: { exit_toward_elements?: VSign[]; exit_branch_elements?: VSign[] };
+  sign?: {
+    exit_toward_elements?: VSign[];
+    exit_branch_elements?: VSign[];
+    exit_number_elements?: VSign[];
+  };
 }
 interface VSign {
   text?: string;
@@ -275,6 +281,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
         exit: m.roundabout_exit_count,
         toward: towardOf(m),
         refs: refsOf(m),
+        junction: joined(texts(m.sign?.exit_number_elements, false)),
         lanes: parseLanes(m.lanes),
         ...(stop !== undefined ? { stop } : {}),
       });

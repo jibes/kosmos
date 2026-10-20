@@ -15,6 +15,7 @@ import { fill, t, units } from '../i18n';
 import { arrowRadios, focusSearch, useFocusOnMount } from './a11y';
 import { CloseIcon, CoinsIcon, ModeIcon, TurnIcon } from './icons';
 import { isNative, openElsewhere } from './native';
+import { AlongRoute, type AlongSearch } from './AlongRoute';
 import { Sheet } from './Sheet';
 import { PointList, type PointListProps } from './PointList';
 import type { LocationStatus } from './useLocation';
@@ -47,6 +48,8 @@ interface Props {
   /** Public transport departure; `null` is now. */
   at: number | null;
   onDepart: (at: number | null) => void;
+  /** Places along the chosen way (road routes). */
+  along?: AlongSearch;
 }
 
 const MESSAGE: Partial<Record<RouteStatus, string>> = {
@@ -68,6 +71,13 @@ export function RouteCard(props: Props) {
       : MESSAGE[status];
   // While a changed trip is asked for, the last ways found stay, dimmed, so nothing below the
   // points jumps (a road route for a road one: public transport is laid out otherwise).
+  /** Places along the way, open under the links (closed again for another way of travel). */
+  const [alongOpen, setAlongOpen] = useState(false);
+  const [alongMode, setAlongMode] = useState(mode);
+  if (alongMode !== mode) {
+    setAlongMode(mode);
+    setAlongOpen(false);
+  }
   const [last, setLast] = useState({ routes, transit: mode === 'transit' });
   if (status === 'ready' && routes !== last.routes)
     setLast({ routes, transit: mode === 'transit' });
@@ -138,10 +148,33 @@ export function RouteCard(props: Props) {
       </header>
 
       <PointList {...props.points} />
-      {props.onAdd && (
-        <button type="button" className="quiet-link add-stop" onClick={props.onAdd}>
-          + {t.addStop}
-        </button>
+      {/* Both about stops: one by name, or one found along the way. */}
+      <div className="card-links">
+        {props.onAdd && (
+          <button type="button" className="quiet-link add-stop" onClick={props.onAdd}>
+            + {t.addStop}
+          </button>
+        )}
+        {route && mode !== 'transit' && props.along && (
+          <button
+            type="button"
+            className="quiet-link add-stop"
+            aria-expanded={alongOpen}
+            onClick={() => setAlongOpen(!alongOpen)}
+          >
+            {t.alongWay}
+          </button>
+        )}
+      </div>
+      {alongOpen && route && mode !== 'transit' && props.along && (
+        <AlongRoute
+          route={route}
+          mode={mode}
+          from={0}
+          lang={lang}
+          heading={false}
+          {...props.along}
+        />
       )}
 
       {mode === 'transit' && <DepartTime at={props.at} now={now} onDepart={props.onDepart} />}

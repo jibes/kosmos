@@ -611,3 +611,46 @@ button.via[aria-expanded='true']::after {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* A small window over another app (Android's picture-in-picture, `ui/usePip.ts`): the next
+   turn and how far, the map following under it; nothing to tap, as taps open the app. */
+:root[data-pip]
+  :is(
+    .nav-bar,
+    .controls,
+    .speed,
+    .notes,
+    .credit,
+    .ride-details,
+    .nav-then,
+    .nav-lanes,
+    .ride-toggle
+  ),
+:root[data-pip] .nav-banner small {
+  display: none !important;
+}
+
+:root[data-pip] .nav-banner {
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  animation: none;
+}
+
+:root[data-pip] .nav-banner svg {
+  width: 28px;
+  height: 28px;
+}
+
+:root[data-pip] .nav-banner strong {
+  font-size: 20px;
+}
+
+:root[data-pip] .nav-banner p {
+  font-size: 14px;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}

@@ -1,3 +1,4 @@
+import { isAway } from './native';
 import type * as maplibregl from 'maplibre-gl';
 import { useEffect, useRef, type RefObject } from 'react';
 import { userMarker } from './markers';
@@ -37,13 +38,14 @@ export function useMapGestures(
     };
     const up = (e: PointerEvent) => touchingRef.current.delete(e.pointerId);
     const away = () => {
-      if (document.hidden) touchingRef.current.clear();
+      if (isAway()) touchingRef.current.clear();
     };
     const surface = map.getCanvasContainer();
     surface.addEventListener('pointerdown', down);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
     document.addEventListener('visibilitychange', away);
+    window.addEventListener('kosmosaway', away);
     const drag = () => on.current.drag();
     const look = (e: { originalEvent?: Event }) => {
       if (e.originalEvent) on.current.look();
@@ -57,6 +59,7 @@ export function useMapGestures(
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
       document.removeEventListener('visibilitychange', away);
+      window.removeEventListener('kosmosaway', away);
       map.off('dragstart', drag);
       for (const ev of looks) map.off(ev, look);
     };

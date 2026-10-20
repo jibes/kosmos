@@ -12,6 +12,9 @@ import {
   type TravelMode,
 } from '../core/route';
 import { narrateWays, type ExitWords } from '../core/roundabout';
+import { track } from '../core/nav';
+import type { Town } from '../core/towns';
+import { townsAlong } from './categorySearch';
 import { nameStops, type StopWords } from '../core/stops';
 import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
@@ -50,7 +53,16 @@ const NO_ROUTES: Route[] = [];
 const EXIT_WORDS: ExitWords = {
   toward: (place) => fill(t.exitToward, { place }),
   heading: (way) => fill(t.exitHeading, { way: t[`way_${way}`] }),
+  junction: (n) => fill(t.sayJunction, { n }),
 };
+
+/** Towns a road sign would name, read in the time a route may wait for them, else none. */
+const TOWNS_MS = 2500;
+const towns = (route: Route, mode: Mode): Promise<Town[]> =>
+  Promise.race([
+    townsAlong(track(route, mode)).catch(() => []),
+    new Promise<Town[]>((done) => setTimeout(() => done([]), TOWNS_MS)),
+  ]);
 
 /** A stop said by its name. */
 const STOP_WORDS: StopWords = {
@@ -168,11 +180,18 @@ export function useRoute(
           via,
         ),
         ctrl.signal,
-      ).then((r) => ({
+      ).then(async (r) => ({
         ...r,
         routes: r.ok
-          ? parseValhalla(r.json).map((x) =>
-              nameStops(narrateWays(x, EXIT_WORDS), names, behind, STOP_WORDS),
+          ? await Promise.all(
+              parseValhalla(r.json).map(async (x) =>
+                nameStops(
+                  narrateWays(x, EXIT_WORDS, await towns(x, trip.mode as Mode)),
+                  names,
+                  behind,
+                  STOP_WORDS,
+                ),
+              ),
             )
           : [],
       }));

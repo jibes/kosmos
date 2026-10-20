@@ -1,3 +1,4 @@
+import { MIN_FREE_PX } from '../core/fitRoom';
 import type * as maplibregl from 'maplibre-gl';
 import { boundsOf, navPitch, navZoomFor } from '../core/navView';
 import type { Mode } from '../core/route';
@@ -29,9 +30,12 @@ export const padding = () =>
  * quarter of the height from the bottom beside the column, where nothing else is.
  */
 export const navPadding = () =>
-  wide()
-    ? { top: Math.round(innerHeight * 0.55), bottom: 16, left: beside(WIDE_GUTTER), right: 0 }
-    : { top: Math.round(innerHeight * 0.42), bottom: 110, left: 0, right: 0 };
+  // A small window over another app: the banner on top, nothing below.
+  document.documentElement.hasAttribute('data-pip')
+    ? { top: Math.round(innerHeight * 0.4), bottom: 8, left: 0, right: 0 }
+    : wide()
+      ? { top: Math.round(innerHeight * 0.55), bottom: 16, left: beside(WIDE_GUTTER), right: 0 }
+      : { top: Math.round(innerHeight * 0.42), bottom: 110, left: 0, right: 0 };
 
 export const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
 
@@ -47,8 +51,14 @@ export const routePadding = () => {
     };
   }
   // Clear of the map buttons on the right, with room for the start dot and the destination pin.
+  // A card up to the top still leaves `MIN_FREE_PX` of map under the search bar's room.
   const bottom = panel && panel.height ? innerHeight - panel.top + 32 : 380;
-  return { top: 104, bottom: Math.min(bottom, innerHeight - 240), left: ENDS_PX, right: 96 };
+  return {
+    top: 104,
+    bottom: Math.min(bottom, innerHeight - 104 - MIN_FREE_PX),
+    left: ENDS_PX,
+    right: 96,
+  };
 };
 
 /** A finger long-presses; a mouse right-clicks. */
@@ -88,12 +98,15 @@ const overviewPadding = () => {
   if (wide()) return { top: ENDS_PX, bottom: ENDS_PX, left: beside(ENDS_PX), right: 72 };
   const top = banner && banner.height ? banner.bottom : innerHeight * 0.3;
   const bottom = bar && bar.height ? innerHeight - bar.top : 150;
+  // A phone is narrow: the arrow and the pin a quarter in, not a thumb's width from the edge,
+  // and the map buttons' column kept clear on its side.
+  const side = Math.max(ENDS_PX, Math.round(innerWidth * 0.25));
+  const buttons = document.querySelector('.controls')?.getBoundingClientRect();
   return {
     top: Math.round(top + ENDS_PX),
     bottom: Math.round(bottom + ENDS_PX),
-    // A phone is narrow: the pin's centre a fifth in, not a thumb's width from the edge.
-    left: Math.max(ENDS_PX, Math.round(innerWidth * 0.18)),
-    right: Math.max(72, Math.round(innerWidth * 0.18)),
+    left: side,
+    right: Math.max(side, buttons?.width ? Math.round(innerWidth - buttons.left + 24) : 72),
   };
 };
 

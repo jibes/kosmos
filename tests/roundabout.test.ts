@@ -107,4 +107,30 @@ describe('roundabouts', () => {
     expect(depart.wayOut).toBeUndefined();
     expect(arrive.wayOut).toBeUndefined();
   });
+
+  it("says a junction's number where the router's words do not", () => {
+    const j = (instruction: string): Route => ({
+      ...route({}),
+      maneuvers: [
+        man({ type: 1, instruction: 'Head north.' }),
+        man({
+          type: 20,
+          begin: 1,
+          instruction,
+          pre: instruction,
+          junction: '14a',
+          toward: 'Galway',
+        }),
+        man({ type: 4, begin: 4, instruction: 'You have arrived.' }),
+      ],
+    });
+    const w = { ...words, junction: (n: string) => `exit ${n}` };
+    const m = narrateWays(j('Take the ramp on the right.'), w).maneuvers[1];
+    expect(m.pre).toBe('Take the ramp on the right, towards Galway, exit 14a.');
+    // Said already: not twice; a road number is not the junction's.
+    expect(narrateWays(j('Take exit 14a on the right.'), w).maneuvers[1].pre).toBe(
+      'Take exit 14a on the right, towards Galway.',
+    );
+    expect(narrateWays(j('Take the ramp onto M14a.'), w).maneuvers[1].pre).toContain('exit 14a');
+  });
 });

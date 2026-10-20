@@ -21,8 +21,6 @@ const build = {
   time: (epoch ? new Date(Number(epoch) * 1000) : new Date()).toISOString(),
 };
 
-const DAY = 24 * 60 * 60;
-
 export default defineConfig({
   base: process.env.VITE_BASE ?? './',
   define: { __BUILD__: JSON.stringify(build) },
@@ -75,36 +73,6 @@ export default defineConfig({
         globIgnores: ['**/inter-{cyrillic,greek,vietnamese}*'],
         navigateFallback: 'index.html',
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            // Tile URLs name the planet build, and the TileJSON names a new one every week or
-            // so. Kept without it, an area viewed once still shows offline after the next
-            // build; each tile is fetched anew once it expires.
-            urlPattern: ({ url }) =>
-              url.origin === 'https://tiles.openfreemap.org' && /\.pbf$/.test(url.pathname),
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'kosmos-tiles-v1',
-              expiration: { maxEntries: 4000, maxAgeSeconds: 45 * DAY, purgeOnQuotaError: true },
-              cacheableResponse: { statuses: [0, 200] },
-              plugins: [
-                {
-                  cacheKeyWillBeUsed: async ({ request }) =>
-                    request.url.replace(/\/planet\/[^/]+\//, '/planet/any/'),
-                },
-              ],
-            },
-          },
-          {
-            urlPattern: ({ url }) => url.origin === 'https://tiles.openfreemap.org',
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'kosmos-tilejson-v1',
-              networkTimeoutSeconds: 4,
-              expiration: { maxEntries: 8, maxAgeSeconds: 45 * DAY },
-            },
-          },
-        ],
       },
     }),
   ],

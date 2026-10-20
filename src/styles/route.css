@@ -122,6 +122,12 @@ span.end-btn {
   align-items: center;
 }
 
+.card-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
 .quiet-link.add-stop {
   min-height: 44px;
   padding: 0 12px;
@@ -550,6 +556,76 @@ span.end-btn {
 }
 
 /* The last ways found, kept while a changed trip is asked for: there, but not current. */
-.card.route[aria-busy='true'] :is(.summary, .alts, .steps) {
+.card.route[aria-busy='true'] :is(.summary, .alts, .steps, .along) {
   opacity: 0.5;
+}
+
+/* Places along the way: kinds of place to stop for, then those ahead with their detour. */
+.along {
+  margin-top: 8px;
+  border-top: 0.5px solid var(--line);
+  padding-top: 8px;
+}
+
+.card.route .along {
+  margin-top: 0;
+  border-top: 0;
+}
+
+.along h3 {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.along-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  position: relative;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  font-size: 14px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text);
+}
+
+/* A chip's own 36 px reach 44 with the space around it. */
+.chip::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  color: #fff;
+}
+
+.along-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.along-list > li:not(.r-empty) {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.along-list > li > svg {
+  grid-row: span 2;
+  color: var(--muted);
+}
+
+.along-add {
+  grid-column: 3;
+  grid-row: 1 / span 2;
 }

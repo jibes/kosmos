@@ -214,6 +214,28 @@ public class KosmosPlugin extends Plugin {
         call.resolve();
     }
 
+    /** While guiding the page keeps running with the app out of sight (`KosmosWebView`). */
+    @PluginMethod
+    public void keepRunning(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        getActivity().runOnUiThread(() -> {
+            if (getBridge().getWebView() instanceof KosmosWebView) {
+                ((KosmosWebView) getBridge().getWebView()).keepRunning(on);
+            }
+        });
+        call.resolve();
+    }
+
+    /** Picture-in-picture while guiding: on leaving the app it becomes a small window. */
+    @PluginMethod
+    public void pip(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        getActivity().runOnUiThread(() -> {
+            if (getActivity() instanceof MainActivity) ((MainActivity) getActivity()).setPip(on);
+        });
+        call.resolve();
+    }
+
     @PluginMethod
     public void log(PluginCall call) {
         String message = call.getString("message", "");

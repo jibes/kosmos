@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { CloseIcon, Mark } from './icons';
 import { restoreBackup, saveBackup } from './backup';
+import { OfflineInfo } from './OfflineInfo';
 import { logging, saveLog, setLogging } from './usageLog';
 
 const SOURCE = 'https://github.com/jibes/kosmos';
@@ -77,6 +78,8 @@ export function About({ onClose }: { onClose: () => void }) {
             )}
             {saveFailed && <small role="alert">{t.usageLogFailed}</small>}
           </dd>
+          <dt>{t.offlineMap}</dt>
+          <OfflineInfo />
           <dt>{t.backup}</dt>
           <dd className="backup">
             <small>{t.backupText}</small>

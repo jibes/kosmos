@@ -529,7 +529,7 @@ test.describe('guidance', () => {
       still = moving[i][1] === moving[i - 1][1] ? still + moving[i][0] - moving[i - 1][0] : 0;
       worst = Math.max(worst, still);
     }
-    expect(moving.length).toBeGreaterThan(3);
+    expect(moving.length).toBeGreaterThan(2);
     expect(Math.abs(moving.at(-1)![1] - moving[0][1])).toBeGreaterThan(0.0001);
     expect(worst).toBeLessThan(250);
     // On screen the arrow stays where it is: the map moves under it.

@@ -45,6 +45,8 @@ const Kosmos = isNative
   ? registerPlugin<{
       openSettings(): Promise<void>;
       duck(o: { on: boolean }): Promise<void>;
+      pip(o: { on: boolean }): Promise<void>;
+      keepRunning(o: { on: boolean }): Promise<void>;
       log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
       vibrate(o: { pattern: number[] }): Promise<void>;
       takeShared(): Promise<{ text?: string }>;
@@ -59,6 +61,28 @@ const Kosmos = isNative
         listener: (e: { text: string }) => void,
       ): Promise<PluginListenerHandle>;
     }>('Kosmos')
+  : null;
+
+/**
+ * Android, while guiding: the page keeps running with the app out of sight (`KosmosWebView`),
+ * which then says the page is shown; whether it really is comes as `kosmosaway` (`isAway`).
+ */
+export const keepRunning = Kosmos
+  ? (on: boolean) => void Kosmos.keepRunning({ on }).catch(() => undefined)
+  : null;
+
+let awayNow = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('kosmosaway', (e) => {
+    awayNow = !!(e as Event & { away?: boolean }).away;
+  });
+}
+/** Out of sight: hidden, or the app put away while its page keeps running (nothing to draw). */
+export const isAway = () => awayNow || (typeof document !== 'undefined' && document.hidden);
+
+/** Android: picture-in-picture while guiding, so leaving the app keeps a small window of it. */
+export const allowPip = Kosmos
+  ? (on: boolean) => void Kosmos.pip({ on }).catch(() => undefined)
   : null;
 
 /** Android: a `geo:` link to the other maps apps, kOSMos left out of the chooser. */
