@@ -7,6 +7,7 @@ import type {
 } from '@maplibre/maplibre-gl-style-spec';
 import { palettes, type Palette, type Theme } from './palette';
 import { contacts, favourites, MARK_CLUSTER } from './styleMarks';
+import { poiIcon } from './stylePoi';
 
 /** OpenMapTiles-schema vector tiles, free and keyless. */
 export const TILES_URL = 'https://tiles.openfreemap.org/planet';
@@ -626,19 +627,20 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
         ...(after !== undefined ? [['>', RANK, after]] : []),
         ...(upTo !== undefined ? [['<=', RANK, upTo]] : []),
       ] as unknown as FilterSpecification,
-      // Below the place's point, not on it: a selected place's pin stands on the point, and a
-      // category result's name takes this spot, so the map's own copy gives way to it.
+      // The kind's icon on the point, the name below it: a selected place's pin stands on the
+      // point, and a category result's name takes this spot, so the map's own copy gives way.
       layout: {
+        ...poiIcon(p).layout,
         'text-field': name(lang),
         'text-font': [FONT.regular],
         'text-size': lerp(14, 10.5, 18, 12.5),
         'text-max-width': 7,
         'text-anchor': 'top',
-        'text-offset': [0, 0.6],
+        'text-offset': [0, 0.9],
         'symbol-sort-key': RANK,
         'text-padding': lerp(14, 6, 18, 2),
       },
-      paint: { 'text-color': p.labelMinor, ...halo },
+      paint: { 'text-color': p.labelMinor, ...halo, ...poiIcon(p).paint },
     })),
     {
       id: 'label-peak',

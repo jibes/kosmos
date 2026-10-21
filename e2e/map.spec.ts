@@ -23,6 +23,16 @@ test.describe('map', () => {
     ).toContain('blur');
     await shot(page, info, 'globe');
     await jump(page, { ...CENTER, zoom: 15.2 });
+    // The places show their kind: a café's cup on its point, tinted by the style.
+    const cafe = await page.evaluate(() => {
+      const m = window.kosmos!;
+      const shown = m
+        .queryRenderedFeatures({ layers: ['label-poi', 'label-poi-15'] })
+        .some((x) => x.properties.subclass === 'cafe');
+      const icon = JSON.stringify(m.getLayoutProperty('label-poi', 'icon-image'));
+      return { shown, image: m.hasImage('poi-cafe'), icon };
+    });
+    expect(cafe).toEqual({ shown: true, image: true, icon: expect.stringContaining('poi-') });
     await shot(page, info, 'city');
     await jump(page, { ...CENTER, zoom: 16.2, pitch: 60, bearing: -25 });
     await expect(page.getByRole('button', { name: /north|Norden/i })).toBeVisible();

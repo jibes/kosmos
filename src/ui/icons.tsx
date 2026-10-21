@@ -283,67 +283,56 @@ export const LaneIcon = ({ lane, size }: { lane: LaneView; size: number }) => (
   </Svg>
 );
 
-const VEHICLE_PATHS: Record<Vehicle, ReactNode> = {
-  bus: (
-    <path d="M7 3.5h10a2.5 2.5 0 0 1 2.5 2.5v11h-15V6A2.5 2.5 0 0 1 7 3.5ZM4.5 11h15M8 20v-3M16 20v-3" />
-  ),
-  tram: (
-    <path d="M8 6.5h8a2.5 2.5 0 0 1 2.5 2.5v8.5h-13V9A2.5 2.5 0 0 1 8 6.5ZM5.5 12.5h13M9 3h6M12 3v3.5M9 21l1.5-3.5M15 21l-1.5-3.5" />
-  ),
-  subway: (
-    <path d="M9.5 3.5h5a5 5 0 0 1 5 5v8.5h-15V8.5a5 5 0 0 1 5-5ZM4.5 11.5h15M8 21l2-4M16 21l-2-4" />
-  ),
-  train: (
-    <path d="M8.5 3h7A2.5 2.5 0 0 1 18 5.5V17H6V5.5A2.5 2.5 0 0 1 8.5 3ZM6 10.5h12M8 21l2-4M16 21l-2-4" />
-  ),
-  ferry: <path d="M3 18c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0M6 14l1-5h10l1 5M12 9V4" />,
-  cable: <path d="M3 5.5 21 2.5M12 4v4M9 8h6a2 2 0 0 1 2 2v7H7v-7a2 2 0 0 1 2-2ZM7 12.5h10" />,
-  plane: (
-    <path d="M21 15.5 13.5 11V5a1.5 1.5 0 0 0-3 0v6L3 15.5V17l7.5-2.2V19l-2 1.5V22l3.5-1 3.5 1v-1.5l-2-1.5v-4.2L21 17Z" />
-  ),
+/** Line drawings as path data, so the map can draw them too (`ui/poiIcons.ts`). */
+export const VEHICLE_D: Record<Vehicle, string> = {
+  bus: 'M7 3.5h10a2.5 2.5 0 0 1 2.5 2.5v11h-15V6A2.5 2.5 0 0 1 7 3.5ZM4.5 11h15M8 20v-3M16 20v-3',
+  tram: 'M8 6.5h8a2.5 2.5 0 0 1 2.5 2.5v8.5h-13V9A2.5 2.5 0 0 1 8 6.5ZM5.5 12.5h13M9 3h6M12 3v3.5M9 21l1.5-3.5M15 21l-1.5-3.5',
+  subway: 'M9.5 3.5h5a5 5 0 0 1 5 5v8.5h-15V8.5a5 5 0 0 1 5-5ZM4.5 11.5h15M8 21l2-4M16 21l-2-4',
+  train:
+    'M8.5 3h7A2.5 2.5 0 0 1 18 5.5V17H6V5.5A2.5 2.5 0 0 1 8.5 3ZM6 10.5h12M8 21l2-4M16 21l-2-4',
+  ferry: 'M3 18c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0M6 14l1-5h10l1 5M12 9V4',
+  cable: 'M3 5.5 21 2.5M12 4v4M9 8h6a2 2 0 0 1 2 2v7H7v-7a2 2 0 0 1 2-2ZM7 12.5h10',
+  plane:
+    'M21 15.5 13.5 11V5a1.5 1.5 0 0 0-3 0v6L3 15.5V17l7.5-2.2V19l-2 1.5V22l3.5-1 3.5 1v-1.5l-2-1.5v-4.2L21 17Z',
 };
 
 /** What a line runs with: bus, tram, underground, train, ferry, cable car, plane. */
 export const VehicleIcon = ({ vehicle, size = 14 }: { vehicle: Vehicle; size?: number }) => (
-  <Svg size={size}>{VEHICLE_PATHS[vehicle]}</Svg>
+  <Svg size={size}>{<path d={VEHICLE_D[vehicle]} />}</Svg>
 );
 
 /** The kinds that are not vehicles: a line drawing each, at the size of a row's text. */
-const KIND_PATHS: Record<Exclude<PlaceKind, Vehicle>, ReactNode> = {
-  person: (
-    <>
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5 20c.8-3.8 3.6-6 7-6s6.2 2.2 7 6" />
-    </>
-  ),
-  food: <path d="M7 3v8m-2.5-8v5a2.5 2.5 0 0 0 5 0V3M7 11v10M16.5 21V3c-2 1.5-3 4-3 8h3" />,
-  cafe: (
-    <path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9Zm11 1.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3m4-3v3" />
-  ),
-  drink: <path d="M5 4h14l-7 8-7-8Zm7 8v8m-4 0h8" />,
-  shop: <path d="M5 8h14l-1 12H6L5 8Zm4 0V6.5a3 3 0 0 1 6 0V8" />,
-  stay: (
-    <path d="M3 18V7m0 7h18v4m0-4v-2.5A2.5 2.5 0 0 0 18.5 9H11v5M7 12.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
-  ),
-  culture: <path d="M3 9.5 12 4l9 5.5M5 10v8m4.7-8v8m4.6-8v8M19 10v8M3 20h18" />,
-  park: <path d="M12 21v-6m0 0c3.3 0 6-2.5 6-5.5S15.3 3 12 3 6 6 6 9.5 8.7 15 12 15Z" />,
-  health: <path d="M9.5 4h5v5.5H20v5h-5.5V20h-5v-5.5H4v-5h5.5V4Z" />,
-  school: <path d="M3 9 12 5l9 4-9 4-9-4Zm4 2v5c1.5 1.3 3 2 5 2s3.5-.7 5-2v-5M21 9v5" />,
-  town: <path d="M4 20V9l5-3v14m0 0V11h6v9m0-6h5v6M3 20h18M12 14v.01M12 17v.01" />,
-  street: <path d="M8 3 5 21m11-18 3 18M12 4v2.5m0 4v3m0 4V20" />,
-  address: <path d="M4 11 12 4l8 7m-14-1.5V20h12V9.5M10 20v-5h4v5" />,
-  place: (
-    <path d="M12 21s-6.5-5.8-6.5-11a6.5 6.5 0 0 1 13 0c0 5.2-6.5 11-6.5 11Zm0-8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
-  ),
+export const KIND_D: Record<Exclude<PlaceKind, Vehicle | 'person'>, string> = {
+  food: 'M7 3v8m-2.5-8v5a2.5 2.5 0 0 0 5 0V3M7 11v10M16.5 21V3c-2 1.5-3 4-3 8h3',
+  cafe: 'M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9Zm11 1.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3m4-3v3',
+  drink: 'M5 4h14l-7 8-7-8Zm7 8v8m-4 0h8',
+  shop: 'M5 8h14l-1 12H6L5 8Zm4 0V6.5a3 3 0 0 1 6 0V8',
+  stay: 'M3 18V7m0 7h18v4m0-4v-2.5A2.5 2.5 0 0 0 18.5 9H11v5M7 12.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z',
+  culture: 'M3 9.5 12 4l9 5.5M5 10v8m4.7-8v8m4.6-8v8M19 10v8M3 20h18',
+  park: 'M12 21v-6m0 0c3.3 0 6-2.5 6-5.5S15.3 3 12 3 6 6 6 9.5 8.7 15 12 15Z',
+  health: 'M9.5 4h5v5.5H20v5h-5.5V20h-5v-5.5H4v-5h5.5V4Z',
+  school: 'M3 9 12 5l9 4-9 4-9-4Zm4 2v5c1.5 1.3 3 2 5 2s3.5-.7 5-2v-5M21 9v5',
+  town: 'M4 20V9l5-3v14m0 0V11h6v9m0-6h5v6M3 20h18M12 14v.01M12 17v.01',
+  street: 'M8 3 5 21m11-18 3 18M12 4v2.5m0 4v3m0 4V20',
+  address: 'M4 11 12 4l8 7m-14-1.5V20h12V9.5M10 20v-5h4v5',
+  place:
+    'M12 21s-6.5-5.8-6.5-11a6.5 6.5 0 0 1 13 0c0 5.2-6.5 11-6.5 11Zm0-8.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z',
 };
 
-const VEHICLES = new Set<string>(['train', 'subway', 'tram', 'bus', 'ferry', 'plane']);
+/** A kind's line drawing as path data; a person is drawn apart. */
+export const glyphOf = (kind: Exclude<PlaceKind, 'person'>): string =>
+  kind in VEHICLE_D ? VEHICLE_D[kind as Vehicle] : KIND_D[kind as keyof typeof KIND_D];
 
 /** A search result's kind at a glance: the vehicle of a station, a cup for a café. */
 export const KindIcon = ({ kind, size = 18 }: { kind: PlaceKind; size?: number }) => (
   <Svg size={size} kind={kind}>
-    {VEHICLES.has(kind)
-      ? VEHICLE_PATHS[kind as Vehicle]
-      : KIND_PATHS[kind as Exclude<PlaceKind, Vehicle>]}
+    {kind === 'person' ? (
+      <>
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M5 20c.8-3.8 3.6-6 7-6s6.2 2.2 7 6" />
+      </>
+    ) : (
+      <path d={glyphOf(kind)} />
+    )}
   </Svg>
 );

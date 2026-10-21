@@ -9,6 +9,7 @@ import { motion } from './motion';
 import { nativeLog } from './native';
 import { registerTileStore, storeRequests } from './tileStore';
 import { t } from '../i18n';
+import { registerPoiIcons } from './poiIcons';
 
 // MapLibre resolves its worker next to its own module, which bundling moves; point it at the copy.
 maplibregl.setWorkerUrl(new URL(workerUrl, document.baseURI).href);
@@ -84,10 +85,13 @@ export function useMap(
       console.info('kosmos:ready');
       nativeLog('info', 'kosmos:ready');
     });
+    // The places' icons, before their first tile is laid out.
+    const icons = registerPoiIcons(m);
     // Exposed for end-to-end tests and the curious.
     (window as unknown as { kosmos?: maplibregl.Map }).kosmos = m;
     setMap(m);
     return () => {
+      icons();
       m.remove();
       setMap(null);
     };

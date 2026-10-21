@@ -122,6 +122,36 @@ export function kindOfOsm(key?: string, value?: string, type?: string): PlaceKin
 export function kindOfPoi(p: Record<string, unknown>): PlaceKind {
   const known = BY_VALUE[String(p.subclass)];
   if (known) return known;
-  if (p.class === 'shop' || p.class === 'grocery' || p.class === 'clothing_store') return 'shop';
+  if (SHOP_CLASSES.includes(String(p.class))) return 'shop';
   return 'place';
 }
+
+/** The kinds the map's own places show an icon for, each in its group's colour. */
+export type PoiGroup = 'transport' | 'food' | 'shop' | 'culture' | 'park' | 'health' | 'other';
+export const POI_GROUP: Partial<Record<PlaceKind, PoiGroup>> = {
+  train: 'transport',
+  subway: 'transport',
+  tram: 'transport',
+  bus: 'transport',
+  ferry: 'transport',
+  plane: 'transport',
+  food: 'food',
+  cafe: 'food',
+  drink: 'food',
+  shop: 'shop',
+  culture: 'culture',
+  park: 'park',
+  health: 'health',
+  stay: 'other',
+  school: 'other',
+};
+
+/** The `poi` subclasses of each kind with an icon, and the classes that say "shop". */
+export const POI_SUBCLASSES = Object.entries(BY_VALUE).reduce<Partial<Record<PlaceKind, string[]>>>(
+  (out, [value, kind]) => {
+    if (POI_GROUP[kind]) (out[kind] ??= []).push(value);
+    return out;
+  },
+  {},
+);
+export const SHOP_CLASSES = ['shop', 'grocery', 'clothing_store'];
