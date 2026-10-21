@@ -1,5 +1,5 @@
 import { distance } from './geo';
-import { snap, type Track } from './nav';
+import { snapNear, type Track } from './nav';
 
 /**
  * The towns a route leads to, from the map's own place labels: what a road sign at a junction
@@ -23,29 +23,44 @@ export const TOWN_HERE_M = 1_500;
 /** Villages are named only this near, a town or city further. */
 const VILLAGE_AHEAD_M = 15_000;
 
+/** A town near the route, with where along it the route passes it. */
+export interface TownOnWay {
+  town: Town;
+  /** Metres along the route. */
+  along: number;
+}
+
+/**
+ * The towns near the route, each snapped onto it once and in the order the route reaches them:
+ * every junction then reads them, rather than snapping every town again for each (a long
+ * drive's hundreds of junctions and villages made that a minute's freeze).
+ */
+export function townsOnWay(tr: Track, towns: Town[]): TownOnWay[] {
+  return snapNear(tr, towns, TOWN_NEAR_M)
+    .flatMap((s, i) => (s ? [{ town: towns[i], along: s.along }] : []))
+    .sort((a, b) => a.along - b.along);
+}
+
 /**
  * The town the route reaches next after `at` metres along it: the first city or town on the
  * way within `TOWN_AHEAD_M`, else the first village within `VILLAGE_AHEAD_M`; never the one
- * the junction is in. `null` when none.
+ * the junction is in. `null` when none. Towns as `townsOnWay` gives them (snapped once), or
+ * as they come.
  */
-export function townAhead(tr: Track, at: number, towns: Town[]): string | null {
+export function townAhead(tr: Track, at: number, towns: Town[] | TownOnWay[]): string | null {
+  const onWay = (towns as (Town | TownOnWay)[]).every((t) => 'along' in t)
+    ? (towns as TownOnWay[])
+    : townsOnWay(tr, towns as Town[]);
   const here = pointAlong(tr, at);
-  const ahead = towns
-    .map((town) => ({ town, s: snap(tr, town) }))
-    .filter(
-      ({ town, s }) =>
-        s.offset <= TOWN_NEAR_M &&
-        s.along > at &&
-        s.along - at <= TOWN_AHEAD_M &&
-        distance(here, town) > TOWN_HERE_M,
-    )
-    .sort((a, b) => a.s.along - b.s.along);
+  const ahead = onWay.filter(
+    ({ town, along }) =>
+      along > at && along - at <= TOWN_AHEAD_M && distance(here, town) > TOWN_HERE_M,
+  );
   const big = ahead.find(({ town }) => town.kind !== 'village');
   if (big) return big.town.name;
-  const near = ahead.find(({ s }) => s.along - at <= VILLAGE_AHEAD_M);
+  const near = ahead.find(({ along }) => along - at <= VILLAGE_AHEAD_M);
   return near?.town.name ?? null;
 }
-
 function pointAlong(tr: Track, at: number) {
   let i = 0;
   while (i + 1 < tr.along.length && tr.along[i + 1] < at) i++;

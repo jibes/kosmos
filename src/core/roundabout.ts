@@ -1,7 +1,7 @@
 import { distance } from './geo';
 import { track } from './nav';
 import type { Maneuver, Route } from './route';
-import { townAhead, type Town } from './towns';
+import { townAhead, townsOnWay, type Town } from './towns';
 
 /** The eight ways a road can lead, clockwise from north. */
 export type Compass = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
@@ -71,8 +71,12 @@ const LONG_LEG_M = 2_000;
 export function narrateWays(route: Route, words: ExitWords, towns: Town[] = []): Route {
   const ms = route.maneuvers;
   const tr = towns.length ? track(route) : null;
+  // Snapped onto the route once, not again at every junction.
+  const onWay = tr ? townsOnWay(tr, towns) : [];
   const townAt = (begin: number) =>
-    tr ? townAhead(tr, tr.along[Math.min(begin, tr.along.length - 1)], towns) : null;
+    tr && onWay.length
+      ? townAhead(tr, tr.along[Math.min(begin, tr.along.length - 1)], onWay)
+      : null;
   const maneuvers = ms.map((m, i): Maneuver => withJunction(way(m, i), words));
   return { ...route, maneuvers };
 

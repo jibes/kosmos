@@ -1,6 +1,6 @@
 import type { Category } from './categories';
 import type { LngLat } from './geo';
-import { pointAt, snap, type Track } from './nav';
+import { pointAt, snapNear, type Track } from './nav';
 import type { Mode } from './route';
 import { DETAIL_ZOOM, tilesIn, type TileId } from './tiles';
 
@@ -97,16 +97,21 @@ export function placesAlong<T extends LngLat & { name: string }>(
 ): AlongHit<T>[] {
   const { band, reach } = ALONG[mode];
   const seen = new Set<string>();
-  const hits: AlongHit<T>[] = [];
-  for (const p of places) {
+  const once = places.filter((p) => {
     const key = `${p.name}|${p.lng.toFixed(4)}|${p.lat.toFixed(4)}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) return false;
     seen.add(key);
-    const s = snap(tr, p);
+    return true;
+  });
+  const hits: AlongHit<T>[] = [];
+  // Snapped near the road only: hundreds of places, each onto the whole road, froze the app.
+  snapNear(tr, once, band).forEach((s, i) => {
+    const p = once[i];
+    if (!s) return;
     const ahead = s.along - from;
-    if (s.offset > band || ahead < 0 || ahead > reach) continue;
+    if (ahead < 0 || ahead > reach) return;
     const detour = s.offset < ON_THE_WAY_M ? 0 : (2 * s.offset) / DETOUR_MS[mode];
     hits.push({ it: p, ahead, off: s.offset, detour });
-  }
+  });
   return hits.sort((a, b) => a.ahead - b.ahead).slice(0, max);
 }

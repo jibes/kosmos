@@ -72,6 +72,8 @@ export function snap(
   fix: LngLat,
   hint = 0,
   reach?: { from: number; ahead: number },
+  /** Only these shape points (segments `from` to `to`), when the caller knows where to look. */
+  within?: { from: number; to: number },
 ): Snap {
   const p = project([fix.lng, fix.lat], tr.lat0);
   const best = { d: Infinity, seg: 0, f: 0 };
@@ -91,9 +93,12 @@ export function snap(
       if (d < best.d) Object.assign(best, { d, seg: i, f });
     }
   };
-  // Forward window of about a kilometre of shape points first, as far as one could have got.
-  scan(hint, hint + 200, reach ? reach.from + reach.ahead : Infinity);
-  if (best.d > 50) scan(0, tr.xy.length);
+  if (within) scan(within.from, within.to);
+  else {
+    // Forward window of about a kilometre of shape points first, as far as one could have got.
+    scan(hint, hint + 200, reach ? reach.from + reach.ahead : Infinity);
+    if (best.d > 50) scan(0, tr.xy.length);
+  }
   const [a, b] = [
     tr.route.coords[best.seg],
     tr.route.coords[best.seg + 1] ?? tr.route.coords[best.seg],
@@ -107,6 +112,45 @@ export function snap(
     point: [a[0] + best.f * (b[0] - a[0]), a[1] + best.f * (b[1] - a[1])],
     bearing: (Math.atan2(bx - ax, by - ay) / RAD + 360) % 360,
   };
+}
+
+/** The coarse marks along the route `snapNear` looks from (metres apart). */
+const MARK_M = 1_000;
+
+/**
+ * Many points snapped onto the route, each `null` beyond `near` metres from it: a point far
+ * from the line through marks about a kilometre apart is far from the road, and a near one is
+ * snapped onto the few kilometres of road round it only. Snapping each onto the whole road
+ * (towns at every junction of a long drive) took a minute and froze the app.
+ */
+export function snapNear(tr: Track, points: LngLat[], near: number): (Snap | null)[] {
+  const marks: number[] = [0];
+  for (let i = 1; i < tr.along.length; i++) {
+    if (tr.along[i] - tr.along[marks[marks.length - 1]] >= MARK_M) marks.push(i);
+  }
+  if (marks[marks.length - 1] !== tr.along.length - 1) marks.push(tr.along.length - 1);
+  return points.map((pt) => {
+    const [px, py] = project([pt.lng, pt.lat], tr.lat0);
+    let best = -1;
+    let bestD = Infinity;
+    // The road between two marks strays from the straight line joining them by less than a
+    // mark's way (a long straight stretch is that line itself).
+    for (let k = 0; k + 1 < marks.length; k++) {
+      const [ax, ay] = tr.xy[marks[k]];
+      const [bx, by] = tr.xy[marks[k + 1]];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      const f = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+      const d = Math.hypot(px - (ax + f * dx), py - (ay + f * dy));
+      if (d < bestD) [bestD, best] = [d, k];
+    }
+    if (best < 0 || bestD > near + MARK_M) return null;
+    const from = marks[Math.max(0, best - 1)];
+    const to = marks[Math.min(marks.length - 1, best + 2)] + 1;
+    const s = snap(tr, pt, 0, undefined, { from, to });
+    return s.offset <= near ? s : null;
+  });
 }
 
 /**

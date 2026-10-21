@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { track } from '../src/core/nav';
+import { snap, track } from '../src/core/nav';
 import { narrateWays } from '../src/core/roundabout';
 import type { Maneuver, Route } from '../src/core/route';
-import { townAhead, type Town } from '../src/core/towns';
+import { TOWN_NEAR_M, townAhead, townsOnWay, type Town } from '../src/core/towns';
 
 // Metres east (x) and north (y) of a point in the Midlands, as [lng, lat].
 const m = (x: number, y: number): [number, number] => [-7.5 + x / 66500, 53.27 + y / 111200];
@@ -81,5 +81,39 @@ describe('towns ahead', () => {
     expect(narrateWays(r(10, 30_000), words, towns).maneuvers[1].wayOut).toBe('towards Tullamore');
     expect(narrateWays(r(20, 500), words, towns).maneuvers[1].wayOut).toBe('towards Tullamore');
     expect(narrateWays(r(10, 300), words, towns).maneuvers[1].wayOut).toBeUndefined();
+  });
+});
+
+describe('towns along a long drive', () => {
+  // 150 km of winding road in 6000 points, 200 junctions, 400 towns and villages around it.
+  const coords = Array.from({ length: 6000 }, (_, i) => m(i * 25, Math.sin(i / 50) * 300));
+  const long: Route = {
+    coords,
+    distance: 150_000,
+    duration: 6000,
+    bbox: [0, 0, 0, 0],
+    maneuvers: Array.from({ length: 200 }, (_, i) =>
+      man({ type: 20, instruction: 'Take the exit.', distance: 750, begin: i * 30 }),
+    ),
+  };
+  const many = Array.from({ length: 400 }, (_, i) =>
+    at(`T${i}`, i % 5 ? 'village' : 'town', (i * 397) % 150_000, ((i * 7919) % 8000) - 4000),
+  );
+
+  it('finds the same towns on the way as snapping each onto the whole road', () => {
+    const tr = track(long);
+    const slow = many
+      .map((town) => ({ town, s: snap(tr, town) }))
+      .filter(({ s }) => s.offset <= TOWN_NEAR_M)
+      .sort((a, b) => a.s.along - b.s.along)
+      .map(({ town }) => town.name);
+    expect(townsOnWay(tr, many).map(({ town }) => town.name)).toEqual(slow);
+  });
+
+  it('names every junction without freezing the app (a minute before)', () => {
+    const t0 = performance.now();
+    const named = narrateWays(long, words, many);
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(named.maneuvers.filter((x) => x.wayOut).length).toBeGreaterThan(100);
   });
 });
