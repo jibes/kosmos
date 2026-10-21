@@ -40,7 +40,10 @@ interface Options {
   /** The user's own zoom and tilt, and whether a pinch or tilt is still to be read. */
   adjustRef: RefObject<Adjust>;
   lookedRef: RefObject<boolean>;
-  /** Set on every fix: moving fast enough for the route's direction to be the heading. */
+  /**
+   * Set on every fix: the way turns the arrow, not the compass (moving, or standing on the
+   * route by road).
+   */
   movingRef: RefObject<boolean>;
   updateTheme: (map: maplibregl.Map, s: Snap, time: number) => void;
   route: Route | undefined;
@@ -139,10 +142,12 @@ export function useGuidance(o: Options) {
       const onLine = !!s && !nav.arrived && s.offset < offRouteLimit(f.accuracy, ways.current.mode);
       const center: [number, number] = onLine ? s.point : [f.lng, f.lat];
       const course = nav.moving && f.heading != null && !Number.isNaN(f.heading) ? f.heading : null;
+      // Standing on the route by road, it still faces the way on.
+      const held = onLine && ways.current.mode !== 'foot';
       const bearing = onLine
-        ? travelHeading(s.bearing, compass.current(), nav.moving)
+        ? travelHeading(s.bearing, compass.current(), nav.moving, held)
         : (course ?? compass.current());
-      movingRef.current = nav.moving;
+      movingRef.current = nav.moving || held;
       if (!nav.moving) meRef.current?.heading(bearing);
       if (s && map) updateTheme(map, s, nav.time);
       // Closer in as a turn comes (not for going straight on or setting off).

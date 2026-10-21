@@ -477,6 +477,43 @@ test.describe('guidance', () => {
     await expect(page.getByRole('button', { name: 'Show the whole route' })).toBeVisible();
   });
 
+  test('standing on the route by car faces the way on, not where the phone points', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation', 'accelerometer', 'gyroscope', 'magnetometer']);
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: from.lng, accuracy: 5 });
+    await go(from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(page.locator('.me.nav')).toHaveCount(1);
+    // In traffic on the first street, which runs south; the phone in its mount reads east.
+    for (let i = 1; i <= 4; i++) {
+      await page.evaluate(() => {
+        for (let n = 0; n < 40; n++) {
+          for (const type of ['deviceorientationabsolute', 'deviceorientation']) {
+            window.dispatchEvent(
+              new DeviceOrientationEvent(type, { alpha: 270, beta: 0, gamma: 0, absolute: true }),
+            );
+          }
+        }
+      });
+      await go(from.lat - 0.000005 * i);
+      await page.waitForTimeout(400);
+    }
+    const off = () =>
+      page.evaluate(() => Math.abs(((window.kosmos!.getBearing() - 180 + 540) % 360) - 180));
+    await expect.poll(off).toBeLessThan(15);
+  });
+
   test('runs the arrow on between uneven fixes, the camera with it', async ({ page, context }) => {
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const go = (lng: number, lat: number) =>
@@ -530,7 +567,11 @@ test.describe('guidance', () => {
       worst = Math.max(worst, still);
     }
     expect(moving.length).toBeGreaterThan(2);
-    expect(Math.abs(moving.at(-1)![1] - moving[0][1])).toBeGreaterThan(0.0001);
+    // At least half the speed driven (0.00009° a second), over the frames there were: a busy
+    // machine draws only a few, at times close together.
+    const span = (moving.at(-1)![0] - moving[0][0]) / 1000;
+    expect(span).toBeGreaterThan(0);
+    expect(Math.abs(moving.at(-1)![1] - moving[0][1]) / span).toBeGreaterThan(0.000045);
     expect(worst).toBeLessThan(250);
     // On screen the arrow stays where it is: the map moves under it.
     const xs = frames.map(([, , x]) => x);
