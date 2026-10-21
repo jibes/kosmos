@@ -395,16 +395,16 @@ test.describe('search', () => {
     const recents = page.locator('.r-recent');
     // Nothing yet: the kinds of place, a list of its own, none preselected.
     await input.focus();
-    await expect(options.first()).toHaveAccessibleName('Kinds of place, opens a list');
+    await expect(options.first()).toHaveAccessibleName('Categories, opens a list');
     await expect(options.first()).toHaveText('Categories');
     await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
     await options.first().click();
     // In it: back first, then what people look for most; Escape goes back out.
-    await expect(options.first()).toHaveAccessibleName('Back: Kinds of place');
+    await expect(options.first()).toHaveAccessibleName('Back: Categories');
     await expect(options.nth(1)).toContainText('Restaurants');
-    await expect(page.locator('.search [role=status]')).toContainText('Kinds of place:');
+    await expect(page.locator('.search [role=status]')).toContainText('Categories:');
     await input.press('Escape');
-    await expect(options.first()).toHaveAccessibleName('Kinds of place, opens a list');
+    await expect(options.first()).toHaveAccessibleName('Categories, opens a list');
 
     await input.fill('brandenburger');
     await options.filter({ hasText: SEARCH_HIT.name }).click();
@@ -873,13 +873,13 @@ test.describe('search', () => {
     await expect(place).toHaveCount(0);
     await expect(input).toBeFocused();
 
-    // The route card's own close from the keyboard lands in the search too.
+    // The route card's own close from the keyboard goes back to the place, as Escape does.
     await input.fill('brandenburg');
     await page.getByRole('option').filter({ hasText: SEARCH_HIT.name }).first().click();
     await place.getByRole('button', { name: /^Route$/ }).press('Enter');
     await expect(card).toBeVisible();
     await card.getByRole('button', { name: 'Close' }).press('Enter');
     await expect(card).toHaveCount(0);
-    await expect(input).toBeFocused();
+    await expect(place.getByRole('heading')).toBeFocused();
   });
 });

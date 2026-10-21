@@ -15,9 +15,9 @@ import { lang, t } from '../i18n';
 import { onLongPress } from './gestures';
 import { logEvent } from './usageLog';
 import { searchResultAt } from './useCategory';
+import type { StopAdder } from './useStops';
 import { motion } from './motion';
 import type { Trip } from './useRoute';
-import { MAX_STOPS } from '../core/stops';
 import { favouriteAt, placeOf } from './useFavourites';
 import { contactAt, placeOfContact } from './useContacts';
 
@@ -81,7 +81,7 @@ interface Options {
   setActive: (index: number) => void;
   setTrip: Dispatch<SetStateAction<Trip | null>>;
   /** A place as a stop on the way of the open route (`useStops`). */
-  addStopRef: RefObject<(p: Place) => void>;
+  addStopRef: RefObject<StopAdder>;
 }
 
 /** Zooms to where a group of marks comes apart, centred on it. */
@@ -115,7 +115,8 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
       const { showToast, addStopRef, labelLang } = opts.current;
       const tr = tripRef.current;
       if (!tr) return;
-      const canStop = tr.mode !== 'transit' && (tr.via?.length ?? 0) < MAX_STOPS;
+      // Guiding, the stops reached count no more (`useStops`).
+      const canStop = addStopRef.current.can;
       // A ride is guided by its timetable: its end changes on the route card, not on the way.
       const canEnd = !(navRef.current && tr.mode === 'transit');
       if (!canStop && !canEnd) return;
@@ -154,7 +155,7 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
         if (!navRef.current) select(place);
       };
       showToast(place.name, [
-        ...(canStop ? [{ label: t.addStop, run: () => addStopRef.current(place) }] : []),
+        ...(canStop ? [{ label: t.addStop, run: () => addStopRef.current.add(place) }] : []),
         ...(canEnd ? [{ label: t.goHere, run: goHere }] : []),
       ]);
     };
@@ -249,11 +250,9 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
           );
         };
         const { addStopRef } = opts.current;
-        const tr = tripRef.current;
-        const stop =
-          tr.mode !== 'transit' && (tr.via?.length ?? 0) < MAX_STOPS
-            ? [{ label: t.addStop, run: () => addStopRef.current(pin) }]
-            : [];
+        const stop = addStopRef.current.can
+          ? [{ label: t.addStop, run: () => addStopRef.current.add(pin) }]
+          : [];
         showToast(t.droppedPin, [
           { label: t.startHere, run: () => set('from') },
           ...stop,

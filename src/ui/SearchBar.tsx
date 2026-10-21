@@ -361,9 +361,10 @@ export function SearchBar({
       // No names for it (none kept: pasted again after other text, it opens again).
       done([], true);
       // Once for the text, however often this runs again.
-      if (openedFor.current === key) return;
-      openedFor.current = key;
-      openShared(shared);
+      if (openedFor.current === q) return;
+      openedFor.current = q;
+      // The route's own fields take places by name only: a link there is no place to open.
+      if (onCategoryRef.current) openShared(shared);
       return;
     }
     openedFor.current = null;
@@ -374,10 +375,16 @@ export function SearchBar({
       done([pointPlace(plus.at, lang)]);
       return;
     }
+    /** Photon answered (it wins over Nominatim, whenever it comes), or gave up for good. */
+    const st: {
+      photon: 'asking' | 'in' | 'failed';
+      nominatim: 'none' | 'asking' | 'failed' | 'shown';
+    } = { photon: 'asking', nominatim: 'none' };
     /** Photon failed or hung: ask Nominatim once for this settled query, in its time slot. */
     const viaNominatim = async () => {
       await new Promise((go) => setTimeout(go, nominatimSlot()));
-      if (fallback.signal.aborted) return null;
+      // Photon answered while this waited its turn: Nominatim is not asked for nothing.
+      if (fallback.signal.aborted || st.photon === 'in') return null;
       const own = new AbortController();
       fallback.signal.addEventListener('abort', () => own.abort());
       const late = setTimeout(() => own.abort(), FALLBACK_MS);
@@ -389,11 +396,6 @@ export function SearchBar({
       }
     };
     const timer = setTimeout(async () => {
-      /** Photon answered (it wins over Nominatim, whenever it comes), or gave up for good. */
-      const st: {
-        photon: 'asking' | 'in' | 'failed';
-        nominatim: 'none' | 'asking' | 'failed' | 'shown';
-      } = { photon: 'asking', nominatim: 'none' };
       /** Photon slow or failed: Nominatim once, for this settled query, in its time slot. */
       const fallBack = async (quick: boolean) => {
         if (st.nominatim !== 'none') return;

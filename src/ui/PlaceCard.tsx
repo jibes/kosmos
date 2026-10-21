@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { lang, locale, t } from '../i18n';
@@ -38,7 +38,6 @@ interface Props {
 }
 
 export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby }: Props) {
-  const [copied, setCopied] = useState(false);
   const details = usePlaceDetails(place.osm, lang);
   const heading = useFocusOnMount<HTMLHeadingElement>();
 
@@ -53,6 +52,14 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
   // A renamed favourite goes by the user's name, however its card was opened.
   const name = fav ? titleOf(fav) : place.name;
   const [naming, setNaming] = useState(false);
+  const cancelled = useRef(false);
+  // The field closed: focus back on the heading, not lost to the page.
+  const wasNaming = useRef(false);
+  useEffect(() => {
+    if (wasNaming.current && !naming) heading.current?.focus();
+    wasNaming.current = naming;
+    if (naming) cancelled.current = false;
+  }, [naming, heading]);
   const rename = (label: string) => {
     renameFavouritePlace(place, label);
     setNaming(false);
@@ -67,10 +74,10 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
     if (result === 'copied') onToast(t.linkCopied);
   };
 
+  // Said in the live region like a copied link, not only swapped in the button.
   const onCopy = async () => {
     await copy(plainLngLat(place));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1400);
+    onToast(t.coordsCopied);
   };
 
   return (
@@ -88,12 +95,14 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
               onKeyDown={(e) => {
                 if (e.key === 'Enter') rename(e.currentTarget.value);
                 if (e.key === 'Escape') {
-                  // Only the field: the card stays open.
+                  // Only the field, and nothing kept: the card stays open.
                   e.stopPropagation();
+                  cancelled.current = true;
                   setNaming(false);
                 }
               }}
-              onBlur={(e) => naming && rename(e.currentTarget.value)}
+              // The field going away blurs it too: an Escape keeps the name as it was.
+              onBlur={(e) => naming && !cancelled.current && rename(e.currentTarget.value)}
             />
           ) : (
             <h2 ref={heading} tabIndex={-1}>
@@ -149,8 +158,8 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
       {details && <PlaceDetails details={details} lng={place.lng} />}
       <Departures place={place} lang={lang} />
       <button type="button" className="coords" title={t.copy} onClick={onCopy}>
-        {copied ? t.copied : formatLngLat(place, 5, locale)}
-        {!copied && <CopyIcon size={13} />}
+        {formatLngLat(place, 5, locale)}
+        <CopyIcon size={13} />
         <span className="sr-only">, {t.copy}</span>
       </button>
       <div className="actions">

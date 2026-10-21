@@ -302,7 +302,7 @@ test.describe('guidance', () => {
       .click();
     const card = page.locator('.card.route');
     await card.locator('.end-btn').first().click();
-    await page.getByRole('combobox', { name: 'Search start' }).fill('brandenburg');
+    await page.getByRole('combobox', { name: 'Search for a start' }).fill('brandenburg');
     await page.getByRole('option').filter({ hasText: 'Havel' }).click();
     await expect(card.locator('.summary strong')).toHaveText(/min|h/);
     // The route from here (asked at Start) does not come.
@@ -800,14 +800,19 @@ test.describe('guidance', () => {
     // it does not come off); Back closes them, guidance goes on.
     const points = page.locator('.ride-details .point-list li');
     await expect(points).toHaveCount(0);
-    await page.getByRole('button', { name: 'Show the route' }).click();
+    await page.getByRole('button', { name: 'Show stops ahead' }).click();
     await expect(points).toHaveText(['My location', 'Brandenburger Tor']);
     await expect(
       page.locator('.ride-details').getByRole('button', { name: /^Remove/ }),
     ).toHaveCount(0);
+    // On a phone the map buttons step aside for the list; beside the column they stay.
+    const locate = page.locator('.controls .ctl[data-follow]');
+    if (info.project.name === 'desktop') await expect(locate).toBeVisible();
+    else await expect(locate).toBeHidden();
     await shot(page, info, 'points');
     await page.keyboard.press('Escape');
     await expect(points).toHaveCount(0);
+    await expect(locate).toBeVisible();
     await expect(banner).toBeVisible();
     await expect(page.getByRole('button', { name: /^End$/ })).toBeVisible();
   });

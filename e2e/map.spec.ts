@@ -613,9 +613,16 @@ test.describe('map', () => {
     await card.getByRole('button', { name: 'Rename' }).click();
     const field = card.getByRole('textbox', { name: 'Name of this favourite' });
     await expect(field).toBeFocused();
+    // Escape leaves the name as it was, the focus back on the heading.
+    await field.fill('Nope');
+    await field.press('Escape');
+    await expect(card.getByRole('heading')).toHaveText(SEARCH_HIT.name);
+    await expect(card.getByRole('heading')).toBeFocused();
+    await card.getByRole('button', { name: 'Rename' }).click();
     await field.fill('Gate');
     await field.press('Enter');
     await expect(card.getByRole('heading')).toHaveText('Gate');
+    await expect(card.getByRole('heading')).toBeFocused();
     await card.getByRole('button', { name: 'Close' }).click();
     // Listed by its new name, the place's own after it; found by either.
     await input.fill('');

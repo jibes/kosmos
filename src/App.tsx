@@ -11,7 +11,7 @@ import { isNative, openAppSettings } from './ui/native';
 import { NavView, NavWaiting } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
 import { connectionStart, RideView, rideWords } from './ui/RideView';
-import { focusSearch } from './ui/a11y';
+import { showNearby } from './ui/nearby';
 import { ResultsSheet } from './ui/ResultsSheet';
 import { RouteCard } from './ui/RouteCard';
 import { SearchBar, useSearch } from './ui/SearchBar';
@@ -64,7 +64,6 @@ interface Selection {
   loading: boolean;
 }
 
-/** After arriving, guidance (screen on, background location) ends by itself. */
 /** A second back press within this ends navigation. */
 const BACK_TWICE_MS = 3000;
 
@@ -363,6 +362,7 @@ export function App() {
     setTrip,
     guided,
     way: riding ? undefined : shown[chosen],
+    current: route.current,
     nav,
     navigating,
     state: stopState,
@@ -567,6 +567,9 @@ export function App() {
     else if (selection) clear();
     else if (search.folder) search.setFolder(null);
     else if (search.query) search.clear();
+    // The list open on an empty field (its keyboard already gone): it closes first.
+    else if (document.activeElement?.closest('.search'))
+      (document.activeElement as HTMLElement).blur();
     else return false;
     return true;
   });
@@ -678,20 +681,7 @@ export function App() {
                   onClose={clear}
                   onToast={showToast}
                   onRoute={openRoute}
-                  onNearby={() => {
-                    const p = selection.place;
-                    logEvent('place.nearby');
-                    // Open on the kinds of place: what is near here.
-                    search.setFolder('kinds');
-                    map?.easeTo({
-                      center: [p.lng, p.lat],
-                      zoom: Math.max(map.getZoom(), 15),
-                      padding: routePadding(),
-                      duration: motion(600),
-                    });
-                    // In the tap itself, so a phone opens its keyboard; focus closes the card.
-                    focusSearch();
-                  }}
+                  onNearby={() => showNearby(map, selection.place, () => search.setFolder('kinds'))}
                 />
               )}
               {/* What a search put on the map, by distance; under a place card it waits. */}

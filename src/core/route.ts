@@ -1,4 +1,4 @@
-import type { LngLat } from './geo';
+import { boundsOfLine, type LngLat } from './geo';
 import { parseLanes, type Lane } from './lanes';
 import type { Transit } from './transit';
 
@@ -288,13 +288,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
     }
   }
   if (coords.length < 2) return null;
-  let [w, s, e, n] = [180, 90, -180, -90];
-  for (const [x, y] of coords) {
-    w = Math.min(w, x);
-    e = Math.max(e, x);
-    s = Math.min(s, y);
-    n = Math.max(n, y);
-  }
+  const [w, s, e, n] = boundsOfLine(coords);
   return {
     coords,
     distance: (trip.summary?.length ?? 0) * metres,
@@ -355,7 +349,9 @@ export function formatDistance(m: number, lang: string, units: Units = 'metric')
       const [size, unit] = units === 'us' ? [FOOT, 'ft'] : [YARD, 'yd'];
       const v = m / size;
       const step = v < 300 ? 10 : 50;
-      return `${Math.max(0, Math.round(v / step) * step)} ${unit}`;
+      // Never more than 0.1 mi says just after (176 yd, 528 ft): a countdown never goes up.
+      const most = units === 'us' ? 500 : 170;
+      return `${Math.min(most, Math.max(0, Math.round(v / step) * step))} ${unit}`;
     }
     // Where rounding would reach the next step ("10.0 mi"), the next step's way of saying it.
     return `${nf(m / MILE, m < 9.95 * MILE ? 1 : 0)} mi`;
@@ -379,7 +375,8 @@ export function spokenDistance(
   if (units !== 'metric') {
     if (m < MILE / 10) {
       const [size, unit] = units === 'us' ? [FOOT, 'ft' as const] : [YARD, 'yd' as const];
-      return { value: Math.max(50, Math.round(m / size / 50) * 50), unit };
+      const most = units === 'us' ? 500 : 150;
+      return { value: Math.min(most, Math.max(50, Math.round(m / size / 50) * 50)), unit };
     }
     return { value: Math.round((m / MILE) * 10) / 10, unit: 'mi' };
   }

@@ -12,9 +12,9 @@ import {
 import { directionsUrl, geoUri } from '../core/geo';
 import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
-import { arrowRadios, focusSearch, useFocusOnMount } from './a11y';
+import { arrowRadios, useFocusOnMount } from './a11y';
 import { CloseIcon, CoinsIcon, ModeIcon, TurnIcon } from './icons';
-import { isNative, openElsewhere } from './native';
+import { isNative, openAppSettings, openElsewhere } from './native';
 import { AlongRoute, type AlongSearch } from './AlongRoute';
 import { Sheet } from './Sheet';
 import { PointList, type PointListProps } from './PointList';
@@ -68,7 +68,10 @@ export function RouteCard(props: Props) {
       : t.noLocation
     : status === 'none'
       ? t[`noRoute_${mode}`]
-      : MESSAGE[status];
+      : // Online and still failed: the server, not the connection.
+        status === 'failed' && navigator.onLine
+        ? t.routeDown
+        : MESSAGE[status];
   // While a changed trip is asked for, the last ways found stay, dimmed, so nothing below the
   // points jumps (a road route for a road one: public transport is laid out otherwise).
   /** Places along the way, open under the links (closed again for another way of travel). */
@@ -138,10 +141,8 @@ export function RouteCard(props: Props) {
           type="button"
           className="icon-btn round"
           aria-label={t.close}
-          onClick={(e) => {
-            props.onClose();
-            if (e.detail === 0) focusSearch();
-          }}
+          // The place card under it, if any, takes focus again on its own.
+          onClick={props.onClose}
         >
           <CloseIcon size={16} />
         </button>
@@ -152,7 +153,8 @@ export function RouteCard(props: Props) {
       <div className="card-links">
         {props.onAdd && (
           <button type="button" className="quiet-link add-stop" onClick={props.onAdd}>
-            + {t.addStop}
+            <span aria-hidden="true">+ </span>
+            {t.addStop}
           </button>
         )}
         {route && mode !== 'transit' && props.along && (
@@ -206,6 +208,11 @@ export function RouteCard(props: Props) {
           {status === 'locating' && (
             <button type="button" onClick={props.onChangeStart}>
               {t.chooseStart}
+            </button>
+          )}
+          {stuck && location === 'denied' && openAppSettings && (
+            <button type="button" onClick={openAppSettings}>
+              {t.settings}
             </button>
           )}
           {status === 'none' && (

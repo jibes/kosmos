@@ -5,8 +5,9 @@ import { clearViewed, keptBytes } from './tileStore';
 import { lastWorld } from './useKeepMap';
 
 const MB = 1024 * 1024;
+const mb = new Intl.NumberFormat(locale, { style: 'unit', unit: 'megabyte' });
 const size = (bytes: number) =>
-  bytes < MB ? '< 1 MB' : `${Math.round(bytes / MB).toLocaleString(locale)} MB`;
+  bytes < MB ? `< ${mb.format(1)}` : mb.format(Math.round(bytes / MB));
 const count = (n: number) => n.toLocaleString(locale);
 
 /** One download under way: what, how far, as a bar and in words. */

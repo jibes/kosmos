@@ -27,6 +27,8 @@ interface Options {
   guided: Route | undefined;
   /** The road route shown (on the card or guided): a new stop takes its place along it. */
   way: Route | undefined;
+  /** The route guided is for the stops as they are now: a kept one counts them by its own. */
+  current: boolean;
   nav: NavState;
   navigating: boolean;
   state: ReturnType<typeof useStopState>;
@@ -48,9 +50,16 @@ interface Options {
  * What the stops share with what is set up before them in App: those reached while guiding
  * (`useRoute` reads them at request time), and `addStop` for the pickers and taps.
  */
+/** A stop added from elsewhere (map taps, along the way), and whether one can be. */
+export interface StopAdder {
+  add: (p: Place) => void;
+  can: boolean;
+}
+
 export function useStopState() {
   const [behind, setBehind] = useState(0);
-  const addStopRef = useRef<(p: Place) => void>(() => undefined);
+  /** Adds a stop, and whether one can be now (guiding, only those ahead count). */
+  const addStopRef = useRef<StopAdder>({ add: () => undefined, can: false });
   /** A place picked by name for a point of the route (`useStops`): whether it is the end. */
   const pickRef = useRef<(p: Place, at: number | 'add') => boolean>(() => false);
   return { behind, setBehind, addStopRef, pickRef };
@@ -68,6 +77,7 @@ export function useStops({
   setTrip,
   guided,
   way,
+  current,
   nav,
   navigating,
   state,
@@ -82,8 +92,8 @@ export function useStops({
   }, [navigating, setBehind]);
   const tr = useMemo(() => (guided ? track(guided) : null), [guided]);
   useEffect(() => {
-    if (navigating && tr) setBehind((b) => stopsReached(tr, nav, b));
-  }, [navigating, tr, nav, setBehind]);
+    if (navigating && tr && current) setBehind((b) => stopsReached(tr, nav, b));
+  }, [navigating, tr, nav, setBehind, current]);
 
   /** Guiding, the stops reached count no more: the router is only asked for those ahead. */
   const first = navigating ? behind : 0;
@@ -195,7 +205,7 @@ export function useStops({
   });
 
   useEffect(() => {
-    addStopRef.current = addStop;
+    addStopRef.current = { add: addStop, can: canAdd };
     pickRef.current = pickPoint;
   });
   return { card, ahead: ahead_ };

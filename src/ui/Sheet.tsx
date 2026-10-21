@@ -45,6 +45,7 @@ export function Sheet({ className, peek, children, busy, startMin, hidden, label
     settle,
   );
 
+  const dragged = useRef(false);
   const down = (e: PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { y: e.clientY, t: e.timeStamp, moved: false };
@@ -62,8 +63,9 @@ export function Sheet({ className, peek, children, busy, startMin, hidden, label
     setDy(0);
     if (!d) return;
     const dist = e.clientY - d.y;
-    if (!d.moved) setMin((m) => !m);
-    else settle(dist, dist / Math.max(1, e.timeStamp - d.t));
+    // A tap is the click below; a drag is not one.
+    dragged.current = d.moved;
+    if (d.moved) settle(dist, dist / Math.max(1, e.timeStamp - d.t));
   };
 
   return (
@@ -89,11 +91,10 @@ export function Sheet({ className, peek, children, busy, startMin, hidden, label
           drag.current = null;
           setDy(0);
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setMin((m) => !m);
-          }
+        // A click, as a tap, a key and a screen reader all send one.
+        onClick={() => {
+          if (dragged.current) dragged.current = false;
+          else setMin((m) => !m);
         }}
       >
         <span />

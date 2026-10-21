@@ -24,6 +24,7 @@ import type { LocationStatus } from './useLocation';
 import { useNavNotice } from './useNavNotice';
 import { useNow } from './useNow';
 import { useSpeedLimits } from './useSpeedLimits';
+import { openAppSettings } from './native';
 
 interface Props {
   route: Route;
@@ -197,7 +198,8 @@ export function NavView(props: Props) {
             </div>
           )}
         </section>
-        {open && guiding && (
+        {/* Off the route too: the stop pulling the user back can come off right there. */}
+        {open && !nav.arrived && (
           <TripDetails onClose={() => on.onOpen(false)}>
             <PointList {...points} />
             {along && (
@@ -274,7 +276,9 @@ export function NavWaiting({ status, location, destination, ...on }: WaitingProp
       : status === 'busy'
         ? t.routeBusy
         : status === 'failed'
-          ? t.routeFailed
+          ? navigator.onLine
+            ? t.routeDown
+            : t.routeFailed
           : status === 'none'
             ? t.noRoute
             : t.routing;
@@ -289,6 +293,12 @@ export function NavWaiting({ status, location, destination, ...on }: WaitingProp
         {(status === 'busy' || status === 'failed') && (
           <button type="button" className="ride-new" onClick={on.onRetry}>
             {t.retry}
+          </button>
+        )}
+        {/* "Allow it in the settings": one tap there (the app; a browser has no such page). */}
+        {noFix && location === 'denied' && openAppSettings && (
+          <button type="button" className="ride-new" onClick={openAppSettings}>
+            {t.settings}
           </button>
         )}
       </section>

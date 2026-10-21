@@ -84,6 +84,13 @@ const tripKey = (trip: Trip) =>
     .join(';')}|${trip.from ? `${trip.from.lng},${trip.from.lat}` : 'me'}`;
 
 /**
+ * Two trips from here to the same end, its stops changed: the way followed still leads there
+ * meanwhile. Not for a new destination: the old way would arrive, and end the trip, at the old.
+ */
+const sameEnd = (a: string, b: string) =>
+  a.endsWith('|me') && b.endsWith('|me') && a.split('|')[2] === b.split('|')[2];
+
+/**
  * A failed reroute must not take the route away from someone who is following it, nor a failed
  * new connection the one being ridden (asked from elsewhere, under another key).
  */
@@ -97,11 +104,7 @@ const keepWhileNavigating = (
   // Across a key change only for a connection (its new start is the stop), or a stop added
   // while guiding from here: a road route from a chosen start is no way from where the user
   // now is.
-  const fromHere = (k: string) => k.endsWith('|me');
-  const same =
-    prev?.key === next.key ||
-    (transit && !!prev) ||
-    (fromHere(next.key) && fromHere(prev?.key ?? ''));
+  const same = prev?.key === next.key || (transit && !!prev) || sameEnd(next.key, prev?.key ?? '');
   return pinned && !next.routes.length && same && prev?.routes.length
     ? { ...prev!, key: next.key, kept: true, n }
     : { ...next, n };
@@ -242,18 +245,18 @@ export function useRoute(
   } else if (trip && !trip.from && !here) {
     status = 'locating';
   }
-  // A new connection asked for while riding, or a stop or destination changed while guiding
-  // from here: the way followed stays until the new one comes, so guidance never blanks.
+  // A new connection asked for while riding, or the stops changed while guiding from here: the
+  // way followed stays until the new one comes, so guidance never blanks.
   const waiting =
-    pinned &&
-    !!result?.routes.length &&
-    (trip?.mode === 'transit' || (key.endsWith('|me') && result.key.endsWith('|me')));
+    pinned && !!result?.routes.length && (trip?.mode === 'transit' || sameEnd(key, result.key));
   const routes = current && result ? result.routes : waiting ? result!.routes : NO_ROUTES;
   return {
     routes,
     status,
     key,
     settled: result?.n ?? 0,
+    /** The routes are for the trip as it is now, not the one followed while asking. */
+    current,
     kept: !!result?.kept,
     retry: () => setAttempt((a) => a + 1),
   };

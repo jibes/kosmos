@@ -5,12 +5,13 @@ import type { Place } from '../core/search';
 import type { AlongSearch } from './AlongRoute';
 import { ALONG_SOURCE } from '../core/style';
 import { findAlong } from './categorySearch';
+import type { StopAdder } from './useStops';
 
 /** Search along a route on this map, and a stop made of what is found while one can be added. */
 export function useAlongSearch(
   map: maplibregl.Map | null,
   lang: string,
-  addStopRef: RefObject<(p: Place) => void>,
+  addStopRef: RefObject<StopAdder>,
   canAdd: boolean,
 ): AlongSearch {
   const find = useCallback<AlongSearch['find']>(
@@ -18,7 +19,7 @@ export function useAlongSearch(
       map ? findAlong(map, track(route, mode), from, kind, lang) : Promise.resolve(null),
     [map, lang],
   );
-  const onAdd = useCallback((p: Place) => addStopRef.current(p), [addStopRef]);
+  const onAdd = useCallback((p: Place) => addStopRef.current.add(p), [addStopRef]);
   /** The places found as dots on the map, tappable like its labels; none to clear them. */
   const show = useCallback(
     (places: Place[]) =>

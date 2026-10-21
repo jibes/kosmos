@@ -8,13 +8,12 @@ import {
   type Transit,
   type TransitLeg,
 } from '../core/transit';
-import { t, units } from '../i18n';
+import { fill, t, units } from '../i18n';
 import { ModeIcon, TurnIcon, VehicleIcon } from './icons';
 
 const count = (n: number, one: string, many: string) =>
   n === 1 ? one : many.replace('{n}', `${n}`);
 
-/** What to call a ride: its line ("U6"), or else its kind of vehicle ("bus"). */
 /** What a line badge needs: a leg of a trip, or a departure. */
 export type LineOf = Pick<TransitLeg, 'mode' | 'line' | 'color' | 'textColor'>;
 
@@ -155,7 +154,7 @@ export function TransitLegs(props: LegsProps) {
             : [
                 l.headsign && `→ ${l.headsign}`,
                 count(l.stops + 1, t.oneStop, t.stops),
-                l.delay > 0 && `+${l.delay} min ${t.late}`,
+                l.delay > 0 && `${fill(t.detourMin, { n: l.delay })} ${t.late}`,
               ]
                 .filter(Boolean)
                 .join(' · ');

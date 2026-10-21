@@ -222,6 +222,10 @@ describe('parseValhalla', () => {
 
 describe('formatting', () => {
   it('rounds distances like a person would say them', () => {
+    // Just under 0.1 mi never reads (or is said) as more than 0.1 mi just after.
+    expect(formatDistance(160.9, 'en', 'uk')).toBe('170 yd');
+    expect(formatDistance(160.9, 'en', 'us')).toBe('500 ft');
+    expect(spokenDistance(160.9, 'uk')).toEqual({ value: 150, unit: 'yd' });
     expect(formatDistance(12, 'en')).toBe('10 m');
     expect(formatDistance(437, 'en')).toBe('440 m');
     expect(formatDistance(4234, 'en')).toBe('4.2 km');

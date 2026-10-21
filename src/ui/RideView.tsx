@@ -169,7 +169,7 @@ export function RideView(props: Props) {
             <p aria-live="polite">{title}</p>
             {goal && <small>{capital(goal)}</small>}
             {sub && <small>{capital(sub)}</small>}
-            {connecting === 'failed' && <small>{t.noRoute}</small>}
+            {connecting === 'failed' && <small>{t.noRoute_transit}</small>}
             <span className="sr-only" aria-live="polite">
               {change && capital(change)}
             </span>

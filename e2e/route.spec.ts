@@ -61,7 +61,7 @@ test.describe('routes', () => {
   test('changes the start and the destination of a route', async ({ page, context }) => {
     const card = await openRoute(page, context);
     await card.locator('.end-btn').first().click();
-    const start = page.getByRole('combobox', { name: 'Search start' });
+    const start = page.getByRole('combobox', { name: 'Search for a start' });
     await expect(start).toBeFocused();
     await start.fill('brandenburg');
     await page.getByRole('option').nth(1).click();
@@ -80,7 +80,7 @@ test.describe('routes', () => {
 
     // The destination can be changed from the route view too.
     await card.locator('.end-btn').nth(1).click();
-    const dest = page.getByRole('combobox', { name: 'Search destination' });
+    const dest = page.getByRole('combobox', { name: 'Search for a destination' });
     await expect(dest).toBeFocused();
     await dest.fill('brandenburg');
     await page.getByRole('option', { name: /Havel/ }).click();
@@ -465,7 +465,7 @@ test.describe('routes', () => {
       const [lat, lng] = transitRequests.at(-1)!.get('fromPlace')!.split(',').map(Number);
       expect(lat).toBeCloseTo(stopLat, 4);
       expect(lng).toBeCloseTo(from.lng, 4);
-      await expect(banner).toContainText('No route found');
+      await expect(banner).toContainText('No public transport connection');
       await expect(banner).toContainText('U6 is cancelled');
       await expect(banner.getByRole('button', { name: 'New connection' })).toBeEnabled();
     } finally {
@@ -580,7 +580,7 @@ test.describe('routes', () => {
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     // From the card: a stop found by name.
     await card.getByRole('button', { name: /Add stop/ }).click();
-    await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+    await page.getByRole('combobox', { name: 'Search for a stop' }).fill('brandenburg');
     await page.getByRole('option').filter({ hasText: 'Havel' }).click();
     await expect(card.locator('.point-list li')).toHaveCount(3);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(1);
@@ -656,7 +656,7 @@ test.describe('routes', () => {
       .click();
     const card = page.locator('.card.route');
     await card.getByRole('button', { name: /Add stop/ }).click();
-    await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+    await page.getByRole('combobox', { name: 'Search for a stop' }).fill('brandenburg');
     await page.getByRole('option').filter({ hasText: 'Havel' }).click();
     await expect(card.locator('.summary strong')).toHaveText(/min|h/);
     await idle(page);
@@ -767,7 +767,7 @@ test.describe('routes', () => {
     await expect(banner).toBeVisible();
     await expect(page.locator('.stop-dot')).toHaveText(['1']);
     // The steps ahead list it: taken off again, straight there from here.
-    await banner.getByRole('button', { name: 'Show the route' }).click();
+    await banner.getByRole('button', { name: 'Show stops ahead' }).click();
     const list = page.locator('.ride-details .point-list li').filter({ hasText: 'Café' });
     await expect(list).toHaveText([/Café Einstein/]);
     await list.getByRole('button', { name: /^Remove Café/ }).click();
@@ -775,7 +775,7 @@ test.describe('routes', () => {
     await expect(page.locator('.stop-dot')).toHaveCount(0);
     await expect(banner).toBeVisible();
     // Changed plans: the café is where the trip now ends, one route there from here.
-    await banner.getByRole('button', { name: 'Show the route' }).click();
+    await banner.getByRole('button', { name: 'Show stops ahead' }).click();
     await seeCafe();
     const before = routeRequests.length;
     await page.mouse.click(at.x, at.y);
@@ -821,7 +821,7 @@ test.describe('routes', () => {
         .click();
       const card = page.locator('.card.route');
       await card.getByRole('button', { name: /Add stop/ }).click();
-      await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+      await page.getByRole('combobox', { name: 'Search for a stop' }).fill('brandenburg');
       await page.getByRole('option').filter({ hasText: 'Havel' }).click();
       await expect(card.locator('.summary strong')).toHaveText(/min|h/);
       await page.getByRole('button', { name: 'Start', exact: true }).click();

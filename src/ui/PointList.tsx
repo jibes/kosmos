@@ -140,7 +140,12 @@ export function PointList({
               {mark === 'stop' ? i + numberFrom : ''}
             </span>
             {onPick && i >= locked ? (
-              <button type="button" className="end-btn" onClick={() => onPick(i)}>
+              <button
+                type="button"
+                className="end-btn"
+                title={fill(t.changePoint, { name })}
+                onClick={() => onPick(i)}
+              >
                 {name}
               </button>
             ) : (
@@ -162,7 +167,13 @@ export function PointList({
                 type="button"
                 className="icon-btn"
                 aria-label={fill(t.removePoint, { name })}
-                onClick={() => onRemove(i)}
+                onClick={() => {
+                  onRemove(i);
+                  // Its row gone, focus stays in the list rather than falling to the page.
+                  requestAnimationFrame(() =>
+                    list.current?.querySelector<HTMLElement>('button.end-btn')?.focus(),
+                  );
+                }}
               >
                 <CloseIcon size={16} />
               </button>

@@ -1,4 +1,4 @@
-import { distance, type LngLat } from './geo';
+import { boundsOfLine, distance, type LngLat } from './geo';
 import { decodePolyline, type Route, type Turn } from './route';
 
 /**
@@ -250,13 +250,7 @@ function toRoute(it: MItinerary): Route | null {
   if (!legs.length) return null;
   const coords: [number, number][] = [];
   for (const l of legs) coords.push(...(coords.length ? l.coords.slice(1) : l.coords));
-  let [w, s, e, n] = [180, 90, -180, -90];
-  for (const [x, y] of coords) {
-    w = Math.min(w, x);
-    e = Math.max(e, x);
-    s = Math.min(s, y);
-    n = Math.max(n, y);
-  }
+  const [w, s, e, n] = boundsOfLine(coords);
   const start = Date.parse(it.startTime ?? '') || legs[0].start;
   const end = Date.parse(it.endTime ?? '') || legs[legs.length - 1].end;
   return {

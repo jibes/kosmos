@@ -35,7 +35,11 @@ const ty = (lat: number, n: number) => {
 export function tilesIn(b: Bounds, center: LngLat, z = DETAIL_ZOOM, max = 48): TileId[] {
   const n = 2 ** z;
   const east = b.east < b.west ? b.east + 360 : b.east;
-  const cx = tx(center.lng, n);
+  // The centre in the bounds' own frame: a wrapped one just past 180° lies east of `west`.
+  let lng = center.lng;
+  while (lng < b.west - 180) lng += 360;
+  while (lng > east + 180) lng -= 360;
+  const cx = tx(lng, n);
   const cy = ty(center.lat, n);
   // The `max` nearest tiles all lie within this many tiles of the centre.
   const r = Math.ceil(Math.sqrt(max)) + 1;
