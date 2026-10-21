@@ -12,6 +12,8 @@ test.describe('the map kept on the device', () => {
     page,
     context,
   }) => {
+    // A trip's tiles fetched, then the map read from them offline: past 30 s on a busy machine.
+    test.slow();
     // The usage log says when the way is kept (nothing shows it on the map).
     await page.evaluate(() => localStorage.setItem('kosmos.logging.v1', '1'));
     await page.reload();

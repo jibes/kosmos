@@ -14,16 +14,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # Per calling workflow (the deploy, the Android release): neither cancels the other's run.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    env:
-      # Build and e2e must agree on the base path, or Playwright opens a 404.
-      VITE_BASE: ${{ inputs.base || './' }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,16 +38,39 @@ jobs:
       - run: npm run format:check
       - run: npm test
 
+  # The same end-to-end tests, a quarter on each of four machines at once: about a quarter of
+  # the time, and every test still has to pass before anything deploys.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      # Build and e2e must agree on the base path, or Playwright opens a 404.
+      VITE_BASE: ${{ inputs.base || './' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
       - name: Build
         run: npm run build
 
       - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
+      - run: npx playwright test --shard=${{ matrix.shard }}/4
 
       - if: failure()
         # TODO pin to SHA (Dependabot keeps it current)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7

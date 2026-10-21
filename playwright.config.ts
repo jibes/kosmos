@@ -6,6 +6,8 @@ const executablePath = process.env.CHROMIUM_PATH || undefined;
 
 export default defineConfig({
   testDir: 'e2e',
+  // Every test stands alone, so CI's shards split them evenly, not by whole files.
+  fullyParallel: true,
   reporter: process.env.CI ? [['html', { open: 'never' }], ['github']] : 'list',
   use: {
     baseURL: `http://localhost:4173${base}`,
