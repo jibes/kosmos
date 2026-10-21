@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { distance, type LngLat } from '../core/geo';
+import { courseOf, type Course } from '../core/nav';
 import {
   classifyError,
   parseValhalla,
@@ -17,6 +18,7 @@ import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
 import { fill, t, units } from '../i18n';
 import { getJson } from './http';
+import { logEvent } from './usageLog';
 import type { RouteStatus } from './RouteCard';
 
 export interface Trip {
@@ -128,6 +130,11 @@ export function useRoute(
     setOpen(!!trip);
     if (!trip) setResult(null);
   }
+  // The way last driven, for a reroute asked while standing in traffic.
+  const course = useRef<Course | null>(null);
+  useEffect(() => {
+    if (here) course.current = courseOf(here, course.current, Date.now());
+  }, [here]);
   const last = useRef<{ key: string; from: LngLat; attempt: number; at: number } | null>(null);
   const inflight = useRef<AbortController | null>(null);
   const key = trip ? tripKey(trip) : '';
@@ -155,13 +162,19 @@ export function useRoute(
     inflight.current = ctrl;
     const behind = pinned ? behindRef.current : 0;
     const via = viaOf(trip).slice(behind);
+    // The usage log: which way a reroute was asked to leave in.
+    if (pinned && trip.mode !== 'transit') {
+      const c = course.current;
+      logEvent('route.heading', { sent: !!c, kept: !!c && c.at < Date.now() - 1500 });
+    }
     const names = viaOf(trip).map((v) => v.name);
     const road = (alternates: number, noTolls: boolean) =>
       getJson(
-        // A reroute while guiding: one route, leaving in the direction of travel.
+        // A reroute while guiding: one route, leaving in the direction of travel (the one last
+        // driven while standing in traffic).
         routeUrl(
-          pinned && !trip.from && here?.heading != null && (here.speed ?? 0) > 2
-            ? { ...from, heading: here.heading }
+          pinned && !trip.from && course.current
+            ? { ...from, heading: course.current.heading }
             : from,
           trip.to,
           trip.mode as Mode,

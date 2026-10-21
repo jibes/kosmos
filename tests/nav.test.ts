@@ -15,6 +15,8 @@ import {
   type Fix,
   type NavState,
   headingToRoute,
+  COURSE_KEEP_MS,
+  courseOf,
 } from '../src/core/nav';
 import { buzzFor } from '../src/core/haptics';
 import type { Mode, Route } from '../src/core/route';
@@ -584,5 +586,18 @@ describe('sayable', () => {
     expect(sayable(1000, 1000 + SAY_MAX_AGE_MS)).toBe(false);
     // A fix stamped slightly ahead of the phone's clock is fresh.
     expect(sayable(5000, 4000)).toBe(true);
+  });
+});
+
+describe('the way a reroute leaves in', () => {
+  it('keeps the course last driven while standing in traffic, not for ever', () => {
+    const moving = courseOf({ heading: 90, speed: 12 }, null, 1000);
+    expect(moving).toEqual({ heading: 90, at: 1000 });
+    // Stopped: GPS course is noise, the last one stands.
+    expect(courseOf({ heading: 200, speed: 0.4 }, moving, 60_000)).toBe(moving);
+    expect(courseOf({ heading: null, speed: 0 }, moving, 100_000)).toBe(moving);
+    // Two minutes on, nobody knows which way the car faces any more.
+    expect(courseOf({ heading: null, speed: 0 }, moving, 1000 + COURSE_KEEP_MS)).toBeNull();
+    expect(courseOf({ heading: NaN, speed: 10 }, null, 0)).toBeNull();
   });
 });

@@ -89,7 +89,14 @@ export function useNav(o: Options) {
     let nav = initialNav();
     const { mode, subscribe } = opts.current;
     const onFix = (fix: Fix) => {
+      const before = nav;
       nav = step(tr, nav, fix);
+      // The usage log: guidance waiting on poor fixes, and steps passed without a word.
+      const acc = Math.round(fix.accuracy);
+      if (nav.weak !== before.weak) logEvent('nav.weak', { on: nav.weak, acc });
+      if (nav.next > before.next + 1 && before.snap && !nav.offRoute) {
+        logEvent('nav.skip', { from: before.next, to: nav.next, acc });
+      }
       const found = prompt(tr, nav, mode);
       const p = found?.head ? { ...found, text: t.headToRoute } : found;
       // Said once, and only while it is still true: never about a fix from a queue.
@@ -97,7 +104,7 @@ export function useNav(o: Options) {
       if (p) {
         const fresh = sayable(fix.time, Date.now());
         const age = Date.now() - fix.time;
-        logEvent('nav.prompt', { key: p.key, age, muted: opts.current.muted, fresh });
+        logEvent('nav.prompt', { key: p.key, age, acc, muted: opts.current.muted, fresh });
       }
       if (p && sayable(fix.time, Date.now())) {
         nav = markSpoken(nav, p.key);
@@ -112,6 +119,7 @@ export function useNav(o: Options) {
       // Never on a coarse fix, and backing off when standing in the same wrong place.
       if (nav.offRoute && !nav.arrived && !nav.weak && rerouteDue(asked.current, fix)) {
         asked.current = markReroute(asked.current, fix);
+        logEvent('nav.reroute', { acc, moving: nav.moving });
         opts.current.onReroute();
       }
     };

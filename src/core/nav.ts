@@ -398,6 +398,32 @@ export interface RerouteMark {
   count: number;
 }
 
+/** A course this old still says which way a car stopped in traffic faces. */
+export const COURSE_KEEP_MS = 120_000;
+/** Above this a fix's own course is the way of travel (below it GPS course is noise), m/s. */
+const COURSE_SPEED = 2;
+
+export interface Course {
+  heading: number;
+  at: number;
+}
+
+/**
+ * The way of travel a reroute leaves in: the fix's own course while moving, else the last one
+ * while it is recent, as a car stopped in traffic still faces it. Without one the router may
+ * start the new route backwards, and it is off again at once.
+ */
+export function courseOf(
+  fix: { heading?: number | null; speed?: number | null },
+  last: Course | null,
+  now: number,
+): Course | null {
+  const h = fix.heading;
+  if (h != null && !Number.isNaN(h) && (fix.speed ?? 0) > COURSE_SPEED)
+    return { heading: h, at: now };
+  return last && now - last.at < COURSE_KEEP_MS ? last : null;
+}
+
 const movedOn = (last: RerouteMark, fix: Fix) =>
   distance(last, fix) > Math.max(50, 2 * fix.accuracy);
 
