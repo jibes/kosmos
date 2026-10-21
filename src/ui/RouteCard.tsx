@@ -19,7 +19,14 @@ import { AlongRoute, type AlongSearch } from './AlongRoute';
 import { Sheet } from './Sheet';
 import { PointList, type PointListProps } from './PointList';
 import type { LocationStatus } from './useLocation';
-import { changesText, DepartTime, LineChips, TransitCredit, TransitLegs } from './TransitParts';
+import {
+  changesText,
+  DepartTime,
+  LineChips,
+  Tickets,
+  TransitCredit,
+  TransitLegs,
+} from './TransitParts';
 import { useNow } from './useNow';
 
 export type RouteStatus = 'locating' | 'loading' | 'ready' | Exclude<RouteError, 'none'> | 'none';
@@ -263,6 +270,7 @@ export function RouteCard(props: Props) {
       )}
 
       {transit && <TransitLegs transit={transit} lang={lang} />}
+      {transit && <Tickets transit={transit} />}
 
       {route && !transit && (
         // Closed again for another way of travel: its steps are another list.

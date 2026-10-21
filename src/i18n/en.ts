@@ -62,6 +62,8 @@ export const en = {
   cancelled: 'Cancelled',
   late: 'late',
   transitCredit: 'Timetables via Transitous',
+  tickets: 'Tickets',
+  ticketsFrom: 'Tickets from {name}, on its website',
   walkTo: 'Walk to {stop}',
   leaves: '{line} leaves {time}',
   hasLeft: '{line} has left',

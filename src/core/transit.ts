@@ -59,6 +59,8 @@ export interface TransitLeg {
   steps: WalkStep[];
   /** Rides: the timetable's trip id, which identifies this vehicle at the boarding stop. */
   trip?: string;
+  /** Rides: who runs it, and their website, from the timetable (GTFS `agency`). */
+  agency?: { name: string; url?: string };
 }
 
 export interface Transit {
@@ -149,6 +151,8 @@ interface MLeg {
   legGeometry?: { points?: string; precision?: number };
   cancelled?: boolean;
   tripId?: string;
+  agencyName?: string;
+  agencyUrl?: string;
   steps?: { relativeDirection?: string; distance?: number; streetName?: string }[];
 }
 interface MItinerary {
@@ -242,7 +246,37 @@ function toLeg(l: MLeg): TransitLeg | null {
     cancelled: !!l.cancelled,
     steps: ride ? [] : walkSteps(l.steps),
     ...(ride && l.tripId ? { trip: l.tripId } : {}),
+    ...(ride && l.agencyName?.trim()
+      ? { agency: { name: l.agencyName.trim(), ...web(l.agencyUrl) } }
+      : {}),
   };
+}
+
+/** A website the timetable gives, only as a web address (never `javascript:` or the like). */
+function web(url: string | undefined): { url?: string } {
+  if (!url) return {};
+  const full = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+  try {
+    const u = new URL(full);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? { url: u.href } : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Where to buy tickets for a connection: each operator of its rides once, in the order they
+ * are ridden, with its website. No timetable says where a given journey is sold, so it is the
+ * operator's own site, not a booking with the journey filled in.
+ */
+export function ticketsOf(transit: Transit): { name: string; url: string }[] {
+  const out: { name: string; url: string }[] = [];
+  for (const l of transit.legs) {
+    const a = l.agency;
+    if (!a?.url || out.some((o) => o.url === a.url || o.name === a.name)) continue;
+    out.push({ name: a.name, url: a.url });
+  }
+  return out;
 }
 
 function toRoute(it: MItinerary): Route | null {

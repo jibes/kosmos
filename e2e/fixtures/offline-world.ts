@@ -152,6 +152,8 @@ function fakePlan(a: Pt, b: Pt, depart: number) {
           [s1, s2],
           {
             displayName: 'U6',
+            agencyName: 'BVG',
+            agencyUrl: 'https://www.bvg.de/',
             tripId: `u6-${t0}`,
             headsign: 'Alt-Tegel',
             routeColor: '8C6DAB',

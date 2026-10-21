@@ -657,3 +657,30 @@ select.chip option {
   grid-column: 3;
   grid-row: 1 / span 2;
 }
+
+/* Where to buy tickets: the operators of the connection, each a link to its website. */
+.tickets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 10px 0 0;
+  font-size: 14px;
+}
+
+.tickets span {
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.tickets a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 22px;
+  background: var(--hover-strong);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}

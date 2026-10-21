@@ -11,6 +11,7 @@ import {
   withLiveTrip,
   servedBefore,
   departed,
+  ticketsOf,
 } from '../src/core/transit';
 
 const at = (hh: number, mm: number, day = 13) => new Date(2026, 9, day, hh, mm).getTime();
@@ -302,5 +303,46 @@ describe('departed', () => {
     expect(departed(tr, 7 * 60_000)).toBe(false);
     expect(departed(tr, 9 * 60_000)).toBe(true);
     expect(departed({ legs: [{ ride: false, start: 0 }] } as never, 9e9)).toBe(false);
+  });
+});
+
+describe('ticketsOf', () => {
+  const leg = (mode: string, agencyName?: string, agencyUrl?: string) => ({
+    mode,
+    from: { name: 'A', lat: 52.5, lon: 13.4 },
+    to: { name: 'B', lat: 52.51, lon: 13.41 },
+    startTime: '2026-10-13T12:00:00Z',
+    endTime: '2026-10-13T12:10:00Z',
+    legGeometry: { points: '', precision: 6 },
+    ...(agencyName ? { agencyName } : {}),
+    ...(agencyUrl ? { agencyUrl } : {}),
+  });
+  const plan = (...legs: ReturnType<typeof leg>[]) =>
+    parseMotis({
+      itineraries: [{ startTime: '2026-10-13T12:00:00Z', endTime: '2026-10-13T13:00:00Z', legs }],
+    })[0].transit!;
+
+  it("lists each ride's operator once, in the order ridden, with its website", () => {
+    const t = plan(
+      leg('WALK'),
+      leg('REGIONAL_RAIL', 'DB Regio', 'https://www.bahn.de'),
+      leg('BUS', 'BVG', 'www.bvg.de'),
+      leg('SUBWAY', 'BVG', 'https://www.bvg.de/'),
+      leg('WALK', 'Not a ride', 'https://walk.example'),
+    );
+    expect(ticketsOf(t)).toEqual([
+      { name: 'DB Regio', url: 'https://www.bahn.de/' },
+      { name: 'BVG', url: 'https://www.bvg.de/' },
+    ]);
+  });
+
+  it('leaves out an operator without a web address, and anything that is not one', () => {
+    const t = plan(
+      leg('BUS', 'Local Bus'),
+      leg('TRAM', 'Sneaky', 'javascript:alert(1)'),
+      leg('TRAM', 'Broken', 'http://'),
+    );
+    expect(ticketsOf(t)).toEqual([]);
+    expect(t.legs[0].agency).toEqual({ name: 'Local Bus' });
   });
 });

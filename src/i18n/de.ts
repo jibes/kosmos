@@ -64,6 +64,8 @@ export const de = {
   cancelled: 'Fällt aus',
   late: 'Verspätung',
   transitCredit: 'Fahrpläne über Transitous',
+  tickets: 'Fahrkarten',
+  ticketsFrom: 'Fahrkarten bei {name}, auf der Website',
   walkTo: 'Zu Fuß bis {stop}',
   leaves: '{line} fährt um {time}',
   hasLeft: '{line} ist abgefahren',

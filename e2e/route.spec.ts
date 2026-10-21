@@ -210,6 +210,10 @@ test.describe('routes', () => {
     await expect(legs.locator('.ride time').first()).toHaveAttribute('data-late');
     await expect(legs.locator('.walk')).toHaveCount(2);
     await expect(card.locator('.summary')).toContainText('Direct');
+    // Tickets from the operator of the ride, on its own website.
+    const tickets = card.getByRole('link', { name: 'Tickets from BVG, on its website' });
+    await expect(tickets).toHaveAttribute('href', 'https://www.bvg.de/');
+    await expect(tickets).toHaveAttribute('target', '_blank');
     // Two connections and walking the whole way; each tile names its lines with their vehicle.
     const tiles = card.locator('.alts [role=radio]');
     await expect(tiles).toHaveCount(3);

@@ -4,6 +4,7 @@ import {
   clockValue,
   departureAt,
   servedBefore,
+  ticketsOf,
   vehicleOf,
   type Transit,
   type TransitLeg,
@@ -268,6 +269,31 @@ export function TransitLegs(props: LegsProps) {
         );
       })}
     </ol>
+  );
+}
+
+/**
+ * Where to buy tickets: each operator of the connection's rides, its own website (the timetable
+ * names no booking for a given journey). Opens in the browser.
+ */
+export function Tickets({ transit }: { transit: Transit }) {
+  const sellers = ticketsOf(transit);
+  if (!sellers.length) return null;
+  return (
+    <p className="tickets">
+      <span>{t.tickets}</span>
+      {sellers.map((s) => (
+        <a
+          key={s.url}
+          href={s.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={fill(t.ticketsFrom, { name: s.name })}
+        >
+          {s.name}
+        </a>
+      ))}
+    </p>
   );
 }
 
