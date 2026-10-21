@@ -16,6 +16,8 @@ test.describe('map', () => {
   inWorld();
 
   test('renders the globe and a city', async ({ page }, info) => {
+    // Three settled views in software GL and their screenshots: past 30 s on a busy runner.
+    test.slow();
     await expect(page.locator('canvas.maplibregl-canvas')).toBeVisible();
     // Frosted glass, in Chromium too (a minifier once kept only the -webkit- form).
     expect(
@@ -24,15 +26,22 @@ test.describe('map', () => {
     await shot(page, info, 'globe');
     await jump(page, { ...CENTER, zoom: 15.2 });
     // The places show their kind: a café's cup on its point, tinted by the style.
-    const cafe = await page.evaluate(() => {
-      const m = window.kosmos!;
-      const shown = m
-        .queryRenderedFeatures({ layers: ['label-poi', 'label-poi-15'] })
-        .some((x) => x.properties.subclass === 'cafe');
-      const icon = JSON.stringify(m.getLayoutProperty('label-poi', 'icon-image'));
-      return { shown, image: m.hasImage('poi-cafe'), icon };
-    });
-    expect(cafe).toEqual({ shown: true, image: true, icon: expect.stringContaining('poi-') });
+    expect(
+      await page.evaluate(() => ({
+        image: window.kosmos!.hasImage('poi-cafe'),
+        icon: JSON.stringify(window.kosmos!.getLayoutProperty('label-poi', 'icon-image')),
+      })),
+    ).toEqual({ image: true, icon: expect.stringContaining('poi-') });
+    // Placed once its symbols have settled.
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          window
+            .kosmos!.queryRenderedFeatures({ layers: ['label-poi', 'label-poi-15'] })
+            .some((x) => x.properties.subclass === 'cafe'),
+        ),
+      )
+      .toBe(true);
     await shot(page, info, 'city');
     await jump(page, { ...CENTER, zoom: 16.2, pitch: 60, bearing: -25 });
     await expect(page.getByRole('button', { name: /north|Norden/i })).toBeVisible();
@@ -159,6 +168,8 @@ test.describe('map', () => {
   });
 
   test('says how to drop a pin once, the first time the map shows streets', async ({ page }) => {
+    // Two loads, four settled maps and the note's own 6 s: past 30 s on a busy runner.
+    test.slow();
     // From the globe, where a pin means nothing: no note.
     await jump(page, { ...CENTER, zoom: 2 });
     await page.evaluate(() => localStorage.removeItem('kosmos.hinted.v1'));
@@ -170,10 +181,24 @@ test.describe('map', () => {
     await expect(note).toHaveCount(0);
 
     // Streets: the note comes, stays long enough to try it, and lets taps through to the map.
+    // How long it has stayed is measured in the page: a busy machine sees it late.
+    await page.evaluate(() => {
+      const w = window as unknown as { since?: number };
+      new MutationObserver(() => {
+        if (!w.since && document.querySelector('.toast')) w.since = performance.now();
+      }).observe(document.body, { childList: true, subtree: true });
+    });
     await jump(page, { ...CENTER, zoom: 16 });
     await expect(note).toHaveText(/(Long-press|Right-click) anywhere to drop a pin/);
-    await page.waitForTimeout(4000);
-    await expect(note).toBeVisible();
+    // Up for 4 s and showing still (gone before, this never comes and the test fails).
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const since = (window as unknown as { since?: number }).since;
+          return since && document.querySelector('.toast') ? performance.now() - since : -1;
+        }),
+      )
+      .toBeGreaterThanOrEqual(4000);
     expect(await note.evaluate((e) => getComputedStyle(e).pointerEvents)).toBe('none');
     // Doing it opens a card, and the note goes.
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
