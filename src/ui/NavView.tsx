@@ -14,7 +14,7 @@ import {
 } from '../core/route';
 import { limitAt, limitIn, overLimit } from '../core/speedLimit';
 import { capital, fill, ordinal, t, units } from '../i18n';
-import { LaneIcon, TurnIcon } from './icons';
+import { JunctionIcon, LaneIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
 import { PointList, type PointListProps } from './PointList';
 import { TripDetails } from './TripDetails';
@@ -23,7 +23,7 @@ import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
 import { useNavNotice } from './useNavNotice';
 import { useNow } from './useNow';
-import { useSpeedLimits } from './useSpeedLimits';
+import { useRouteTrace } from './useRouteTrace';
 import { openAppSettings } from './native';
 
 interface Props {
@@ -87,7 +87,7 @@ export function NavView(props: Props) {
   const eta = started ? nav.eta : route.duration;
   const remaining = started ? nav.remaining : route.distance;
   const speed = speedIn(nav.speed, units);
-  const limits = useSpeedLimits(mode === 'car' ? route : undefined);
+  const { limits, junctions } = useRouteTrace(route, mode);
   // The limit where the car is on the route; off it, the road is another one.
   const limit = nav.snap && !nav.offRoute ? limitAt(limits, nav.snap.along) : null;
   const shownLimit = limit != null && Number.isFinite(limit) ? limitIn(limit, units) : null;
@@ -132,6 +132,11 @@ export function NavView(props: Props) {
       reroute === 'failed' ? t.rerouteFailed : reroute === 'asking' ? t.rerouting : t.offRoute;
     turn = reroute === 'failed' ? 'uturn' : 'depart';
   }
+  // The junction as it lies, where the router's trace knows it; else the arrow for its kind.
+  const junction =
+    guiding && !heading && m && turn !== 'arrive'
+      ? junctions.get(started ? nav.next : 0)
+      : undefined;
   const big = heading ? nav.toRoute : toNext;
   const arrival = fill(t.arriveAt, { time: formatClock(new Date(now + eta * 1000), lang) });
   useNavNotice(
@@ -164,7 +169,11 @@ export function NavView(props: Props) {
               onClick={() => on.onOpen(!open)}
             />
           )}
-          <TurnIcon turn={turn} size={40} />
+          {junction ? (
+            <JunctionIcon junction={junction} size={40} />
+          ) : (
+            <TurnIcon turn={turn} size={40} />
+          )}
           <div>
             {guiding && big != null && <strong>{formatDistance(big, lang, units)}</strong>}
             {/* Only the instruction is announced: the distance changes with every fix. */}

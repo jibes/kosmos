@@ -63,7 +63,7 @@ interface Options {
  * start that is not the user's location. */
 export function useRouteLayer(map: maplibregl.Map | null, o: Options) {
   const { routes, chosen, navigating, ready, tripKey, from, via, hasTrip, padding } = o;
-  // The map's tiles, for the towns a new route's signs would name (`useRoute`).
+  // The map's tiles, for a trip's to be kept at Start (`useKeepMap`).
   useEffect(() => (map ? knowTiles(map) : undefined), [map]);
 
   useEffect(() => {

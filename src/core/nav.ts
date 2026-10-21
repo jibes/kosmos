@@ -121,7 +121,7 @@ const MARK_M = 1_000;
  * Many points snapped onto the route, each `null` beyond `near` metres from it: a point far
  * from the line through marks about a kilometre apart is far from the road, and a near one is
  * snapped onto the few kilometres of road round it only. Snapping each onto the whole road
- * (towns at every junction of a long drive) took a minute and froze the app.
+ * (places along a long drive) took a minute and froze the app.
  */
 export function snapNear(tr: Track, points: LngLat[], near: number): (Snap | null)[] {
   const marks: number[] = [0];

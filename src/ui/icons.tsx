@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { junctionPaths, type Junction } from '../core/junction';
 import type { LaneView } from '../core/lanes';
 import type { TravelMode, Turn } from '../core/route';
 import type { PlaceKind } from '../core/placeKind';
@@ -206,6 +207,20 @@ const TURN_PATHS: Record<Turn, ReactNode> = {
 export const TurnIcon = ({ turn, size = 22 }: { turn: Turn; size?: number }) => (
   <Svg size={size}>{TURN_PATHS[turn]}</Svg>
 );
+
+/** A junction as it lies: the roads there faint, the way taken bold (`core/junction.ts`). */
+export const JunctionIcon = ({ junction, size = 40 }: { junction: Junction; size?: number }) => {
+  const { faint, way, ring } = junctionPaths(junction);
+  return (
+    <Svg size={size} kind="junction">
+      <g opacity={0.45} strokeWidth={1.6}>
+        {ring !== undefined && <circle cx="12" cy="12" r={ring} />}
+        {faint && <path d={faint} />}
+      </g>
+      <path d={way} strokeWidth={2.4} />
+    </Svg>
+  );
+};
 
 const MODE_PATHS: Record<TravelMode, ReactNode> = {
   car: (

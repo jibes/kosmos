@@ -76,6 +76,14 @@ test.describe('guidance', () => {
       await page.waitForTimeout(250);
     }
     await expect(banner).toContainText('Turn right onto Unter den Linden.');
+    // The crossroads as it lies (the router's trace), not just an arrow: the way out bold, the
+    // roads straight on and to the left faint.
+    const drawn = banner.locator('svg[data-kind="junction"]');
+    await expect(drawn).toHaveCount(1);
+    await expect(drawn.locator('g path')).toHaveAttribute(
+      'd',
+      /^M12\.0 13\.0L12\.0 4\.0M12\.0 13\.0L3\.0 13\.0$|^M12\.0 13\.0L3\.0 13\.0M12\.0 13\.0L12\.0 4\.0$/,
+    );
     const lanes = banner.locator('.nav-lanes');
     await expect(lanes).toHaveAttribute('data-size', 'big');
     await expect(lanes.locator('span')).toHaveCount(3);

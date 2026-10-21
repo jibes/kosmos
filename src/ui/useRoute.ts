@@ -12,9 +12,6 @@ import {
   type TravelMode,
 } from '../core/route';
 import { narrateWays, type ExitWords } from '../core/roundabout';
-import { track } from '../core/nav';
-import type { Town } from '../core/towns';
-import { townsAlong } from './categorySearch';
 import { nameStops, type StopWords } from '../core/stops';
 import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
@@ -55,14 +52,6 @@ const EXIT_WORDS: ExitWords = {
   heading: (way) => fill(t.exitHeading, { way: t[`way_${way}`] }),
   junction: (n) => fill(t.sayJunction, { n }),
 };
-
-/** Towns a road sign would name, read in the time a route may wait for them, else none. */
-const TOWNS_MS = 2500;
-const towns = (route: Route, mode: Mode): Promise<Town[]> =>
-  Promise.race([
-    townsAlong(track(route, mode)).catch(() => []),
-    new Promise<Town[]>((done) => setTimeout(() => done([]), TOWNS_MS)),
-  ]);
 
 /** A stop said by its name. */
 const STOP_WORDS: StopWords = {
@@ -127,9 +116,7 @@ export function useRoute(
 ) {
   const tollFreeRef = useRef(avoidTolls);
   const behindRef = useRef(stopsBehind);
-  const pinnedRef = useRef(pinned);
   useEffect(() => {
-    pinnedRef.current = pinned;
     tollFreeRef.current = avoidTolls;
     behindRef.current = stopsBehind;
   });
@@ -169,13 +156,6 @@ export function useRoute(
     const behind = pinned ? behindRef.current : 0;
     const via = viaOf(trip).slice(behind);
     const names = viaOf(trip).map((v) => v.name);
-    // The route as Valhalla gave it, kept to say again once the towns on its signs are read.
-    const raw = new WeakMap<Route, Route>();
-    const dress = (x: Route, towns: Town[]) => {
-      const done = nameStops(narrateWays(x, EXIT_WORDS, towns), names, behind, STOP_WORDS);
-      raw.set(done, x);
-      return done;
-    };
     const road = (alternates: number, noTolls: boolean) =>
       getJson(
         // A reroute while guiding: one route, leaving in the direction of travel.
@@ -192,16 +172,13 @@ export function useRoute(
           via,
         ),
         ctrl.signal,
-      ).then(async (r) => ({
+      ).then((r) => ({
         ...r,
-        // Guidance waits for the towns, as it says them; the route card shows its ways at once.
-        routes: !r.ok
-          ? []
-          : pinned
-            ? await Promise.all(
-                parseValhalla(r.json).map(async (x) => dress(x, await towns(x, trip.mode as Mode))),
-              )
-            : parseValhalla(r.json).map((x) => dress(x, [])),
+        routes: r.ok
+          ? parseValhalla(r.json).map((x) =>
+              nameStops(narrateWays(x, EXIT_WORDS), names, behind, STOP_WORDS),
+            )
+          : [],
       }));
     const ask =
       trip.mode === 'transit'
@@ -229,20 +206,6 @@ export function useRoute(
         setResult((prev) =>
           keepWhileNavigating(prev, { key, routes, error }, pinned, trip.mode === 'transit'),
         );
-        if (pinned || trip.mode === 'transit' || !routes.length) return;
-        // Behind, the towns its signs would name, for when it is started: the same ways, said
-        // again, unless guidance began meanwhile (it keeps the words it started with).
-        void Promise.all(
-          routes.map(async (x) => {
-            const from = raw.get(x);
-            return from ? dress(from, await towns(from, trip.mode as Mode)) : x;
-          }),
-        ).then((named) => {
-          if (ctrl.signal.aborted || pinnedRef.current) return;
-          setResult((prev) =>
-            prev?.key === key && prev.routes === routes ? { ...prev, routes: named } : prev,
-          );
-        });
       })
       .catch(() => {
         if (ctrl.signal.aborted) return;

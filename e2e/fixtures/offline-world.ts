@@ -1,7 +1,7 @@
 import type { BrowserContext } from '@playwright/test';
 import GeoJSONVT from 'geojson-vt';
 import vtpbf from 'vt-pbf';
-import { encodePolyline } from '../../src/core/route';
+import { decodePolyline, encodePolyline } from '../../src/core/route';
 import { CENTER, scene } from './scene';
 
 const indexes = Object.entries(scene()).map(
@@ -338,13 +338,35 @@ export async function offlineWorld(context: BrowserContext) {
     photonSearches.push(q);
     return route.fulfill({ contentType: 'application/json', body: photon(hits) });
   });
-  // Speed limits along a followed route: 30 km/h all the way.
+  // A followed route's trace: 30 km/h all the way, and at each corner a crossroads (the road
+  // in going on straight, and one more opposite the way out).
   await context.route(/valhalla1\.openstreetmap\.de\/trace_attributes/, (route) => {
     const body = JSON.parse(route.request().postData() ?? '{}');
     limitRequests.push(body.costing);
+    const pts = decodePolyline(body.encoded_polyline);
+    const heading = (p: Pt, q: Pt) =>
+      ((Math.atan2((q[0] - p[0]) * 0.61, q[1] - p[1]) * 180) / Math.PI + 360) % 360;
+    const edges = pts.slice(1).map((q, i) => {
+      const h = heading(pts[i], q);
+      const next = pts[i + 2] ? heading(q, pts[i + 2]) : h;
+      return {
+        length: 5 / (pts.length - 1),
+        speed_limit: 30,
+        begin_heading: h,
+        end_heading: h,
+        begin_shape_index: i,
+        end_shape_index: i + 1,
+        end_node: {
+          intersecting_edges: [
+            { begin_heading: h, driveability: 'both' },
+            { begin_heading: (next + 180) % 360, driveability: 'both' },
+          ],
+        },
+      };
+    });
     return route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify({ edges: [{ length: 5, speed_limit: 30 }] }),
+      body: JSON.stringify({ shape: body.encoded_polyline, edges }),
     });
   });
   await context.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {
