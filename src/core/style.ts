@@ -36,6 +36,9 @@ export const LABEL_LAYERS = [
   'contact-icons',
   'contact-groups',
   'label-poi',
+  'label-poi-13',
+  'label-poi-15',
+  'label-poi-16',
   'label-village',
   'label-town',
   'label-city',
@@ -44,6 +47,27 @@ export const LABEL_LAYERS = [
   'label-water-line',
   'label-peak',
 ] as const;
+
+const RANK: Expr = ['coalesce', ['get', 'rank'], 99];
+/**
+ * The map's own places, a layer per step of importance: the most important from zoom 13, more
+ * at 14 and 15, every one from 16 (`label-poi` holds the first steps; all of them are tapped
+ * alike, `POI_LAYERS`).
+ */
+export const POI_TIERS: {
+  id: string;
+  minzoom: number;
+  maxzoom?: number;
+  /** Ranks shown: above `after`, up to `upTo` (both optional). */
+  after?: number;
+  upTo?: number;
+}[] = [
+  { id: 'label-poi-13', minzoom: 13, maxzoom: 14, upTo: 3 },
+  { id: 'label-poi', minzoom: 14, upTo: 14 },
+  { id: 'label-poi-15', minzoom: 15, after: 14, upTo: 30 },
+  { id: 'label-poi-16', minzoom: 16, after: 30 },
+];
+export const POI_LAYERS = POI_TIERS.map((t) => t.id);
 
 /** The OpenMapTiles vector source. */
 export const MAP_SOURCE = 'omt';
@@ -586,27 +610,36 @@ function labels(p: Palette, lang: string): LayerSpecification[] {
       },
       paint: { 'text-color': p.labelMinor, ...halo },
     },
-    {
-      id: 'label-poi',
+    // Places come in by importance as the map zooms in (OpenMapTiles' `rank`: 1 the most
+    // important in its patch of map), the spacing between them tightening as there is room.
+    ...POI_TIERS.map(({ id, minzoom, maxzoom, after, upTo }): LayerSpecification => ({
+      id,
       type: 'symbol',
       source: MAP_SOURCE,
       'source-layer': 'poi',
-      minzoom: 15,
-      filter: ['all', hasName, isPoint],
+      minzoom,
+      ...(maxzoom ? { maxzoom } : {}),
+      filter: [
+        'all',
+        hasName,
+        isPoint,
+        ...(after !== undefined ? [['>', RANK, after]] : []),
+        ...(upTo !== undefined ? [['<=', RANK, upTo]] : []),
+      ] as unknown as FilterSpecification,
       // Below the place's point, not on it: a selected place's pin stands on the point, and a
       // category result's name takes this spot, so the map's own copy gives way to it.
       layout: {
         'text-field': name(lang),
         'text-font': [FONT.regular],
-        'text-size': lerp(15, 10.5, 18, 12.5),
+        'text-size': lerp(14, 10.5, 18, 12.5),
         'text-max-width': 7,
         'text-anchor': 'top',
         'text-offset': [0, 0.6],
-        'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
-        'text-padding': 6,
+        'symbol-sort-key': RANK,
+        'text-padding': lerp(14, 6, 18, 2),
       },
       paint: { 'text-color': p.labelMinor, ...halo },
-    },
+    })),
     {
       id: 'label-peak',
       type: 'symbol',

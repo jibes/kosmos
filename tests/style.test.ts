@@ -1,7 +1,7 @@
 import { validateStyleMin } from '@maplibre/maplibre-gl-style-spec';
 import { describe, expect, it } from 'vitest';
 import { palettes, type Palette } from '../src/core/palette';
-import { FONT, LABEL_LAYERS, buildStyle } from '../src/core/style';
+import { FONT, LABEL_LAYERS, POI_LAYERS, POI_TIERS, buildStyle } from '../src/core/style';
 
 describe('buildStyle', () => {
   for (const theme of ['light', 'dark'] as const) {
@@ -35,8 +35,31 @@ describe('buildStyle', () => {
   });
 
   it('hangs place labels below their point, where a pin standing on it leaves them readable', () => {
-    const poi = buildStyle({ theme: 'light', lang: 'en' }).layers.find((l) => l.id === 'label-poi');
-    expect(poi?.layout).toMatchObject({ 'text-anchor': 'top' });
+    const layers = buildStyle({ theme: 'light', lang: 'en' }).layers;
+    for (const id of POI_LAYERS) {
+      expect(layers.find((l) => l.id === id)?.layout).toMatchObject({ 'text-anchor': 'top' });
+    }
+  });
+
+  it('brings places in by importance as the map zooms in, each once', () => {
+    // How many tiers show a place of a rank at a zoom: never two, and more the closer in.
+    const shown = (rank: number, zoom: number) =>
+      POI_TIERS.filter(
+        (t) =>
+          zoom >= t.minzoom &&
+          zoom < (t.maxzoom ?? 24) &&
+          rank > (t.after ?? 0) &&
+          rank <= (t.upTo ?? Infinity),
+      ).length;
+    const ranks = [1, 3, 10, 20, 50];
+    for (const zoom of [12, 13, 14, 15, 16, 18]) {
+      for (const rank of ranks) expect(shown(rank, zoom)).toBeLessThanOrEqual(1);
+    }
+    const count = (zoom: number) => ranks.filter((r) => shown(r, zoom)).length;
+    expect([12, 13, 14, 15, 16].map(count)).toEqual([0, 2, 3, 4, 5]);
+    const layers = buildStyle({ theme: 'light', lang: 'en' }).layers.map((l) => l.id);
+    for (const id of POI_LAYERS) expect(layers).toContain(id);
+    for (const id of POI_LAYERS) expect(LABEL_LAYERS).toContain(id);
   });
 
   it('keeps streets and water apart from buildings and land at night', () => {

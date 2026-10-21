@@ -10,7 +10,7 @@ import {
   type Place,
 } from '../core/search';
 import { isStopPoi } from '../core/departures';
-import { LABEL_LAYERS, ROUTE_ALT_LAYER } from '../core/style';
+import { LABEL_LAYERS, POI_LAYERS, ROUTE_ALT_LAYER } from '../core/style';
 import { lang, t } from '../i18n';
 import { onLongPress } from './gestures';
 import { logEvent } from './usageLog';
@@ -32,7 +32,7 @@ export type Enrich = () => Promise<Partial<Place> | null>;
 
 /** How far a label's place may lie from where its label stands, by kind of label. */
 const RADIUS_M: Record<string, number> = {
-  'label-poi': 150,
+  ...Object.fromEntries(POI_LAYERS.map((id) => [id, 150])),
   'search-names': 150,
   'search-dots': 150,
   'label-peak': 1000,
@@ -224,7 +224,7 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
           : e.lngLat;
       const radius = RADIUS_M[f.layer.id] ?? PLACE_RADIUS_M;
       // A stop's label, or the dot of a stop a search found.
-      const stop = (f.layer.id === 'label-poi' && isStopPoi(props)) || props.stop === true;
+      const stop = (POI_LAYERS.includes(f.layer.id) && isStopPoi(props)) || props.stop === true;
       select({ name, detail: '', ...at, ...(stop ? { stop } : {}) }, () =>
         addressOf(name, at, radius),
       );

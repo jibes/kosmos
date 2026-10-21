@@ -228,7 +228,9 @@ test.describe('search', () => {
         layer,
       );
     await expect.poll(() => named('search-names')).toContain('Borchardt');
-    expect(await named('label-poi')).not.toContain('Borchardt');
+    for (const layer of ['label-poi', 'label-poi-15', 'label-poi-16']) {
+      expect(await named(layer)).not.toContain('Borchardt');
+    }
 
     // Typed in German, groceries: supermarket and bakery in view.
     await jump(page, { ...CENTER, zoom: 15 });
