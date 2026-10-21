@@ -33,6 +33,7 @@ export const JUNCTION_ATTRIBUTES = [
   'edge.begin_shape_index',
   'edge.end_shape_index',
   'edge.roundabout',
+  'edge.internal_intersection',
   'edge.drive_on_right',
   'node.intersecting_edge.begin_heading',
   'node.intersecting_edge.driveability',
@@ -52,6 +53,8 @@ interface VEdge {
   begin_shape_index?: number;
   end_shape_index?: number;
   roundabout?: boolean;
+  /** Across a dual carriageway's central reservation: part of one junction with its ends. */
+  internal_intersection?: boolean;
   drive_on_right?: boolean;
   end_node?: { intersecting_edges?: VCross[] };
 }
@@ -120,18 +123,32 @@ export function junctionsOf(json: unknown, route: Route, mode: Mode): Map<number
   return out;
 }
 
+/** A way out this close to straight back is a U-turn, drawn by its own arrow. */
+const BACK_DEG = 150;
+
+/**
+ * A junction from the node edge `i` arrives at. Across a dual carriageway the router goes by
+ * a short edge between its two halves (`internal_intersection`): the roads at both its ends
+ * are one junction, and the way out is the edge after it.
+ */
 function turn(edges: VEdge[], i: number, inH: number, mode: Mode): Junction | null {
-  const next = edges[i + 1]?.begin_heading;
+  let k = i + 1;
+  while (k < edges.length - 1 && edges[k].internal_intersection) k++;
+  const next = edges[k]?.begin_heading;
   if (next === undefined) return null;
   const o = rel(next - inH);
+  if (Math.abs(o) > BACK_DEG) return null;
   const others: number[] = [];
-  for (const x of edges[i].end_node?.intersecting_edges ?? []) {
-    if (x.begin_heading === undefined || !usable(x, mode)) continue;
-    const a = rel(x.begin_heading - inH);
-    // The other carriageway of the way in, or the way out's own twin: drawn already.
-    if (Math.abs(rel(a - 180)) < SAME_DEG || Math.abs(rel(a - o)) < SAME_DEG) continue;
-    if (others.some((b) => Math.abs(rel(a - b)) < SAME_DEG)) continue;
-    others.push(a);
+  for (let e = i; e < k; e++) {
+    for (const x of edges[e].end_node?.intersecting_edges ?? []) {
+      if (x.begin_heading === undefined || !usable(x, mode)) continue;
+      const a = rel(x.begin_heading - inH);
+      // The other carriageway of the way in, or the way out's own twin: drawn already.
+      if (Math.abs(rel(a - 180)) < SAME_DEG || Math.abs(rel(a - o)) < SAME_DEG) continue;
+      // Both halves of the road crossed, one arm each way.
+      if (others.some((b) => Math.abs(rel(a - b)) < SAME_DEG)) continue;
+      others.push(a);
+    }
   }
   return others.length ? { kind: 'turn', out: o, others: others.sort((a, b) => a - b) } : null;
 }

@@ -59,6 +59,49 @@ describe('junctions from the trace', () => {
     expect(junctionsOf({ edges: [] }, route, 'car').size).toBe(0);
   });
 
+  it('draws a turn across a dual carriageway as one crossroads, a U-turn by its arrow', () => {
+    // North up a side street, left across both halves of a road running east and west.
+    const c = [m(0, -200), m(0, 0), m(0, 15), m(-200, 15)];
+    const r = routeOf(c, [man(1, 0), man(15, 1), man(4, 3)]);
+    const trace = (out: number) => ({
+      shape: encodePolyline(c),
+      edges: [
+        {
+          begin_shape_index: 0,
+          end_shape_index: 1,
+          end_heading: 0,
+          // The near half runs east only.
+          end_node: {
+            intersecting_edges: [
+              { begin_heading: 90, driveability: 'forward' },
+              { begin_heading: 270, driveability: 'backward' },
+            ],
+          },
+        },
+        {
+          begin_shape_index: 1,
+          end_shape_index: 2,
+          begin_heading: 0,
+          internal_intersection: true,
+          // The far half runs west only; the side street goes on north.
+          end_node: {
+            intersecting_edges: [
+              { begin_heading: 90, driveability: 'backward' },
+              { begin_heading: 0, driveability: 'both' },
+            ],
+          },
+        },
+        { begin_shape_index: 2, end_shape_index: 3, begin_heading: out },
+      ],
+    });
+    expect(junctionsOf(trace(270), r, 'car').get(1)).toEqual({
+      kind: 'turn',
+      out: -90,
+      others: [0, 90],
+    });
+    expect(junctionsOf(trace(180), r, 'car').size).toBe(0);
+  });
+
   it('draws a roundabout with the exits passed, round the way traffic goes', () => {
     // North into a roundabout, past an exit east, out north again.
     const c = [m(0, -200), m(0, -20), m(15, 0), m(0, 20), m(0, 200)];
