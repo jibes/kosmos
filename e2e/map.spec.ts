@@ -730,6 +730,8 @@ test.describe('map', () => {
   test('keeps a usage log only when asked, saved as a file without places or words', async ({
     page,
   }) => {
+    // A settled map at zoom 14, a category search and a download: past 30 s on a busy runner.
+    test.slow();
     const about = () => page.getByRole('button', { name: '© OpenStreetMap' }).click();
     await about();
     const keep = page.getByRole('checkbox', { name: 'Keep a usage log on this device' });

@@ -60,6 +60,16 @@ test.describe('routes', () => {
     );
   });
 
+  test('shows the ways at once, not waiting for the towns on their signs', async ({
+    page,
+    context,
+  }) => {
+    // The towns come from zoom-10 tiles; these never answer.
+    await page.route(/\/planet\/[^/]+\/10\/\d+\/\d+\.pbf/, () => undefined);
+    const card = await openRoute(page, context);
+    await expect(card.locator('.summary strong')).toHaveText(/min/, { timeout: 2000 });
+  });
+
   test('changes the start and the destination of a route', async ({ page, context }) => {
     const card = await openRoute(page, context);
     await card.locator('.end-btn').first().click();
