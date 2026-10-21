@@ -17,6 +17,8 @@ test.describe('routes', () => {
   inWorld();
 
   test('routes to a place, with steps, by travel mode', async ({ page, context }, info) => {
+    // Every way of travel in turn: past 30 s on a slow runner.
+    test.slow();
     const card = await openRoute(page, context);
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     await expect(card.getByRole('radio', { name: 'Car' })).toHaveAttribute('aria-checked', 'true');

@@ -604,6 +604,8 @@ test.describe('map', () => {
   });
 
   test('renames a favourite, and keeps favourites in a backup file', async ({ page }) => {
+    // Rename, list, backup, reload and restore: past 30 s on a slow runner.
+    test.slow();
     const input = page.getByRole('combobox');
     await input.fill('brandenburger');
     await page.getByRole('option').first().click();
