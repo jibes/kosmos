@@ -75,10 +75,14 @@ export function RouteCard(props: Props) {
       : t.noLocation
     : status === 'none'
       ? t[`noRoute_${mode}`]
-      : // Online and still failed: the server, not the connection.
-        status === 'failed' && navigator.onLine
-        ? t.routeDown
-        : MESSAGE[status];
+      : status === 'noRoad'
+        ? t[`noRoad_${mode}`]
+        : status === 'tooFar'
+          ? t.routeTooFar
+          : // Online and still failed: the server, not the connection.
+            status === 'failed' && navigator.onLine
+            ? t.routeDown
+            : MESSAGE[status];
   // While a changed trip is asked for, the last ways found stay, dimmed, so nothing below the
   // points jumps (a road route for a road one: public transport is laid out otherwise).
   /** Places along the way, open under the links (closed again for another way of travel). */
@@ -222,7 +226,7 @@ export function RouteCard(props: Props) {
               {t.settings}
             </button>
           )}
-          {status === 'none' && (
+          {(status === 'none' || status === 'noRoad' || status === 'tooFar') && (
             // No way by this mode (a car-free zone, a ferry-only island): offer the others.
             <span className="route-try" role="group" aria-label={t.tryOther}>
               {TRAVEL_MODES.filter((m) => m !== mode).map((m) => (

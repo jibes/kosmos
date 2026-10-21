@@ -288,10 +288,16 @@ export function NavWaiting({ status, location, destination, ...on }: WaitingProp
           ? navigator.onLine
             ? t.routeDown
             : t.routeFailed
-          : status === 'none'
+          : status === 'none' || status === 'noRoad' || status === 'tooFar'
             ? t.noRoute
             : t.routing;
-  const stuck = noFix || status === 'busy' || status === 'failed' || status === 'none';
+  const stuck =
+    noFix ||
+    status === 'busy' ||
+    status === 'failed' ||
+    status === 'none' ||
+    status === 'noRoad' ||
+    status === 'tooFar';
   return (
     <>
       <section className="nav-banner" data-state={stuck ? 'rerouting' : 'go'}>

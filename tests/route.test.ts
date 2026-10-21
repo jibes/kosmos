@@ -336,6 +336,13 @@ describe('formatting', () => {
     expect(classifyError(429)).toBe('busy');
     expect(classifyError(400)).toBe('none');
     expect(classifyError(500)).toBe('failed');
+    // The router's own code says more than its status.
+    expect(classifyError(400, { error_code: 171, error: 'No suitable edges near location' })).toBe(
+      'noRoad',
+    );
+    expect(classifyError(400, '{"error_code":154}')).toBe('tooFar');
+    expect(classifyError(400, { error_code: 442 })).toBe('none');
+    expect(classifyError(400, 'not json')).toBe('none');
     expect(turnOf(10)).toBe('right');
     expect(turnOf(16)).toBe('slight-left');
     expect(turnOf(26)).toBe('roundabout');

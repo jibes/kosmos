@@ -314,10 +314,36 @@ export function parseValhalla(json: unknown): Route[] {
     .filter((x): x is Route => !!x);
 }
 
-export type RouteError = 'none' | 'busy' | 'failed';
+/**
+ * `none`: no way between the two ends; `noRoad`: none for this way of travel near one of them
+ * (a car park's private road, a footpath only); `tooFar`: past the router's limit for it.
+ */
+export type RouteError = 'none' | 'busy' | 'failed' | 'noRoad' | 'tooFar';
 
 /** Valhalla answers "no route" with HTTP 400; the public server says "busy" with 429. */
-export function classifyError(status: number): RouteError {
+/** Valhalla's own error codes, where they tell more than the status. */
+const NO_ROAD = new Set([170, 171]);
+const TOO_FAR = new Set([150, 154, 155, 156, 157]);
+
+/** The router's error code in its answer, if any. */
+export function errorCodeOf(json: unknown): number | undefined {
+  let body = json;
+  // The app's own HTTP hands a body it could not read as JSON over as text.
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return undefined;
+    }
+  }
+  const c = (body as { error_code?: unknown } | null)?.error_code;
+  return typeof c === 'number' ? c : undefined;
+}
+
+export function classifyError(status: number, json?: unknown): RouteError {
+  const code = errorCodeOf(json);
+  if (code !== undefined && NO_ROAD.has(code)) return 'noRoad';
+  if (code !== undefined && TOO_FAR.has(code)) return 'tooFar';
   if (status === 429 || status === 503) return 'busy';
   if (status === 400 || status === 404) return 'none';
   return 'failed';

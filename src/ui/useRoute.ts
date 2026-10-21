@@ -3,6 +3,7 @@ import { distance, type LngLat } from '../core/geo';
 import { courseOf, type Course } from '../core/nav';
 import {
   classifyError,
+  errorCodeOf,
   parseValhalla,
   routeUrl,
   needsTollFree,
@@ -213,9 +214,11 @@ export function useRoute(
               return { ...r, routes: withTollFree(r.routes, free?.routes ?? []) };
             });
     ask
-      .then(({ ok, status, routes }) => {
+      .then(({ ok, status, routes, json }) => {
         if (ctrl.signal.aborted) return;
-        const error = ok ? 'none' : classifyError(status);
+        const error = ok ? 'none' : classifyError(status, json);
+        // The usage log: why the router said no (never where).
+        if (!ok) logEvent('route.fail', { mode: trip.mode, status, code: errorCodeOf(json) ?? 0 });
         setResult((prev) =>
           keepWhileNavigating(prev, { key, routes, error }, pinned, trip.mode === 'transit'),
         );

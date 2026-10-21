@@ -891,6 +891,33 @@ test.describe('routes', () => {
     await expect(start).toBeEnabled();
   });
 
+  test('says when no road for the way of travel is near an end', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    // What Valhalla answers for a point only private or footpaths reach.
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) =>
+      route.request().url().includes('auto')
+        ? route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ error_code: 171, error: 'No suitable edges near location' }),
+          })
+        : route.fallback(),
+    );
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await expect(card.locator('.route-msg')).toContainText(
+      'No road for cars near the start or the destination',
+    );
+    // The other ways are offered as for no route at all.
+    await expect(card.getByRole('group', { name: 'Try another way' })).toBeVisible();
+  });
+
   test('a route to a dropped pin takes its address once it comes', async ({ page, context }) => {
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
