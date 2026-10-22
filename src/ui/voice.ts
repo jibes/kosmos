@@ -1,11 +1,10 @@
-import { QueueStrategy, TextToSpeech } from '@capacitor-community/text-to-speech';
 import { useCallback, useRef, useState } from 'react';
 import type { TravelMode } from '../core/route';
-import { duckAudio, isNative } from './native';
+import { duckAudio, isNative, nativeLog, speak, stopSpeaking } from './native';
 import { MUTED_KEY, store, storedMuted } from './prefs';
 import { logEvent } from './usageLog';
 
-/** Spoken guidance. Web Speech in browsers; the system engine (Google's voices) on Android. */
+/** Spoken guidance. Web Speech in browsers; on Android the speech engine the user chose. */
 export interface Voice {
   speak(text: string): void;
   stop(): void;
@@ -37,7 +36,8 @@ export function webVoice(lang: string): Voice {
 const DUCK_MAX_MS = 20_000;
 
 /**
- * Android's own speech engine: natural voices, offline, and it keeps talking in the background.
+ * The speech engine the user chose in Android's settings (Google's, or one such as HayaiTTS):
+ * natural voices, offline, and it keeps talking in the background (`KosmosPlugin.speak`).
  * Music and podcasts duck while it speaks, from the first queued prompt to the end of the last.
  */
 export function nativeVoice(lang: string): Voice {
@@ -58,14 +58,14 @@ export function nativeVoice(lang: string): Voice {
       const mine = round;
       clearTimeout(watchdog);
       watchdog = setTimeout(release, DUCK_MAX_MS);
-      void TextToSpeech.speak({ text, lang, rate: 1, queueStrategy: QueueStrategy.Add })
-        .catch(() => undefined)
+      void speak(text, lang)
+        .catch((e: unknown) => nativeLog('error', `prompt not spoken: ${String(e)}`))
         .finally(() => {
           if (mine === round && --speaking === 0) release();
         });
     },
     stop() {
-      void TextToSpeech.stop().catch(() => undefined);
+      stopSpeaking();
       release();
     },
   };

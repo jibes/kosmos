@@ -67,11 +67,15 @@
         </provider>
     </application>
 
-    <!-- geo: links open the user's navigation app of choice. -->
+    <!-- geo: links open the user's navigation app of choice; prompts speak with the user's
+         speech engine, which Android 11+ hides from apps that do not ask for it. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="geo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
     </queries>
 

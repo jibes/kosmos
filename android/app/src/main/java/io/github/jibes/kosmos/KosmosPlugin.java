@@ -16,12 +16,19 @@ import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.provider.ContactsContract;
 import android.provider.Settings;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
 import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -34,7 +41,7 @@ import com.getcapacitor.annotation.PermissionCallback;
 
 /**
  * The app's own small native helpers: its page in the system settings (where a refused location
- * permission is allowed again), other audio ducking under spoken prompts, a buzz for a turn
+ * permission is allowed again), spoken prompts and other audio ducking under them, a buzz for a turn
  * when the voice is off, the usage log handed to the share sheet, a place handed to another maps app, a place opened
  * or shared from another app, and a log line under its own tag. Release builds forward nothing
  * else from the WebView to the system log, so no position ever ends up there; the CI smoke test
@@ -212,6 +219,136 @@ public class KosmosPlugin extends Plugin {
             focus = null;
         }
         call.resolve();
+    }
+
+    /** The user's speech engine (Settings → Text-to-speech output), started with the first prompt. */
+    private TextToSpeech tts;
+    /** Whether it started: null while it still is. */
+    private Boolean ttsUp;
+    /** The language last asked of it: asked once, not with every prompt. */
+    private String ttsLang;
+    /** Prompts asked for while it starts, said once it has. */
+    private final List<PluginCall> waiting = new ArrayList<>();
+    /** Prompts handed to it, by utterance id, settled once said or stopped. */
+    private final Map<String, PluginCall> said = new HashMap<>();
+    private int utterances;
+
+    /**
+     * A prompt, queued behind the one speaking; settles once said or stopped. The language is a
+     * wish, not a condition: an engine that says no to it still speaks, with its own default
+     * voice. Some say no to every language (HayaiTTS misreads the three-letter codes Android
+     * asks with), and a prompt dropped on that answer left guidance silent.
+     */
+    @PluginMethod
+    public void speak(PluginCall call) {
+        synchronized (this) {
+            if (tts == null || Boolean.FALSE.equals(ttsUp)) startSpeech();
+            if (ttsUp == null) {
+                waiting.add(call);
+                return;
+            }
+        }
+        say(call);
+    }
+
+    /** The prompt speaking and every one queued, cut off; each settles. */
+    @PluginMethod
+    public void stopSpeaking(PluginCall call) {
+        List<PluginCall> cut;
+        synchronized (this) {
+            if (tts != null && Boolean.TRUE.equals(ttsUp)) tts.stop();
+            cut = new ArrayList<>(waiting);
+            cut.addAll(said.values());
+            waiting.clear();
+            said.clear();
+        }
+        for (PluginCall c : cut) c.resolve();
+        call.resolve();
+    }
+
+    /** Called with the lock held: the engine may answer at once, from inside its constructor. */
+    private void startSpeech() {
+        if (tts != null) tts.shutdown();
+        ttsUp = null;
+        ttsLang = null;
+        tts = new TextToSpeech(getContext(), this::speechStarted);
+        tts.setOnUtteranceProgressListener(
+            new UtteranceProgressListener() {
+                @Override
+                public void onStart(String id) {}
+
+                @Override
+                public void onDone(String id) {
+                    settle(id, null);
+                }
+
+                @Override
+                public void onError(String id) {
+                    settle(id, "Not spoken");
+                }
+
+                @Override
+                public void onError(String id, int code) {
+                    settle(id, "Not spoken (" + code + ")");
+                }
+
+                @Override
+                public void onStop(String id, boolean interrupted) {
+                    settle(id, null);
+                }
+            }
+        );
+    }
+
+    private void speechStarted(int status) {
+        List<PluginCall> now;
+        synchronized (this) {
+            ttsUp = status == TextToSpeech.SUCCESS;
+            if (!ttsUp) Log.w(TAG, "speech engine did not start (" + status + ")");
+            now = new ArrayList<>(waiting);
+            waiting.clear();
+        }
+        for (PluginCall c : now) say(c);
+    }
+
+    private void say(PluginCall call) {
+        String text = call.getString("text", "");
+        String lang = call.getString("lang", "");
+        synchronized (this) {
+            if (!Boolean.TRUE.equals(ttsUp)) {
+                call.reject("No speech engine", "UNAVAILABLE");
+                return;
+            }
+            if (!lang.isEmpty() && !lang.equals(ttsLang)) {
+                ttsLang = lang;
+                if (tts.setLanguage(Locale.forLanguageTag(lang)) < TextToSpeech.LANG_AVAILABLE) {
+                    Log.w(TAG, "speech engine has no voice for " + lang + ", speaking with its default");
+                }
+            }
+            String id = "prompt" + ++utterances;
+            said.put(id, call);
+            if (tts.speak(text, TextToSpeech.QUEUE_ADD, null, id) == TextToSpeech.SUCCESS) return;
+            said.remove(id);
+        }
+        call.reject("Not spoken", "UNAVAILABLE");
+    }
+
+    private void settle(String id, String error) {
+        PluginCall call;
+        synchronized (this) {
+            call = said.remove(id);
+        }
+        if (call == null) return;
+        if (error == null) call.resolve();
+        else call.reject(error, "SPEECH_ERROR");
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        synchronized (this) {
+            if (tts != null) tts.shutdown();
+            tts = null;
+        }
     }
 
     /** While guiding the page keeps running with the app out of sight (`KosmosWebView`). */
