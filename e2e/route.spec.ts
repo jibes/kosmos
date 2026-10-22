@@ -613,13 +613,6 @@ test.describe('routes', () => {
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     // A stop where the map is held.
     await idle(page);
-    // Clear of the card, which grows tall on a phone with three points.
-    const top = (await card.boundingBox())!.y;
-    const under = (await screenAt(page, CENTER.lng, CENTER.lat)).y - (top - 120);
-    if (under > 0) {
-      await page.evaluate((dy) => window.kosmos!.panBy([0, dy], { duration: 0 }), under);
-      await idle(page);
-    }
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
     await page.mouse.click(at.x, at.y, { button: 'right' });
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
@@ -687,7 +680,19 @@ test.describe('routes', () => {
     await expect(card.locator('.steps li').filter({ hasText: /^Arrive at/ })).toHaveCount(1);
     await card.locator('.steps summary').click();
     // From the map: a point held there.
+    // Close in: fitted to the whole way, the point lies under the destination's pin and the dot.
+    await page.evaluate(
+      ([lng, lat]) => window.kosmos!.jumpTo({ center: [lng, lat], zoom: 15 }),
+      [CENTER.lng, CENTER.lat],
+    );
     await idle(page);
+    // Clear of the card, which grows tall on a phone with three points.
+    const top = (await card.boundingBox())!.y;
+    const under = (await screenAt(page, CENTER.lng, CENTER.lat)).y - (top - 120);
+    if (under > 0) {
+      await page.evaluate((dy) => window.kosmos!.panBy([0, dy], { duration: 0 }), under);
+      await idle(page);
+    }
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
     await page.mouse.click(at.x, at.y, { button: 'right' });
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
