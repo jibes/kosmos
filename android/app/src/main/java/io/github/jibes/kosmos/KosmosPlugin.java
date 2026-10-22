@@ -57,6 +57,14 @@ public class KosmosPlugin extends Plugin {
 
     /** Held while prompts speak: music and podcasts duck under them, as for any navigation. */
     private AudioFocusRequest focus;
+    /**
+     * What prompts are, for the focus held and the voice itself: the navigation volume and route
+     * (a car's own guidance channel over Bluetooth or Android Auto), never the media's.
+     */
+    private static final AudioAttributes GUIDANCE = new AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build();
 
     /** The app's page in the settings, else the settings at all (some builds have no page). */
     @PluginMethod
@@ -205,12 +213,8 @@ public class KosmosPlugin extends Plugin {
         AudioManager audio = getContext().getSystemService(AudioManager.class);
         if (Boolean.TRUE.equals(call.getBoolean("on", false))) {
             if (focus == null) {
-                AudioAttributes guidance = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build();
                 focus = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                    .setAudioAttributes(guidance)
+                    .setAudioAttributes(GUIDANCE)
                     .build();
                 audio.requestAudioFocus(focus);
             }
@@ -272,6 +276,7 @@ public class KosmosPlugin extends Plugin {
         ttsUp = null;
         ttsLang = null;
         tts = new TextToSpeech(getContext(), this::speechStarted);
+        tts.setAudioAttributes(GUIDANCE);
         tts.setOnUtteranceProgressListener(
             new UtteranceProgressListener() {
                 @Override
