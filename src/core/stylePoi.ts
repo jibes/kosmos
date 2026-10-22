@@ -1,9 +1,11 @@
 import type { ExpressionSpecification } from '@maplibre/maplibre-gl-style-spec';
 import type { Palette } from './palette';
 import {
+  BY_CLASS,
+  BY_CLASS_FIRST,
+  BY_FAITH,
   POI_GROUP,
   POI_SUBCLASSES,
-  SHOP_CLASSES,
   type PlaceKind,
   type PoiGroup,
 } from './placeKind';
@@ -13,12 +15,27 @@ type Expr = ExpressionSpecification;
 /** The image of a kind of place, drawn by the app (`ui/poiIcons.ts`) when a style asks. */
 export const POI_ICON_PREFIX = 'poi-';
 
-/** A `poi` feature's kind with an icon, else `''`: by its subclass, then a shop by its class. */
+/** Values of `by` that lead to a kind with an icon, grouped by kind, as `match` arms. */
+const arms = (by: Record<string, PlaceKind>) => {
+  const out: Partial<Record<PlaceKind, string[]>> = {};
+  for (const [value, kind] of Object.entries(by))
+    if (POI_GROUP[kind]) (out[kind] ??= []).push(value);
+  return Object.entries(out).flatMap(([kind, values]) => [values!, kind]);
+};
+
+/** A `poi` feature's kind with an icon, else `''`: as `kindOfPoi` reads it. */
 const kindOf: Expr = [
   'match',
-  ['get', 'subclass'],
-  ...Object.entries(POI_SUBCLASSES).flatMap(([kind, values]) => [values!, kind]),
-  ['match', ['get', 'class'], SHOP_CLASSES, 'shop', ''],
+  ['get', 'class'],
+  'place_of_worship',
+  ['match', ['get', 'subclass'], ...arms(BY_FAITH), 'culture'],
+  ...arms(BY_CLASS_FIRST),
+  [
+    'match',
+    ['get', 'subclass'],
+    ...Object.entries(POI_SUBCLASSES).flatMap(([kind, values]) => [values!, kind]),
+    ['match', ['get', 'class'], ...arms(BY_CLASS), ''],
+  ],
 ] as unknown as Expr;
 
 const COLOUR: Record<PoiGroup, keyof Palette> = {

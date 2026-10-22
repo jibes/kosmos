@@ -44,5 +44,10 @@ describe('kind of place', () => {
     expect(kindOfPoi({ class: 'shop', subclass: 'electronics' })).toBe('shop');
     expect(kindOfPoi({ class: 'cafe', subclass: 'cafe' })).toBe('cafe');
     expect(kindOfPoi({ class: 'office', subclass: 'company' })).toBe('place');
+    // The same as the map's icons: a church by its faith, a pitch by its class.
+    expect(kindOfPoi({ class: 'place_of_worship', subclass: 'christian' })).toBe('church');
+    expect(kindOfPoi({ class: 'place_of_worship', subclass: 'hindu' })).toBe('culture');
+    expect(kindOfPoi({ class: 'pitch', subclass: 'tennis' })).toBe('sport');
+    expect(kindOfPoi({ class: 'aerialway', subclass: 'station' })).toBe('cable');
   });
 });

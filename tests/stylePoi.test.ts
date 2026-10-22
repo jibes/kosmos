@@ -37,7 +37,10 @@ describe("the map's places' icons", () => {
     expect(evaluate(img, { class: 'police', subclass: 'police' })).toBe('poi-police');
     expect(evaluate(img, { class: 'stadium', subclass: 'stadium' })).toBe('poi-sport');
     expect(evaluate(img, { class: 'swimming', subclass: 'swimming_pool' })).toBe('poi-sport');
-    expect(evaluate(img, { class: 'town_hall', subclass: 'townhall' })).toBe('poi-culture');
+    expect(evaluate(img, { class: 'town_hall', subclass: 'townhall' })).toBe('poi-civic');
+    expect(evaluate(img, { class: 'attraction', subclass: 'viewpoint' })).toBe('poi-view');
+    expect(evaluate(img, { class: 'campsite', subclass: 'camp_site' })).toBe('poi-camp');
+    expect(evaluate(img, { class: 'theatre', subclass: 'theatre' })).toBe('poi-theatre');
     expect(evaluate(img, { class: 'lodging', subclass: 'bed_and_breakfast' })).toBe('poi-stay');
     expect(evaluate(img, { class: 'fire_station', subclass: 'fire_station' })).toBe('poi-fire');
     expect(evaluate(img, { class: 'information', subclass: 'information' })).toBe('poi-info');
@@ -45,6 +48,22 @@ describe("the map's places' icons", () => {
     expect(evaluate(img, { class: 'cinema', subclass: 'cinema' })).toBe('poi-cinema');
     expect(evaluate(img, { class: 'library', subclass: 'library' })).toBe('poi-library');
     expect(evaluate(img, { class: 'toilets', subclass: 'toilets' })).toBe('poi-toilets');
+    // The tiles put a place of worship's faith, an information point's sort and a pitch's sport
+    // where the subclass would be: their class says what they are.
+    const worship = (subclass?: string) =>
+      evaluate(img, { class: 'place_of_worship', ...(subclass ? { subclass } : {}) });
+    expect(worship('christian')).toBe('poi-church');
+    expect(worship('muslim')).toBe('poi-mosque');
+    expect(worship('jewish')).toBe('poi-synagogue');
+    expect(worship('buddhist')).toBe('poi-culture');
+    expect(worship()).toBe('poi-culture');
+    expect(evaluate(img, { class: 'information', subclass: 'office' })).toBe('poi-info');
+    expect(evaluate(img, { class: 'pitch', subclass: 'soccer' })).toBe('poi-sport');
+    // A cable car's station is no train station.
+    expect(evaluate(img, { class: 'aerialway', subclass: 'station' })).toBe('poi-cable');
+    // An unknown subclass: its class still says what it is.
+    expect(evaluate(img, { class: 'hospital', subclass: 'nursing_home' })).toBe('poi-health');
+    expect(evaluate(img, { class: 'harbor', subclass: 'marina' })).toBe('poi-ferry');
   });
 
   it("tints it by its group's colour", () => {
@@ -54,6 +73,9 @@ describe("the map's places' icons", () => {
     expect(evaluate(c, { subclass: 'pharmacy' })).toBe(palettes.light.poiHealth);
     expect(evaluate(c, { subclass: 'fuel' })).toBe(palettes.light.poiTransport);
     expect(evaluate(c, { subclass: 'pitch' })).toBe(palettes.light.poiPark);
+    // Help when in trouble, one colour: health, fire and police.
+    expect(evaluate(c, { subclass: 'police' })).toBe(palettes.light.poiHealth);
+    expect(evaluate(c, { subclass: 'fire_station' })).toBe(palettes.light.poiHealth);
     expect(evaluate(c, { subclass: 'company' })).toBe(palettes.light.labelMinor);
   });
 
