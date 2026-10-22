@@ -686,9 +686,12 @@ test.describe('routes', () => {
       [CENTER.lng, CENTER.lat],
     );
     await idle(page);
-    // Clear of the card, which grows tall on a phone with three points.
-    const top = (await card.boundingBox())!.y;
-    const under = (await screenAt(page, CENTER.lng, CENTER.lat)).y - (top - 120);
+    // Clear of the card, which grows tall on a phone with three points (beside it in the side
+    // layout: nothing to do).
+    const cardBox = (await card.boundingBox())!;
+    const held = await screenAt(page, CENTER.lng, CENTER.lat);
+    const inside = held.x >= cardBox.x && held.x <= cardBox.x + cardBox.width;
+    const under = inside ? held.y - (cardBox.y - 120) : 0;
     if (under > 0) {
       await page.evaluate((dy) => window.kosmos!.panBy([0, dy], { duration: 0 }), under);
       await idle(page);
