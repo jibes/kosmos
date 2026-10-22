@@ -666,13 +666,15 @@ test.describe('guidance', () => {
   }) => {
     // A slow wake lock: it arrives after guidance has ended.
     await page.evaluate(() => {
-      const w = window as unknown as { held: number };
+      const w = window as unknown as { held: number; came: number };
       w.held = 0;
+      w.came = 0;
       Object.defineProperty(navigator, 'wakeLock', {
         value: {
           request: () =>
             new Promise((done) =>
               setTimeout(() => {
+                w.came++;
                 w.held++;
                 done({ release: async () => void w.held-- });
               }, 4000),
@@ -696,8 +698,14 @@ test.describe('guidance', () => {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.getByRole('button', { name: 'End' }).click();
     await page.getByRole('button', { name: /(Tap|Click) again to end navigation/ }).click();
-    await page.waitForTimeout(4500);
-    expect(await page.evaluate(() => (window as unknown as { held: number }).held)).toBe(0);
+    // Once the lock has come (a busy page's timer may be late), it is let go at once.
+    const lock = () =>
+      page.evaluate(() => {
+        const { came, held } = window as unknown as { held: number; came: number };
+        return { came, held };
+      });
+    await expect.poll(async () => (await lock()).came, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await lock()).held).toBe(0);
   });
 
   test('shows the speed limit, the speed red when well over it', async ({
