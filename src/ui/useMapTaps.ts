@@ -250,9 +250,20 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
           );
         };
         const { addStopRef } = opts.current;
-        const stop = addStopRef.current.can
-          ? [{ label: t.addStop, run: () => addStopRef.current.add(pin) }]
-          : [];
+        // A stop held on the map takes its address too, as a start or destination does.
+        const addPin = () => {
+          addStopRef.current.add(pin);
+          void spotOf(here)
+            .catch(() => null)
+            .then((extra) =>
+              setTrip((tr) =>
+                tr?.via?.includes(pin)
+                  ? { ...tr, via: tr.via.map((v) => (v === pin ? { ...pin, ...extra } : v)) }
+                  : tr,
+              ),
+            );
+        };
+        const stop = addStopRef.current.can ? [{ label: t.addStop, run: addPin }] : [];
         showToast(t.droppedPin, [
           { label: t.startHere, run: () => set('from') },
           ...stop,

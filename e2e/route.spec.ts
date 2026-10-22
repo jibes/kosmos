@@ -580,6 +580,51 @@ test.describe('routes', () => {
     expect(Math.abs(pin.y + pin.height - end.y)).toBeLessThan(16);
   });
 
+  test("the destination's pin follows the list: a stop moved to the end, the end taken off", async ({
+    page,
+    context,
+  }) => {
+    const card = await openRoute(page, context);
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    // A stop where the map is held.
+    await idle(page);
+    const at = await screenAt(page, CENTER.lng, CENTER.lat);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
+    // It takes its address, and Undo still takes it off after that.
+    await expect(card.locator('.point-list li').nth(1)).toContainText('Unter den Linden 5');
+    await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+    await expect(card.locator('.point-list li')).toHaveCount(2);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
+    await expect(card.locator('.point-list li')).toHaveCount(3);
+    /** How far the pin's tip stands from the trip's end as the router was last asked, px. */
+    const offEnd = () =>
+      page.evaluate((to) => {
+        const pin = document.querySelector('.pin')!.getBoundingClientRect();
+        const p = window.kosmos!.project(to as [number, number]);
+        return Math.hypot(pin.x + pin.width / 2 - p.x, pin.bottom - p.y);
+      }, routeRequests.at(-1)!.to);
+    await expect.poll(offEnd).toBeLessThan(3);
+    // The stop moved to the end by the keyboard: the route and the pin go there.
+    const grip = card.getByRole('button', { name: 'Move Unter den Linden 5', exact: true });
+    await grip.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(card.locator('.end-btn').last()).toHaveText('Unter den Linden 5');
+    await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(CENTER.lng, 2);
+    await expect.poll(offEnd).toBeLessThan(3);
+    await expect(page.locator('.pin')).toHaveCount(1);
+    // That end taken off: the one before is the end again, and so is the pin.
+    const last = card.locator('.point-list li').last();
+    await last.getByRole('button', { name: /^Remove/ }).click();
+    await expect(card.locator('.point-list li')).toHaveCount(2);
+    await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(SEARCH_HIT.lng, 4);
+    await expect.poll(offEnd).toBeLessThan(3);
+    // Closed, the card under it is the destination's.
+    await card.getByRole('button', { name: 'Close' }).first().click();
+    await expect(page.locator('.card h2').first()).toHaveText(SEARCH_HIT.name);
+  });
+
   test('goes by way of stops: added from the card or the map, taken off again', async ({
     page,
     context,
@@ -617,7 +662,8 @@ test.describe('routes', () => {
     // Where it was held, give or take the map settling under the pointer; nearer along the way
     // than the first stop, so before it.
     expect(routeRequests.at(-1)!.via[0][0]).toBeCloseTo(CENTER.lng, 2);
-    await expect(card.locator('.point-list li').nth(1)).toContainText('Dropped pin');
+    // Its address, once looked up, as a start or destination held on the map has.
+    await expect(card.locator('.point-list li').nth(1)).toContainText('Unter den Linden 5');
     await expect(page.locator('.stop-dot')).toHaveText(['1', '2']);
     // The second dragged above the first by its grip: the router asked in the new order.
     const grip = card.getByRole('button', { name: /^Move Brandenburg an/ });
@@ -630,7 +676,7 @@ test.describe('routes', () => {
       })
       .toBeLessThan(1);
     const above = (await card
-      .getByRole('button', { name: 'Move Dropped pin', exact: true })
+      .getByRole('button', { name: 'Move Unter den Linden 5', exact: true })
       .boundingBox())!;
     const box = (await grip.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -650,7 +696,7 @@ test.describe('routes', () => {
     await card.getByRole('radio', { name: 'Car' }).click();
     await expect(card.locator('.point-list li')).toHaveCount(4);
     // Taken off again: straight there.
-    await card.getByRole('button', { name: 'Remove Dropped pin' }).click();
+    await card.getByRole('button', { name: 'Remove Unter den Linden 5' }).click();
     await card.getByRole('button', { name: /^Remove Brandenburg an/ }).click();
     // Two left: neither comes off.
     await expect(card.getByRole('button', { name: /^Remove / })).toHaveCount(0);

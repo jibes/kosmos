@@ -180,18 +180,27 @@ export function App() {
     setTrip((tr) => (tr ? { ...tr, mode } : tr));
   }, []);
 
-  // Pin: the selected place.
+  // Pin: the selected place, or with a route open its destination, whichever point the list
+  // now ends with (moved, taken off, changed while guiding).
   const pin = useRef<maplibregl.Marker | null>(null);
-  const sel = selection?.place;
+  const end = trip ? trip.to : selection?.place;
   useEffect(() => {
     if (!map) return;
-    if (!sel) {
+    if (!end) {
       pin.current?.remove();
       return;
     }
     pin.current ??= pinMarker();
-    pin.current.setLngLat([sel.lng, sel.lat]).addTo(map);
-  }, [map, sel?.lng, sel?.lat]); // eslint-disable-line react-hooks/exhaustive-deps
+    pin.current.setLngLat([end.lng, end.lat]).addTo(map);
+  }, [map, end?.lng, end?.lat]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The card under the route's is its destination's, so closing the route shows that place.
+  // Quietly: not `select`, which would stop following while guiding.
+  const to = trip?.to;
+  const [lastTo, setLastTo] = useState(to);
+  if (to !== lastTo) {
+    setLastTo(to);
+    if (to && !to.here && selection?.place !== to) setSelection({ place: to, loading: false });
+  }
 
   useMapTaps(map, {
     labelLang: LABEL_LANG,
@@ -580,6 +589,7 @@ export function App() {
   useHint(map, showToast, dismissText, !!selection || !!trip || navigating);
   useShared(map, select, search.searchFor);
 
+  const sel = selection?.place;
   const panelRef = usePanel(map, sel && !trip && !navigating ? sel : null, selection?.loading);
 
   return (

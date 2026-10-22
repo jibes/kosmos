@@ -109,8 +109,16 @@ export function useStops({
       });
       logEvent('stop.add', { navigating });
       // A label tapped by mistake while driving: undone in one tap, no list to open.
+      // By its point: a stop held on the map takes its address after it was added.
       const undo = () =>
-        setTrip((tr) => (tr ? { ...tr, via: viaOf(tr).filter((v) => v !== place) } : tr));
+        setTrip((tr) =>
+          tr
+            ? {
+                ...tr,
+                via: viaOf(tr).filter((v) => v.lng !== place.lng || v.lat !== place.lat),
+              }
+            : tr,
+        );
       showToast(fill(t.stopAdded, { name: place.name }), [{ label: t.undo, run: undo }]);
     },
     [setTrip, showToast, navigating, first, wayTrack],
