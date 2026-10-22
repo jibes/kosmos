@@ -48,6 +48,8 @@ const Kosmos = isNative
       pip(o: { on: boolean }): Promise<void>;
       keepRunning(o: { on: boolean }): Promise<void>;
       log(o: { level: 'info' | 'error'; message: string }): Promise<void>;
+      speak(o: { text: string; lang: string }): Promise<void>;
+      stopSpeaking(): Promise<void>;
       vibrate(o: { pattern: number[] }): Promise<void>;
       takeShared(): Promise<{ text?: string }>;
       shareFile(o: { name: string; text: string; type?: string }): Promise<void>;
@@ -126,6 +128,16 @@ export async function saveFile(name: string, text: string, type = 'text/plain') 
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
   return true;
 }
+
+/**
+ * Android: a prompt said by the user's own speech engine, queued behind the one speaking;
+ * settles once said or stopped. The engine's own voice when it has none for `lang`.
+ */
+export const speak = (text: string, lang: string) =>
+  Kosmos ? Kosmos.speak({ text, lang }) : Promise.resolve();
+
+/** Android: the prompt speaking and every one queued, cut off. */
+export const stopSpeaking = () => void Kosmos?.stopSpeaking().catch(() => undefined);
 
 /** Android: other audio ducks while `on` (a prompt speaks), and comes back after. */
 export const duckAudio = (on: boolean) => void Kosmos?.duck({ on }).catch(() => undefined);

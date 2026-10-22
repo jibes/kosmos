@@ -18,15 +18,15 @@ kOSMos is free software under [GPL-3.0-or-later](LICENSE). It holds no data of i
 
 ## Software
 
-| Component                                                      | Licence      |
-| -------------------------------------------------------------- | ------------ |
-| MapLibre GL JS                                                 | BSD-3-Clause |
-| @mapbox/vector-tile, pbf                                       | BSD-3-Clause |
-| React, React DOM                                               | MIT          |
-| Capacitor and plugins (app, share, text to speech, keep awake) | MIT          |
-| AndroidX libraries (in the Android app)                        | Apache-2.0   |
-| Apache Cordova Android framework, cordova.js (via Capacitor)   | Apache-2.0   |
-| Workbox (via vite-plugin-pwa)                                  | MIT          |
-| Inter (bundled), Noto (glyph server)                           | OFL-1.1      |
+| Component                                                    | Licence      |
+| ------------------------------------------------------------ | ------------ |
+| MapLibre GL JS                                               | BSD-3-Clause |
+| @mapbox/vector-tile, pbf                                     | BSD-3-Clause |
+| React, React DOM                                             | MIT          |
+| Capacitor and plugins (app, share, keep awake)               | MIT          |
+| AndroidX libraries (in the Android app)                      | Apache-2.0   |
+| Apache Cordova Android framework, cordova.js (via Capacitor) | Apache-2.0   |
+| Workbox (via vite-plugin-pwa)                                | MIT          |
+| Inter (bundled), Noto (glyph server)                         | OFL-1.1      |
 
 The map style (`src/core/style.ts`) and palette (`src/core/palette.ts`) are original to this project.
