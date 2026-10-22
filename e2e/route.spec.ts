@@ -573,11 +573,17 @@ test.describe('routes', () => {
     await expect(card.locator('.point-list')).not.toContainText('Brandenburger Tor');
     await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(CENTER.lng, 3);
     // The pin moves to the new destination: it no longer marks the old one.
-    await idle(page);
-    const end = await screenAt(page, CENTER.lng, CENTER.lat);
-    const pin = (await page.locator('.pin').boundingBox())!;
-    expect(Math.abs(pin.x + pin.width / 2 - end.x)).toBeLessThan(4);
-    expect(Math.abs(pin.y + pin.height - end.y)).toBeLessThan(16);
+    // Polled: the map may still be easing to the new route.
+    await expect
+      .poll(async () => {
+        await idle(page);
+        const end = await screenAt(page, CENTER.lng, CENTER.lat);
+        const pin = (await page.locator('.pin').boundingBox())!;
+        return (
+          Math.abs(pin.x + pin.width / 2 - end.x) < 4 && Math.abs(pin.y + pin.height - end.y) < 16
+        );
+      })
+      .toBe(true);
   });
 
   test('a note with many choices stays clear of the map buttons', async ({ page, context }) => {
