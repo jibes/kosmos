@@ -22,8 +22,10 @@ export interface PointListProps {
 
 const keyOf = (p: Point, i: number, points: Point[]) => {
   // "My location" is the same point wherever it goes, live at the start or the position now.
-  const id = p && !p.here ? `${p.lng},${p.lat}` : 'me';
-  return `${id}#${points.slice(0, i).filter((q) => q === p).length}`;
+  const idOf = (q: Point) => (q && !q.here ? `${q.lng},${q.lat}` : 'me');
+  const id = idOf(p);
+  // Two at the same spot (the start chosen as the end too) are told apart by their order.
+  return `${id}#${points.slice(0, i).filter((q) => idOf(q) === id).length}`;
 };
 
 /**

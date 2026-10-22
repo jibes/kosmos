@@ -4,7 +4,7 @@ import type { Place } from '../core/search';
 import { parseShared, type Shared } from '../core/shared';
 import { lookupUrl, parseLookup, parseLookupPlace } from '../core/details';
 import { lang, t } from '../i18n';
-import { getJson, nominatimSlot, nominatimWait } from './http';
+import { getJson, nominatimSlot } from './http';
 import { knowDetails } from './usePlaceDetails';
 import { focusSearch } from './a11y';
 import { motion } from './motion';
@@ -13,8 +13,8 @@ import { addressOf, spotOf, type Enrich } from './useMapTaps';
 
 /** An OSM object by its id, through Nominatim's one-a-second slot; `null` when not found. */
 async function lookUp(osm: string) {
-  await new Promise((go) => setTimeout(go, nominatimWait()));
-  nominatimSlot();
+  // Its turn reserved at once: another lookup asked meanwhile waits for the next one.
+  await new Promise((go) => setTimeout(go, nominatimSlot()));
   try {
     const r = await getJson(lookupUrl(osm, lang), new AbortController().signal);
     if (!r.ok) return null;
@@ -41,17 +41,21 @@ export function useShared(
   map: maplibregl.Map | null,
   select: (place: Place, enrich?: Enrich) => void,
   setQuery: (q: string) => void,
+  /** A route open is closed for it; guidance is never taken over: it waits until it ends. */
+  trip: { guiding: boolean; open: boolean; close: () => void; note: (text: string) => void },
 ) {
-  /** Handed over before the map was ready: shown once it is. */
+  /** Handed over before the map was ready, or while guiding: shown once it can be. */
   const pending = useRef<Shared | null>(null);
   const show = useRef<(s: Shared) => void>(() => undefined);
   useEffect(() => {
     show.current = (s: Shared) => {
-      if (!map) {
+      if (!map || trip.guiding) {
+        if (map && pending.current !== s) trip.note(t.sharedLater);
         pending.current = s;
         return;
       }
       pending.current = null;
+      if (trip.open) trip.close();
       if ('query' in s) {
         setQuery(s.query);
         focusSearch();

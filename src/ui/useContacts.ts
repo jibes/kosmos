@@ -236,9 +236,14 @@ export function useContactsRow(
       })
       .finally(() => setBusy(false));
   }, [say]);
+  // Hundreds placed by a lookup each: one tap off is one tap back.
+  const onForget = useCallback(() => {
+    const was = list;
+    forgetContacts();
+    say(t.contactsRemoved, [{ label: t.undo, run: () => list.length || set(was) }]);
+  }, [say]);
   return useMemo(
-    () =>
-      contactsAvailable() ? { list: contacts, busy, onAdd, onForget: forgetContacts } : undefined,
-    [contacts, busy, onAdd],
+    () => (contactsAvailable() ? { list: contacts, busy, onAdd, onForget } : undefined),
+    [contacts, busy, onAdd, onForget],
   );
 }

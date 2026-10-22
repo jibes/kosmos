@@ -31,7 +31,8 @@ export function About({ onClose }: { onClose: () => void }) {
       ref={dialog}
       className="about surface"
       aria-labelledby="about-title"
-      onClose={onClose}
+      // Closed and shown again at once (React's development double run): no close to act on.
+      onClose={() => !dialog.current?.open && onClose()}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="about-body">

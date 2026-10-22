@@ -41,6 +41,13 @@ test.describe('along the route', () => {
         window.kosmos!.querySourceFeatures('along').map((f) => String(f.properties.name)),
       );
     await expect.poll(dots).toContain('Linden-Apotheke');
+    // The system turning dark restyles the map: the dots stay (a tunnel does the same).
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe('dark');
+    await page.waitForTimeout(1000);
+    await expect.poll(dots).toContain('Linden-Apotheke');
     // None of a kind the way does not pass.
     await along.getByRole('button', { name: 'Petrol stations', exact: true }).click();
     await expect(along.locator('.along-list')).toHaveText('None along the way');

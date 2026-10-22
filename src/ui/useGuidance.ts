@@ -138,8 +138,13 @@ export function useGuidance(o: Options) {
       }
       const s = nav.snap;
       // On the line the arrow rides the route; off it (or after arriving) it is where the fix
-      // is, and so is the camera: a missed turn must not leave the user off the screen.
-      const onLine = !!s && !nav.arrived && s.offset < offRouteLimit(f.accuracy, ways.current.mode);
+      // is, and so is the camera: a missed turn must not leave the user off the screen. Going
+      // back down the route is off it too: riding the line the arrow would stand, facing on.
+      const onLine =
+        !!s &&
+        !nav.arrived &&
+        nav.offSince === null &&
+        s.offset < offRouteLimit(f.accuracy, ways.current.mode);
       const center: [number, number] = onLine ? s.point : [f.lng, f.lat];
       const course = nav.moving && f.heading != null && !Number.isNaN(f.heading) ? f.heading : null;
       // Standing on the route by road, it still faces the way on.
@@ -197,11 +202,13 @@ export function useGuidance(o: Options) {
       if (lookedRef.current) {
         if (map.isMoving()) return glideTo(null);
         lookedRef.current = false;
-        adjustRef.current = {
-          zoomBy:
-            map.getZoom() - navZoomFor(lastView.current.mode, nav.speed, lastView.current.toTurn),
-          pitch: map.getPitch(),
-        };
+        // Pinched in the way-back view: its zoom and flat map are no adjustment to keep.
+        if (!autoRef.current)
+          adjustRef.current = {
+            zoomBy:
+              map.getZoom() - navZoomFor(lastView.current.mode, nav.speed, lastView.current.toTurn),
+            pitch: map.getPitch(),
+          };
       }
       const away = s && !onLine && !nav.arrived ? s.point : null;
       const far = !!away && distance(f, { lng: away[0], lat: away[1] }) > OVERVIEW_M;

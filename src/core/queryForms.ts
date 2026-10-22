@@ -12,8 +12,12 @@ const PAIR_RES = [20, 1, 0.05, 0.0025, 0.000125];
 const GRID_ROWS = 5;
 const GRID_COLS = 4;
 
-/** A Plus Code anywhere in the text ("9C5M8RJW+Q2", "8RJW+Q2 Dublin"), and the rest of it. */
-const PLUS = /(?:^|\s)([23456789CFGHJMPQRVWX]{2,8}\+[23456789CFGHJMPQRVWX]{0,7})(?=\s|,|$)/i;
+/**
+ * A Plus Code anywhere in the text ("9C5M8RJW+Q2", "8RJW+Q2 Dublin"), and the rest of it. A
+ * short one always has two characters or more after the "+" ("Lidl 24+" is none).
+ */
+const C = '[23456789CFGHJMPQRVWX]';
+const PLUS = new RegExp(`(?:^|\\s)(${C}{8}\\+${C}{0,7}|${C}{2,7}\\+${C}{2,7})(?=\\s|,|$)`, 'i');
 
 /** The middle of a full code's area; null for a code that is not one. */
 function decodeFull(code: string): LngLat | null {

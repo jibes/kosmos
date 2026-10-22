@@ -450,6 +450,32 @@ describe('fixes not to be trusted, turns not taken', () => {
     expect(states.at(-1)!.offRoute).toBe(true);
   });
 
+  it('never counts going on along the route as back, after a fix off it snapped far ahead', () => {
+    // North 1 km, east 100 m, back south: a side road east off the way up comes within 40 m of
+    // the way back, 1.8 km along.
+    const u = routeThrough(
+      [
+        [0, 0],
+        [0, 1000],
+        [100, 1000],
+        [100, 0],
+      ],
+      [
+        { type: 1, text: 'Head north.' },
+        { type: 10, text: 'Turn right.' },
+        { type: 10, text: 'Turn right.' },
+        { type: 4, text: 'You have arrived.' },
+      ],
+    );
+    const fixes: [number, number][] = [];
+    for (let n = 0; n <= 300; n += 20) fixes.push(m(0, n));
+    for (const e of [20, 40, 60, 60, 40, 20]) fixes.push(m(e, 300));
+    for (let n = 300; n <= 900; n += 20) fixes.push(m(0, n));
+    const { states } = replay(u, fixes, 10);
+    expect(states.at(-1)!.offRoute).toBe(false);
+    expect(states.at(-1)!.offSince).toBeNull();
+  });
+
   it('notices a course against the route', () => {
     let st = initialNav();
     for (let i = 0; i <= 10; i++) {

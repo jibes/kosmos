@@ -132,8 +132,10 @@ function legDone(legs: TransitLeg[], i: number, fix: Fix | null, time: number): 
   if (l.ride) {
     // A vehicle that does not run is never ridden; the rider needs another connection.
     if (l.cancelled || time < l.start) return false;
+    // Ending at the destination: only a position says so (below), never the timetable.
+    const last = !next;
     // No position (underground): the timetable moves the rider on.
-    if (!fix) return time >= l.end + 120_000;
+    if (!fix) return !last && time >= l.end + 120_000;
     // At the stop to get off, whenever: a vehicle ahead of its timetable too.
     if (d < atStop(fix)) return true;
     const on = project(l.coords, fix);
@@ -146,10 +148,10 @@ function legDone(legs: TransitLeg[], i: number, fix: Fix | null, time: number): 
       // At the end of the line already.
       if (on.along >= on.total - 30) return true;
       // On the line and short of the stop: riding, late or not, for up to an hour.
-      return time >= l.end + LATE_MAX_MS;
+      return !last && time >= l.end + LATE_MAX_MS;
     }
     // Away from the line and from the stop: the timetable decides.
-    return time >= l.end + 120_000;
+    return !last && time >= l.end + 120_000;
   }
   if (next?.ride) {
     // No position: trust the timetable once the vehicle has left (provisionally, see `blind`).
@@ -171,8 +173,9 @@ function evaluate(tr: Transit, prev: RideState, seen: Fix | null, time: number):
   let leg = prev.leg;
   let blind = prev.blind;
   // Boarded on the timetable alone: a first fix still at the stop, not along the line, after
-  // the departure, means the vehicle left without the rider.
-  if (fix && blind !== null && leg === blind) {
+  // the departure, means the vehicle left without the rider; also once the timetable has
+  // carried the rider past that ride.
+  if (fix && blind !== null && leg >= blind) {
     const l = legs[blind];
     const on = project(l.coords, fix);
     if (
@@ -183,11 +186,13 @@ function evaluate(tr: Transit, prev: RideState, seen: Fix | null, time: number):
       leg = blind - 1;
     blind = null;
   }
-  // At the destination itself, from the last ride on: arrived, whatever the timetable says.
+  // At the destination itself, from the last ride on (or got there another way, the ride
+  // ahead missed or cancelled): arrived, whatever the timetable says.
   let lastRide = -1;
   legs.forEach((l, i) => l.ride && (lastRide = i));
   const dest = legs[legs.length - 1]?.to;
-  if (fix && dest && leg >= lastRide && metres(fix, dest) < atStop(fix)) leg = legs.length;
+  const anyWay = leg >= lastRide || prev.missed || prev.cancelled;
+  if (fix && dest && anyWay && metres(fix, dest) < atStop(fix)) leg = legs.length;
   while (leg < legs.length && legDone(legs, leg, fix, time)) {
     // A walk to a vehicle done without a position is only provisional.
     if (!fix && !legs[leg].ride && legs[leg + 1]?.ride) blind = leg + 1;
@@ -336,7 +341,9 @@ export function ridePrompt(tr: Transit, st: RideState): RidePrompt | null {
     if (st.missed) return ask('missed', st.leg);
     return changes(st.leg) ?? (st.cancelled ? null : ask('board', st.leg));
   }
-  return st.stopsLeft === 1 ? ask('next', st.leg) : null;
+  // Not while still at the stop boarded at (a ride of one stop, its vehicle late): once moving.
+  const moving = st.rideAt === null || st.rideAt > PAST_STOP_M;
+  return st.stopsLeft === 1 && moving ? ask('next', st.leg) : null;
 }
 
 export const markRideSpoken = (st: RideState, key: string): RideState => ({

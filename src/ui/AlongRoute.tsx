@@ -117,7 +117,7 @@ export function AlongRoute({ route, mode, from, lang, find, show, onAdd, heading
       </div>
       {kind && (
         <ul className="along-list" aria-live="polite">
-          {found === 'loading' && <li className="r-empty r-loading" aria-label={t.routing} />}
+          {found === 'loading' && <li className="r-empty r-loading" aria-label={t.searching} />}
           {found === 'failed' && <li className="r-empty">{t.alongFailed}</li>}
           {found && typeof found === 'object' && !shown.length && (
             <li className="r-empty">{t.noneAlong}</li>

@@ -84,6 +84,14 @@
   color: var(--muted);
   cursor: grab;
   touch-action: none;
+  position: relative;
+}
+
+/* 44 px to hold, wider than it looks. */
+.grip::after {
+  content: '';
+  position: absolute;
+  inset: 0 -6px;
 }
 
 .grip:active {
@@ -191,7 +199,8 @@ span.end-btn {
 }
 
 .route-msg button,
-.depart button {
+.depart button,
+.departures-note button {
   min-height: 44px;
   padding: 0 8px;
   color: var(--accent);

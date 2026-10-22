@@ -20,7 +20,7 @@ import {
   useFavourites,
 } from './useFavourites';
 import { rememberPlace } from './useRecent';
-import { favouriteOf, LABEL_MAX, titleOf } from '../core/favourites';
+import { favouriteOf, LABEL_MAX, titleOf, type Favourite } from '../core/favourites';
 import { copy, share } from './native';
 import { Departures } from './Departures';
 import { PlaceDetails } from './PlaceDetails';
@@ -43,9 +43,18 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
 
   const fav = favouriteOf(useFavourites(), place);
   const starred = !!fav;
-  // Starred while its address was still coming: kept with it once it is here.
+  // Starred while its address was still coming: kept with it once it is here, by the name the
+  // lookup found too (a dropped pin's is what is there).
+  const early = useRef<Favourite | undefined>(undefined);
   useEffect(() => {
-    if (!loading && fav && ((!fav.detail && place.detail) || (!fav.osm && place.osm))) {
+    if (loading) {
+      early.current = fav;
+      return;
+    }
+    const was = early.current;
+    early.current = undefined;
+    if (!fav && was) completeFavouritePlace(place, was);
+    else if (fav && ((!fav.detail && place.detail) || (!fav.osm && place.osm))) {
       completeFavouritePlace(place);
     }
   }, [loading, fav, place]);

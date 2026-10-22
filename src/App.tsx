@@ -14,7 +14,8 @@ import { connectionStart, RideView, rideWords } from './ui/RideView';
 import { showNearby } from './ui/nearby';
 import { ResultsSheet } from './ui/ResultsSheet';
 import { RouteCard } from './ui/RouteCard';
-import { SearchBar, useSearch } from './ui/SearchBar';
+import { SearchBar } from './ui/SearchBar';
+import { useSearch } from './ui/useSearch';
 import { Toasts, useToast } from './ui/Toasts';
 import { useLocation } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
@@ -50,8 +51,7 @@ import { addressOf, useMapTaps, type Enrich } from './ui/useMapTaps';
 import { useHint } from './ui/useHint';
 import { useTheme } from './ui/useTheme';
 import { systemVoice, useMuted } from './ui/voice';
-import { keepAwake } from './ui/wakeLock';
-import { usePip } from './ui/usePip';
+import { useNavSession } from './ui/useNavSession';
 import { useKeepMap } from './ui/useKeepMap';
 
 /** Map labels follow the browser language even where the UI falls back to English. */
@@ -371,7 +371,7 @@ export function App() {
     setTrip,
     guided,
     way: riding ? undefined : shown[chosen],
-    current: route.current,
+    current: route.made,
     nav,
     navigating,
     state: stopState,
@@ -430,6 +430,7 @@ export function App() {
     // A plan for "now" left open until its first vehicle has gone: the next ones instead.
     const tr = shown[chosen]?.transit;
     if (trip.mode === 'transit' && !trip.at && tr && departed(tr, Date.now())) {
+      setActive(0);
       route.retry();
       showToast(t.replanned);
       return;
@@ -489,21 +490,7 @@ export function App() {
     if (followRef.current !== 'off') setFollow('position');
     map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: motion(800) });
   }, [map, voice, setFollow]);
-  useEffect(() => {
-    if (!navigating) return;
-    background(true, () =>
-      showToast(
-        t.needPrecise,
-        openAppSettings ? [{ label: t.settings, run: openAppSettings }] : undefined,
-      ),
-    );
-    const release = keepAwake();
-    return () => {
-      release();
-      background(false);
-    };
-  }, [navigating, background, showToast]);
-  usePip(navigating);
+  useNavSession(navigating, background, showToast);
   useKeepMap(guided, roadMode, navigating && !riding);
 
   const locate = () => {
@@ -519,8 +506,8 @@ export function App() {
     start();
     void compass.start();
     if (navigating) return navControls.locate();
-    // A route open: following, the next tap shows all of it; the one after, the user again.
-    if (trip && route.status === 'ready' && follow !== 'off') {
+    // A route open (not while picking a point): following, the next tap shows all of it.
+    if (trip && route.status === 'ready' && picking === null && follow !== 'off') {
       setFollow('off');
       return routeLayer.fit();
     }
@@ -587,7 +574,12 @@ export function App() {
   useAutoLocate(map, start, flyOnFix);
 
   useHint(map, showToast, dismissText, !!selection || !!trip || navigating);
-  useShared(map, select, search.searchFor);
+  useShared(map, select, search.searchFor, {
+    guiding: navigating,
+    open: !!trip,
+    close: closeRoute,
+    note: showToast,
+  });
 
   const sel = selection?.place;
   const panelRef = usePanel(map, sel && !trip && !navigating ? sel : null, selection?.loading);

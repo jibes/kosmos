@@ -4,8 +4,8 @@ import { encodePolyline, parseValhalla, routeUrl } from '../src/core/route';
 import {
   leavingStop,
   MAX_STOPS,
-  moveStopUp,
   nameStops,
+  renameStops,
   SKIP_AWAY_M,
   stopIndex,
   stopsReached,
@@ -93,6 +93,14 @@ describe('stops on the way', () => {
     });
   });
 
+  it('says a stop by the name it got after its route came, the same route if none did', () => {
+    expect(renameStops(route, ['Anna', 'Ben'], WORDS)).toBe(route);
+    const named = renameStops(route, ['Hauptstraße 5', 'Ben'], WORDS);
+    const stops = named.maneuvers.filter((x) => x.via !== undefined);
+    expect(stops.map((x) => x.pre)).toEqual(['Your stop: Hauptstraße 5.', 'Your stop: Ben.']);
+    expect(stops[1]).toBe(route.maneuvers.find((x) => x.via === 1));
+  });
+
   it('says each stop on the way, arrives only at the end', () => {
     const tr = track(route);
     let st = markSpoken(initialNav(), '0:pre');
@@ -127,14 +135,6 @@ describe('stops on the way', () => {
     expect(stopsReached(tr, { ...st, offRoute: true, next: 1 }, 0)).toBe(0);
     // What was reached before a reroute stays reached.
     expect(stopsReached(tr, st, 1)).toBe(1);
-  });
-
-  it('moves a stop a place earlier, never before one already reached', () => {
-    expect(moveStopUp(['a', 'b', 'c'], 2)).toEqual(['a', 'c', 'b']);
-    expect(moveStopUp(['a', 'b', 'c'], 0)).toEqual(['a', 'b', 'c']);
-    // Guiding, a reached: b stays the next one.
-    expect(moveStopUp(['a', 'b', 'c'], 1, 1)).toEqual(['a', 'b', 'c']);
-    expect(moveStopUp(['a', 'b', 'c'], 2, 1)).toEqual(['a', 'c', 'b']);
   });
 
   it('arrives 40 m short of the end along the route: the door is off the road', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  telOf,
   isOsmId,
   lookupUrl,
   nominatimSearchUrl,
@@ -99,5 +100,13 @@ describe('Nominatim search', () => {
     });
     expect(parseLookupPlace([])).toBeNull();
     expect(parseLookupPlace([{ lat: 'x', lon: '1' }])).toBeNull();
+  });
+});
+
+describe('phone links', () => {
+  it('dials the first number, without the trunk zero after the country code', () => {
+    expect(telOf('+49 (0)30 1234567')).toBe('tel:+49301234567');
+    expect(telOf('+353 1 234 5678; +353 87 1234567')).toBe('tel:+35312345678');
+    expect(telOf('(030) 123-45')).toBe('tel:03012345');
   });
 });

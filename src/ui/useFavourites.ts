@@ -51,8 +51,8 @@ export function putBackFavourite(f: Favourite) {
 }
 
 /** The address and OSM id a favourite starred too soon lacks, from its card's place. */
-export function completeFavouritePlace(p: Place) {
-  const next = completeFavourite(list, p);
+export function completeFavouritePlace(p: Place, was?: Favourite) {
+  const next = completeFavourite(list, p, was);
   if (next.some((f, i) => f !== list[i])) set(next);
 }
 
@@ -83,6 +83,7 @@ const placeRest = ({ lng, lat, osm, kind, stop }: Favourite) => ({
 export const placeOf = (f: Favourite): Place => ({
   name: titleOf(f),
   detail: f.label ? [f.name, f.detail].filter(Boolean).join(', ') : f.detail,
+  ...(f.label ? { own: f.name } : {}),
   ...placeRest(f),
 });
 

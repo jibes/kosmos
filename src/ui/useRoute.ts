@@ -15,7 +15,7 @@ import {
   type TravelMode,
 } from '../core/route';
 import { narrateWays, type ExitWords } from '../core/roundabout';
-import { nameStops, type StopWords } from '../core/stops';
+import { nameStops, renameStops, type StopWords } from '../core/stops';
 import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
 import { fill, t, units } from '../i18n';
@@ -40,6 +40,8 @@ interface Result {
   error: RouteError;
   /** The last answer failed and the route being driven was kept. */
   kept?: boolean;
+  /** The key its routes were made for: a kept one's own, not the one asked since. */
+  made: string;
   /** Counts answers, so a caller can tell when the one it asked for came. */
   n: number;
 }
@@ -51,7 +53,7 @@ const REFRESH_MS = 60_000;
 const NO_ROUTES: Route[] = [];
 
 /** A router's answer with the routes read from it. */
-type Answer = Awaited<ReturnType<typeof getJson>> & { routes: Route[] };
+type Answer = Awaited<ReturnType<typeof getJson>> & { routes: Route[]; publicEnds?: boolean };
 
 /** The way out of a roundabout, in the UI's language, as the router's own words are. */
 const EXIT_WORDS: ExitWords = {
@@ -88,11 +90,12 @@ const sameEnd = (a: string, b: string) =>
 
 /**
  * A failed reroute must not take the route away from someone who is following it, nor a failed
- * new connection the one being ridden (asked from elsewhere, under another key).
+ * new connection the one being ridden (asked from elsewhere, under another key), nor a failed
+ * refresh the route card's.
  */
 const keepWhileNavigating = (
   prev: Result | null,
-  next: Omit<Result, 'n'>,
+  next: Omit<Result, 'n' | 'made'>,
   pinned: boolean,
   transit: boolean,
 ): Result => {
@@ -101,9 +104,13 @@ const keepWhileNavigating = (
   // while guiding from here: a road route from a chosen start is no way from where the user
   // now is.
   const same = prev?.key === next.key || (transit && !!prev) || sameEnd(next.key, prev?.key ?? '');
-  return pinned && !next.routes.length && same && prev?.routes.length
+  // An open road route asked again as the user moved on: a server not answering leaves it
+  // shown.
+  const refresh =
+    !transit && prev?.key === next.key && (next.error === 'failed' || next.error === 'busy');
+  return (pinned ? same : refresh) && !next.routes.length && prev?.routes.length
     ? { ...prev!, key: next.key, kept: true, n }
-    : { ...next, n };
+    : { ...next, made: next.key, n };
 };
 
 /** Asks the router once per trip; following the user's location never polls it. */
@@ -200,6 +207,7 @@ export function useRoute(
         }
         return {
           ...r,
+          publicEnds,
           routes: r.ok
             ? parseValhalla(r.json).map((x) =>
                 nameStops(narrateWays(x, EXIT_WORDS), names, behind, STOP_WORDS),
@@ -223,7 +231,8 @@ export function useRoute(
               // Every way found by car has toll roads: one more request for a way without, so
               // there is always one to choose (marked by its absence of coins).
               if (trip.mode !== 'car' || !needsTollFree(r.routes)) return r;
-              const free = await road(0, true).catch(() => null);
+              // From the public roads at once when the first needed them: no "no path" again.
+              const free = await road(0, true, r.publicEnds).catch(() => null);
               return { ...r, routes: withTollFree(r.routes, free?.routes ?? []) };
             });
     ask
@@ -249,6 +258,18 @@ export function useRoute(
       });
   }, [trip, here, key, lang, attempt, pinned]);
 
+  // A stop's name come after its route (a point held on the map, then its address): said by it.
+  // Not while guiding, where a new route object would start guidance over.
+  const names = trip ? viaOf(trip).map((v) => v.name) : [];
+  const [namedFor, setNamedFor] = useState(names.join('\n'));
+  if (!pinned && names.join('\n') !== namedFor) {
+    setNamedFor(names.join('\n'));
+    if (result?.made === key && result.routes.length) {
+      const routes = result.routes.map((r) => renameStops(r, names, STOP_WORDS));
+      if (routes.some((r, i) => r !== result.routes[i])) setResult({ ...result, routes });
+    }
+  }
+
   const current = !!trip && result?.key === key;
   let status: RouteStatus = 'loading';
   if (current && result) {
@@ -268,6 +289,11 @@ export function useRoute(
     settled: result?.n ?? 0,
     /** The routes are for the trip as it is now, not the one followed while asking. */
     current,
+    /**
+     * Made for the trip as it is now: a route kept after a failed request for changed stops
+     * numbers them by its own list, not the trip's.
+     */
+    made: current && result?.made === key,
     kept: !!result?.kept,
     retry: () => setAttempt((a) => a + 1),
   };

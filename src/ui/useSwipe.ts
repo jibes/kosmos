@@ -58,7 +58,11 @@ export function useSwipe(
 
     const onStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) {
+        // A second finger mid-drag: let go where it is, not left part-way.
+        if (start && mode === 'drag') handlers.current.onEnd(last, 0);
         start = null;
+        mode = 'wait';
+        last = 0;
         return;
       }
       const touch = e.touches[0];

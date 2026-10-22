@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { categoriesFor, foundFor, foundOf, type Kind } from '../core/categories';
 import { nominatimSearchUrl, parseNominatim } from '../core/details';
 import { formatLngLat, type LngLat } from '../core/geo';
@@ -27,56 +27,9 @@ import { isFavourite } from '../core/favourites';
 import { forgetRecent, rememberPlace, rememberRecent, useRecent } from './useRecent';
 import { folderName, labelOf as label, rowClass, rowKey, rowLabel, SearchRow } from './SearchRow';
 
+import { useSearch, type SearchState } from './useSearch';
+
 type Status = 'idle' | 'loading' | 'done' | 'error' | 'slow';
-
-/** What is being searched for: by name, or a kind of place (or a chain) on the map. */
-export interface SearchState {
-  query: string;
-  setQuery: (q: string) => void;
-  category: Kind | null;
-  setCategory: (c: Kind | null) => void;
-  /** A list of the user's own, or the kinds of place, open in the field's place. */
-  folder: Folder | null;
-  /** Into a list or out of it; the text was for the other, so it goes. */
-  setFolder: (f: Folder | null) => void;
-  /** Empties the field and ends the category (its dots go with it). */
-  clear: () => void;
-  /** The text to search for, out of any category or list. */
-  searchFor: (q: string) => void;
-}
-
-/** The search's own state, kept by whoever should outlive the bar (App, across a route). */
-export function useSearch(): SearchState {
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<Kind | null>(null);
-  const [folder, setFolderState] = useState<Folder | null>(null);
-  return useMemo(
-    () => ({
-      query,
-      setQuery,
-      category,
-      setCategory,
-      folder,
-      setFolder: (f: Folder | null) => {
-        setFolderState(f);
-        setQuery('');
-        setCategory(null);
-      },
-      clear: () => {
-        setQuery('');
-        setCategory(null);
-        setFolderState(null);
-      },
-      /** Words to search for from elsewhere (a shared message): out of any kind or list first. */
-      searchFor: (q: string) => {
-        setQuery(q);
-        setCategory(null);
-        setFolderState(null);
-      },
-    }),
-    [query, category, folder],
-  );
-}
 
 interface Props {
   /** Kept outside, to survive the bar being hidden; the bar keeps its own without it. */
@@ -269,6 +222,10 @@ export function SearchBar({
   };
   /** Typed: the user's own favourites and contacts by name, before the world's places. */
   const favs = blank || folder || category ? [] : matchFavourites(favourites, q);
+  const typedPeople =
+    blank || folder || category ? [] : matchContacts(contacts?.list ?? people ?? [], q);
+  /** Rows made on the device for exactly this text: fresh before any name has come. */
+  const local = suggestions.length + favs.length + typedPeople.length;
   const items: Item[] = folder
     ? folderItems({ ...list, folder })
     : blank
@@ -276,7 +233,7 @@ export function SearchBar({
       : [
           ...suggestions,
           ...favs.map((f): Item => ({ type: 'place', place: placeOf(f), fav: true })),
-          ...(category ? [] : matchContacts(contacts?.list ?? people ?? [], q)).map((c): Item => ({
+          ...typedPeople.map((c): Item => ({
             type: 'place',
             place: placeOfContact(c),
             contact: true,
@@ -569,7 +526,9 @@ export function SearchBar({
       if (onShowAll) requestAnimationFrame(() => onShowAll());
     } else if (
       e.key === 'Enter' &&
-      (status === 'error' || status === 'slow' || (current?.fallback && !results.length)) &&
+      (status === 'error' ||
+        (status === 'slow' && !current?.pending) ||
+        (current?.fallback && !results.length)) &&
       !suggestions.length
     ) {
       askedFor.current = key;
@@ -577,7 +536,7 @@ export function SearchBar({
       setRetry((n) => n + 1);
     } else if (e.key === 'Enter') {
       // Only rows for exactly this query; stale names from the last query would jump wrong.
-      const fresh = blank || folder || current || active < suggestions.length;
+      const fresh = blank || folder || current || active < local;
       const it = fresh ? items[active] : undefined;
       // The top row was not chosen, only offered: with several names, Enter shows them all.
       const all =
@@ -590,7 +549,10 @@ export function SearchBar({
         results.length > 1;
       if (all) showFound(results);
       else if (it) choice(it);
-      else if (q.length >= 2 && status === 'loading') jumpFor.current = key;
+      // Still coming (Nominatim already asked, too): opened when it comes, never asked twice.
+      else if (q.length >= 2 && (status === 'loading' || status === 'slow')) {
+        jumpFor.current = key;
+      }
     } else if (e.key === 'Delete' && items[active]?.type === 'recent') {
       const it = items[active];
       if (it.type === 'recent') forgetRecent(it.recent);
@@ -644,7 +606,8 @@ export function SearchBar({
       aria-label={rowLabel(it)}
       onPointerDown={(e) => e.preventDefault()}
       onClick={() => choice(it)}
-      onPointerEnter={() => setActive(i)}
+      // A mouse's hover chooses; a finger touching down to scroll does not.
+      onPointerEnter={(e) => e.pointerType === 'mouse' && setActive(i)}
     >
       <SearchRow
         it={it}

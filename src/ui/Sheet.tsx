@@ -47,6 +47,8 @@ export function Sheet({ className, peek, children, busy, startMin, hidden, label
 
   const dragged = useRef(false);
   const down = (e: PointerEvent) => {
+    // A touch drag sends no click after it: the last drag says nothing of this press.
+    dragged.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = { y: e.clientY, t: e.timeStamp, moved: false };
   };

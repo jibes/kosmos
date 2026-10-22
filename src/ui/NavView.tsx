@@ -160,7 +160,8 @@ export function NavView(props: Props) {
           data-state={nav.arrived ? 'arrived' : rerouting ? 'rerouting' : 'go'}
         >
           {/* The whole banner opens the steps ahead; the button inside says so to a screen reader. */}
-          {guiding && (
+          {/* Off the route too, where a stop pulling the user back is taken off. */}
+          {!nav.arrived && (
             <button
               type="button"
               className="ride-toggle"

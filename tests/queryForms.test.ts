@@ -23,6 +23,9 @@ describe('plus codes', () => {
 
   it('is not fooled by other words with a plus', () => {
     expect(plusCode('C++ meetup')).toBeNull();
+    // A short code always has two characters after its "+": these are names.
+    expect(plusCode('Lidl 24+')).toBeNull();
+    expect(plusCode('22+ Club')).toBeNull();
     expect(plusCode('Café Einstein')).toBeNull();
   });
 });

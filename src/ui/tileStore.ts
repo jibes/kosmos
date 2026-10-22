@@ -14,6 +14,8 @@ const SCHEME = 'kosmos';
 const DB = 'kosmos-tiles';
 /** A TileJSON this old is asked again first; offline the kept one serves. */
 const SOURCE_MS = 4000;
+/** A tile fetched for later gives up after this, as the app's other requests do. */
+const PREFETCH_TIMEOUT_MS = 20_000;
 
 let db: Promise<IDBDatabase> | null = null;
 const open = () =>
@@ -75,13 +77,16 @@ async function write(k: string, data: ArrayBuffer, keep: boolean, got = Date.now
   if (total === null || total > OFFLINE_MAX_BYTES) void makeRoom();
 }
 
-/** Shown again: kept longer. Written at most once a day, as it is shown all the time. */
+/**
+ * Shown again: kept longer. Written at most once a day, as it is shown all the time; the record
+ * read anew in the same transaction, so a write since (the world's keep flag) is never undone.
+ */
 async function touch(meta: Meta) {
   if (Date.now() - meta.at < 86_400_000) return;
   const d = await open();
-  d.transaction('meta', 'readwrite')
-    .objectStore('meta')
-    .put({ ...meta, at: Date.now() });
+  const metas = d.transaction('meta', 'readwrite').objectStore('meta');
+  const now = await done(metas.get(meta.k) as IDBRequest<Meta | undefined>);
+  if (now) metas.put({ ...now, at: Date.now() });
 }
 
 let tidying = false;
@@ -180,13 +185,6 @@ async function network(url: string, signal?: AbortSignal) {
   return res.arrayBuffer();
 }
 
-/** Kept already (prefetching skips it). */
-export async function isKept(url: string) {
-  const d = await open();
-  const n = await done(d.transaction('meta').objectStore('meta').count(tileKey(url)));
-  return n > 0;
-}
-
 /**
  * The TileJSON: asked first; the kept one offline or when the network is slow. With none kept,
  * the network is waited for however long it takes, or a slow first start had no map at all.
@@ -247,8 +245,9 @@ export function registerTileStore() {
 }
 
 /**
- * Many tiles fetched for later (the world, a trip), a few at a time, each kept one skipped.
- * Ends early when `stop` says so (guidance ended, the network gone); says how many came.
+ * Many tiles fetched for later (the world, a trip), a few at a time: a kept one is only shown
+ * again (so making room keeps it) or, stale, fetched anew. Ends early when `stop` says so
+ * (guidance ended, the network gone); says how many are kept and how many failed.
  */
 export async function prefetch(
   urls: string[],
@@ -259,8 +258,9 @@ export async function prefetch(
     /** How many are done (kept, fetched or missing), now and then. */
     progress?: (done: number, total: number) => void;
   } = {},
-): Promise<number> {
+): Promise<{ got: number; failed: number }> {
   let got = 0;
+  let failed = 0;
   let i = 0;
   let handled = 0;
   let told = 0;
@@ -276,16 +276,16 @@ export async function prefetch(
     while (i < urls.length && !o.stop?.()) {
       const url = urls[i++];
       try {
-        if (o.keep || !(await isKept(url))) {
-          await storedFetch(url, o.keep, undefined, true);
-          got++;
-        }
+        // Each request ends: a stalled connection would otherwise hold the download for good.
+        await storedFetch(url, o.keep, AbortSignal.timeout(PREFETCH_TIMEOUT_MS), true);
+        got++;
       } catch {
         // Missing (an empty sea tile) or the network gone: the next one.
+        failed++;
       }
       tell();
     }
   };
   await Promise.all(Array.from({ length: o.at ?? 4 }, worker));
-  return got;
+  return { got, failed };
 }

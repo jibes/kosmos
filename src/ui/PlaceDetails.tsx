@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { withScheme, type Details } from '../core/details';
+import { telOf, withScheme, type Details } from '../core/details';
 import {
   allDay,
   hoursState,
@@ -86,7 +86,7 @@ export function PlaceDetails({ details, lng }: { details: Details; lng: number }
       {hours && <Hours spec={hours} lng={lng} />}
       {(phone || website) && (
         <p className="contacts">
-          {phone && <a href={`tel:${phone.replace(/[^\d+]/g, '')}`}>{phone}</a>}
+          {phone && <a href={telOf(phone)}>{phone}</a>}
           {website && (
             <a href={withScheme(website)} target="_blank" rel="noreferrer">
               {

@@ -64,7 +64,7 @@ export function useKeepMap(route: Route | undefined, mode: Mode, navigating: boo
       }
       running = true;
       let stopped = false;
-      const got = await prefetch(
+      const { got, failed } = await prefetch(
         worldTiles(z).map((tile) => tileUrl(template, tile)),
         {
           keep: true,
@@ -76,12 +76,15 @@ export function useKeepMap(route: Route | undefined, mode: Mode, navigating: boo
       );
       running = false;
       setFetching('world', null);
-      if (!stopped) {
+      // Most failing is no world kept (Wi-Fi without the internet, a hotel's login page): again
+      // next time, not in a month.
+      const kept = !stopped && failed * 2 < got + failed;
+      if (kept) {
         store(WORLD_KEY, JSON.stringify({ at: Date.now(), z }));
         // Asked once kept: else the browser may drop the store when space runs low.
         void navigator.storage?.persist?.().catch(() => undefined);
       }
-      logEvent('tiles.world', { z, got, done: !stopped });
+      logEvent('tiles.world', { z, got, failed, done: kept });
     };
     // An automated browser that asked (`worldZoom`) need not wait.
     id = window.setTimeout(run, navigator.webdriver ? 500 : WORLD_AFTER_MS);
@@ -113,7 +116,7 @@ export function useKeepMap(route: Route | undefined, mode: Mode, navigating: boo
     void prefetch(urls, {
       stop: () => !live || !guiding.current || !navigator.onLine,
       progress: (done, total) => setFetching('trip', { done, total }),
-    }).then((got) => {
+    }).then(({ got }) => {
       setFetching('trip', null);
       if (live && navigator.onLine) logEvent('tiles.trip', { n: urls.length, got });
     });

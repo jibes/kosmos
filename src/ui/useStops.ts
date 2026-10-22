@@ -90,6 +90,15 @@ export function useStops({
   useEffect(() => {
     if (navigating) setBehind(0);
   }, [navigating, setBehind]);
+  // Ended part-way: the stops reached are dropped, as the way from here skips them already.
+  const [wasGuiding, setWasGuiding] = useState(navigating);
+  if (navigating !== wasGuiding) {
+    setWasGuiding(navigating);
+    if (!navigating && behind) {
+      setBehind(0);
+      setTrip((tr) => tr && { ...tr, via: viaOf(tr).slice(behind) });
+    }
+  }
   const tr = useMemo(() => (guided ? track(guided) : null), [guided]);
   useEffect(() => {
     if (navigating && tr && current) setBehind((b) => stopsReached(tr, nav, b));
@@ -101,6 +110,8 @@ export function useStops({
   const wayTrack = useMemo(() => (way && !way.transit ? track(way) : null), [way]);
   const addStop = useCallback(
     (place: Place) => {
+      // Full (filled meanwhile, from a note offered before): nothing added, nothing said.
+      if (!canAdd) return;
       setTrip((tr) => {
         const via = viaOf(tr);
         if (!tr || tr.mode === 'transit' || via.length - first >= MAX_STOPS) return tr;
@@ -121,7 +132,7 @@ export function useStops({
         );
       showToast(fill(t.stopAdded, { name: place.name }), [{ label: t.undo, run: undo }]);
     },
-    [setTrip, showToast, navigating, first, wayTrack],
+    [setTrip, showToast, navigating, first, wayTrack, canAdd],
   );
 
   /** "My location" anywhere but first: the position now. */

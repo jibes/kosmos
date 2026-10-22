@@ -19,7 +19,8 @@ adb shell am start -W -n "$PKG/.MainActivity"
 # release build forwards nothing else from the WebView), at most 60 s, then a little longer for
 # the first tiles to draw.
 for _ in $(seq 1 30); do
-  adb logcat -d | grep -q "kosmos:ready" && break
+  # Not grep -q: quitting early breaks the pipe, and pipefail would never let the loop end.
+  adb logcat -d | grep "kosmos:ready" > /dev/null && break
   sleep 2
 done
 sleep 8
@@ -112,7 +113,7 @@ guide() {
   adb shell cmd location set-location-enabled true
   for _ in $(seq 1 20); do
     adb emu geo fix 13.4050 52.5200 >/dev/null
-    adb logcat -d | grep -q "navigation: first fix" && break
+    adb logcat -d | grep "navigation: first fix" > /dev/null && break
     sleep 2
   done
   adb logcat -d > "$OUT/logcat-$name.txt"

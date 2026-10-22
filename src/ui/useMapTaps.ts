@@ -143,16 +143,24 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
                 detail: '',
                 lng: f.geometry.coordinates[0],
                 lat: f.geometry.coordinates[1],
+                ...((POI_LAYERS.includes(f.layer.id) && isStopPoi(p)) || p.stop === true
+                  ? { stop: true }
+                  : {}),
               }
             : null;
       if (!place) return;
+      // A label's address and id, as a tap without a route looks them up: for its card.
+      const label = !fav && !contact && f;
+      const enrich = label
+        ? () => addressOf(place.name, place, RADIUS_M[label.layer.id] ?? PLACE_RADIUS_M)
+        : undefined;
       const { setTrip, select, setActive } = opts.current;
       const goHere = () => {
         logEvent('route.end', { navigating: navRef.current });
         setActive(0);
         setTrip((now) => (now ? { ...now, to: place } : now));
         // A new destination is the selected place too: its pin and, on closing, its card.
-        if (!navRef.current) select(place);
+        if (!navRef.current) select(place, enrich);
       };
       showToast(place.name, [
         ...(canStop ? [{ label: t.addStop, run: () => addStopRef.current.add(place) }] : []),

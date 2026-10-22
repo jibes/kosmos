@@ -489,7 +489,8 @@
   right: 16px;
 }
 
-.about svg {
+/* The logo, not the close button's cross. */
+.about-body > svg {
   border-radius: 14px;
   box-shadow: var(--shadow);
 }

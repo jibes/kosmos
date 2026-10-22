@@ -308,11 +308,15 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
   // Too coarse to tell which road, let alone which side of a turn: wait for a better fix.
   if (fix.accuracy > COARSE_M) return { ...prev, weak: true };
   const s = snap(tr, fix, prev.snap?.segment ?? 0, reachOf(prev, fix));
-  // Never let a noisy fix move progress backwards by more than a few metres.
+  const limit = offRouteLimit(fix.accuracy, tr.mode);
+  // Never let a noisy fix move progress backwards by more than a few metres; progress from a
+  // fix off the route (snapped anywhere along it) is none to hold.
   const along =
-    prev.snap && s.along < prev.snap.along - 30 && s.offset > 20 ? prev.snap.along : s.along;
+    prev.snap && prev.snap.offset <= limit && s.along < prev.snap.along - 30 && s.offset > 20
+      ? prev.snap.along
+      : s.along;
   const total = tr.along[tr.along.length - 1];
-  const onLine = s.offset <= offRouteLimit(fix.accuracy, tr.mode);
+  const onLine = s.offset <= limit;
   const joined = prev.joined || onLine;
   // Still getting to the route (it starts on the road nearest to where it was asked from):
   // heading for its start is not off it; only moving well away from it is.
@@ -325,7 +329,9 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
     off = toRoute > approach + LEAVE_M;
   }
   // The wrong way along the route: going back down it, or a course against it.
-  const peak = Math.max(prev.peak, along);
+  // The furthest along the route, on it only: a fix off it may snap to a far part of the route
+  // (a side road beside its way back), and correct driving after would count as going back.
+  const peak = onLine ? Math.max(prev.peak, along) : prev.peak;
   const course = fix.heading != null && Number.isFinite(fix.heading) ? fix.heading : null;
   const against =
     onLine && course !== null && prev.moving && Math.abs(angleDiff(course, s.bearing)) > AGAINST_DEG
