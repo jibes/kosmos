@@ -10,6 +10,13 @@ describe('kind of place', () => {
     expect(kindOfOsm('public_transport', 'platform')).toBe('bus');
     expect(kindOfOsm('railway', 'subway_entrance')).toBe('subway');
     expect(kindOfOsm('aeroway', 'aerodrome')).toBe('plane');
+    // Search rows show what the map shows: fuel, a cash machine, a pitch.
+    expect(kindOfOsm('amenity', 'fuel')).toBe('fuel');
+    expect(kindOfOsm('amenity', 'atm')).toBe('money');
+    expect(kindOfOsm('leisure', 'pitch')).toBe('sport');
+    expect(kindOfOsm('shop', 'bicycle')).toBe('shop');
+    expect(kindOfPoi({ class: 'bicycle', subclass: 'bicycle' })).toBe('bike');
+    expect(kindOfPoi({ class: 'bakery', subclass: 'bakery' })).toBe('shop');
   });
 
   it('tells other kinds, streets, towns and addresses', () => {
