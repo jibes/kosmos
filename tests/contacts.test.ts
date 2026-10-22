@@ -52,6 +52,13 @@ describe('contacts', () => {
     expect(contactFeatures(list).features).toHaveLength(1);
     expect(contactFeatures(list).features[0].properties).toEqual({ name: 'A', contact: 0 });
     expect(parseContacts('{')).toEqual([]);
+    // Off the globe, half a point, or `missed` anything but true: dropped.
+    const bad = [
+      { ...ok, lat: 91 },
+      { name: 'E', address: 'F', lat: 2 },
+      { name: 'G', address: 'H', missed: 'no' },
+    ];
+    expect(parseContacts(JSON.stringify(bad))).toEqual([]);
   });
 
   it('reads the address book again on coming back after a while', () => {

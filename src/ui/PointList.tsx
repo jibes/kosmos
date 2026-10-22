@@ -22,8 +22,10 @@ export interface PointListProps {
 
 const keyOf = (p: Point, i: number, points: Point[]) => {
   // "My location" is the same point wherever it goes, live at the start or the position now.
-  const id = p && !p.here ? `${p.lng},${p.lat}` : 'me';
-  return `${id}#${points.slice(0, i).filter((q) => q === p).length}`;
+  const idOf = (q: Point) => (q && !q.here ? `${q.lng},${q.lat}` : 'me');
+  const id = idOf(p);
+  // Two at the same spot (the start chosen as the end too) are told apart by their order.
+  return `${id}#${points.slice(0, i).filter((q) => idOf(q) === id).length}`;
 };
 
 /**
@@ -140,7 +142,12 @@ export function PointList({
               {mark === 'stop' ? i + numberFrom : ''}
             </span>
             {onPick && i >= locked ? (
-              <button type="button" className="end-btn" onClick={() => onPick(i)}>
+              <button
+                type="button"
+                className="end-btn"
+                title={fill(t.changePoint, { name })}
+                onClick={() => onPick(i)}
+              >
                 {name}
               </button>
             ) : (
@@ -162,7 +169,13 @@ export function PointList({
                 type="button"
                 className="icon-btn"
                 aria-label={fill(t.removePoint, { name })}
-                onClick={() => onRemove(i)}
+                onClick={() => {
+                  onRemove(i);
+                  // Its row gone, focus stays in the list rather than falling to the page.
+                  requestAnimationFrame(() =>
+                    list.current?.querySelector<HTMLElement>('button.end-btn')?.focus(),
+                  );
+                }}
               >
                 <CloseIcon size={16} />
               </button>

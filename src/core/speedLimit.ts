@@ -1,9 +1,11 @@
 import { distance } from './geo';
-import { ROUTER_URL, encodePolyline, type Units } from './route';
+import { JUNCTION_ATTRIBUTES } from './junction';
+import { ROUTER_URL, encodePolyline, type Mode, type Units } from './route';
 
 /**
  * Speed limits along a road route, from OSM `maxspeed` as the router reads it: one
- * `trace_attributes` request per route followed, never per fix. Stretches by distance along
+ * `trace_attributes` request per route followed (by car; it also brings each junction's roads,
+ * by any road mode), never per fix. Stretches by distance along
  * the route; a limit is `null` where none is mapped, `Infinity` where there is none by law.
  */
 export interface Limits {
@@ -15,14 +17,22 @@ export interface Limits {
 
 export const LIMITS_URL = `${ROUTER_URL}/trace_attributes`;
 
-/** The request body: the route's own line, matched edge by edge (by snapping where that fails). */
-export function limitsBody(coords: [number, number][]): string {
+const COSTING: Record<Mode, string> = { car: 'auto', bike: 'bicycle', foot: 'pedestrian' };
+
+/**
+ * The request body: the route's own line, matched edge by edge (by snapping where that fails),
+ * with the roads at each junction (`core/junction.ts`) besides the limits.
+ */
+export function limitsBody(coords: [number, number][], mode: Mode = 'car'): string {
   return JSON.stringify({
     encoded_polyline: encodePolyline(coords),
-    costing: 'auto',
+    costing: COSTING[mode],
     shape_match: 'walk_or_snap',
     units: 'kilometers',
-    filters: { attributes: ['edge.length', 'edge.speed_limit'], action: 'include' },
+    filters: {
+      attributes: ['edge.length', 'edge.speed_limit', ...JUNCTION_ATTRIBUTES],
+      action: 'include',
+    },
   });
 }
 

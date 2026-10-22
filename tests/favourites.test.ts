@@ -3,8 +3,10 @@ import {
   favouriteFeatures,
   FAVOURITES_MAX,
   isFavourite,
+  LABEL_MAX,
   mergeFavourites,
   parseFavourites,
+  completeFavourite,
   renameFavourite,
   titleOf,
   toggleFavourite,
@@ -13,6 +15,26 @@ import {
 const cafe = { name: 'Café Einstein', detail: 'Berlin', lng: 13.35, lat: 52.5 };
 
 describe('favourites', () => {
+  it('gets the address and id it lacked when starred too soon, nothing else changed', () => {
+    const early = toggleFavourite(
+      [],
+      { name: 'Café Einstein', detail: '', lng: 13.4, lat: 52.5 },
+      1,
+    );
+    const named = renameFavourite(early, early[0], 'Coffee');
+    const [f] = completeFavourite(named, {
+      name: 'Café Einstein',
+      detail: 'Kurfürstenstraße 58',
+      lng: 13.4,
+      lat: 52.5,
+      osm: 'N7',
+    });
+    expect(f).toMatchObject({ detail: 'Kurfürstenstraße 58', osm: 'N7', label: 'Coffee', at: 1 });
+    // Already complete: the same list back.
+    const again = completeFavourite([f], { ...f, detail: 'Elsewhere', osm: 'N8' });
+    expect(again[0]).toBe(f);
+  });
+
   it('stars and unstars a place, newest first', () => {
     let list = toggleFavourite([], cafe, 1);
     expect(list).toEqual([{ ...cafe, at: 1 }]);
@@ -73,5 +95,49 @@ describe('favourites', () => {
     const tor = { name: 'Tor', detail: '', lng: 13.37, lat: 52.51, at: 9 };
     const merged = mergeFavourites(here, [{ ...cafe, at: 1 }, tor]);
     expect(merged.map(titleOf)).toEqual(['Tor', 'Coffee']);
+  });
+
+  it('knows a renamed favourite opened by its old name after another rename', () => {
+    const pin = { name: 'Dropped pin', detail: '', lng: 13.4, lat: 52.5 };
+    let list = renameFavourite(toggleFavourite([], pin, 1), pin, 'Home');
+    // Opened from the list: called "Home", the place's own name carried along.
+    const opened = { ...pin, name: 'Home', own: 'Dropped pin' };
+    list = renameFavourite(list, opened, 'Mum');
+    expect(list.map(titleOf)).toEqual(['Mum']);
+    expect(isFavourite(list, opened)).toBe(true);
+    expect(isFavourite(renameFavourite(list, opened, ''), opened)).toBe(true);
+  });
+
+  it('takes the name a dropped pin got after it was starred, for the one starred only', () => {
+    const pin = { name: 'Dropped pin', detail: '', lng: 13.4, lat: 52.5 };
+    const list = toggleFavourite([], pin, 1);
+    const found = { ...pin, name: 'Unter den Linden 5', detail: 'Berlin', osm: 'N1' };
+    // Not knowing which was starred: nothing changes.
+    expect(completeFavourite(list, found)).toEqual(list);
+    const [f] = completeFavourite(list, found, list[0]);
+    expect(f).toMatchObject({ name: 'Unter den Linden 5', detail: 'Berlin', osm: 'N1', at: 1 });
+    // Another place far off is never this one.
+    const far = { ...found, lng: 13.5 };
+    expect(completeFavourite(list, far, list[0])).toEqual(list);
+  });
+
+  it('never drops one here for one restored, when the list is full', () => {
+    const at = (i: number) => ({ name: `P${i}`, detail: '', lng: i / 10, lat: 0, at: i });
+    const here = Array.from({ length: FAVOURITES_MAX - 1 }, (_, i) => at(i));
+    const merged = mergeFavourites(here, [at(1000), at(1001)]);
+    expect(merged).toHaveLength(FAVOURITES_MAX);
+    expect(merged[0].name).toBe('P1001');
+    expect(here.every((f) => merged.includes(f))).toBe(true);
+  });
+
+  it('drops a backup entry with fields of the wrong type, and cuts a long label', () => {
+    const ok = { ...cafe, at: 1 };
+    const raw = JSON.stringify([
+      { ...ok, osm: { id: 1 } },
+      { ...ok, stop: 'yes' },
+      { ...ok, kind: 3 },
+      { ...ok, label: 'x'.repeat(100) },
+    ]);
+    expect(parseFavourites(raw)).toEqual([{ ...ok, label: 'x'.repeat(LABEL_MAX) }]);
   });
 });

@@ -126,8 +126,12 @@ export function RideView(props: Props) {
     title = leg.headsign ? `→ ${leg.headsign}` : lineName(leg);
     sub = st.cancelled
       ? fill(t.lineCancelled, { line: lineName(leg) })
-      : `${fill(t.leaves, { line: lineName(leg), time: clock(leg.start) })}${platform}`;
+      : st.missed
+        ? fill(t.hasLeft, { line: lineName(leg) })
+        : `${fill(t.leaves, { line: lineName(leg), time: clock(leg.start) })}${platform}`;
     if (st.cancelled) big = t.cancelled;
+    // Left without the rider: no "now" counting on.
+    else if (st.missed) big = '';
   } else if (st.phase === 'ride' && leg) {
     icon = <LineChip leg={leg} big />;
     big = st.stopsLeft === 1 ? t.nextStop : fill(t.stops, { n: st.stopsLeft });
@@ -169,9 +173,14 @@ export function RideView(props: Props) {
             <p aria-live="polite">{title}</p>
             {goal && <small>{capital(goal)}</small>}
             {sub && <small>{capital(sub)}</small>}
-            {connecting === 'failed' && <small>{t.noRoute}</small>}
+            {connecting === 'failed' && (st.missed || st.cancelled) && (
+              <small>{t.noRoute_transit}</small>
+            )}
+            {/* On board the stops left are news too: muted, a screen reader still says them. */}
             <span className="sr-only" aria-live="polite">
-              {change && capital(change)}
+              {[st.phase === 'ride' ? capital(big) : '', change ? capital(change) : '']
+                .filter(Boolean)
+                .join('. ')}
             </span>
           </div>
           {(st.missed || st.cancelled) && (

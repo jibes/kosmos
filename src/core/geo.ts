@@ -65,3 +65,25 @@ export function distance(a: LngLat, b: LngLat): number {
     Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * 6371008.8 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
+
+/**
+ * The box round a line, `[west, south, east, north]`; one crossing the 180th meridian is the
+ * narrow box over it (east past 180, as MapLibre takes it), not one round the whole world.
+ */
+export function boundsOfLine(coords: [number, number][]): [number, number, number, number] {
+  const box = (shift: boolean) => {
+    let [w, s, e, n] = [Infinity, 90, -Infinity, -90];
+    for (const [x0, y] of coords) {
+      const x = shift && x0 < 0 ? x0 + 360 : x0;
+      w = Math.min(w, x);
+      e = Math.max(e, x);
+      s = Math.min(s, y);
+      n = Math.max(n, y);
+    }
+    return [w, s, e, n] as [number, number, number, number];
+  };
+  const plain = box(false);
+  if (plain[2] - plain[0] <= 180) return plain;
+  const shifted = box(true);
+  return shifted[2] - shifted[0] < plain[2] - plain[0] ? shifted : plain;
+}

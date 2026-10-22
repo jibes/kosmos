@@ -304,6 +304,51 @@ describe('getting off and arriving', () => {
     expect(st.phase).toBe('arrived');
   });
 
+  it('arrives at a destination by the stop only on a position there', () => {
+    // The connection ends on board: no walk after it.
+    const onBoard: Transit = { ...transit, legs: transit.legs.slice(0, 2) };
+    let st = initialRide(onBoard, min(7), at(s1, min(7)));
+    st = rideStep(onBoard, st, at(m(500, 400), min(10)), min(10));
+    for (const t of [21, 30, 60]) st = rideStep(onBoard, st, null, min(t));
+    expect(st.phase).not.toBe('arrived');
+    // Far off the line, the timetable long past: still not there.
+    st = rideStep(onBoard, st, at(m(1500, 1400), min(61)), min(61));
+    expect(st.phase).not.toBe('arrived');
+    st = rideStep(onBoard, st, at(s2, min(62)), min(62));
+    expect(st.phase).toBe('arrived');
+  });
+
+  it('says "next stop" for a ride of one stop only once it moves', () => {
+    const one: Transit = {
+      ...transit,
+      legs: transit.legs.map((l) => (l.ride ? { ...l, via: [] } : l)),
+    };
+    let st = initialRide(one, min(7.5), at(s1, min(7.5)));
+    const said: string[] = [];
+    const go = (fix: Fix, time: number) => {
+      st = rideStep(one, st, fix, time);
+      const p = ridePrompt(one, st);
+      if (p) {
+        said.push(p.key);
+        st = markRideSpoken(st, p.key);
+      }
+    };
+    // Departed by the timetable, the vehicle late: still on the platform.
+    go(at(s1, min(8.5)), min(8.5));
+    go(at(s1, min(9)), min(9));
+    expect(said).not.toContain('1:next');
+    go(at(m(800, 400), min(11)), min(11));
+    expect(said).toContain('1:next');
+  });
+
+  it('arrives when the rider got there another way, the ride missed', () => {
+    let st = initialRide(transit, min(6), at(m(0, 300), min(6)));
+    st = rideStep(transit, st, at(m(0, 320), min(9)), min(9));
+    expect(st.missed).toBe(true);
+    st = rideStep(transit, st, at(end, min(40)), min(40));
+    expect(st.phase).toBe('arrived');
+  });
+
   it('counts only the stops the vehicle still calls at', () => {
     const skipping: Transit = {
       ...tram,
@@ -327,6 +372,18 @@ describe('a gap in GPS at the departure', () => {
       { fix: null, time: min(9) },
       // Back above ground, still by the stop.
       { fix: at(m(30, 380), min(9.5)), time: min(9.5) },
+    ]);
+    expect(st).toMatchObject({ leg: 0, phase: 'walk', missed: true });
+    expect(said).toContain('1:missed');
+  });
+
+  it('turns it into a missed departure even once the timetable has carried the rider past it', () => {
+    const { st, said } = replay([
+      { fix: at(m(0, 300), min(6)), time: min(6) },
+      // No fix through the whole ride's time, then one still by the stop boarded at.
+      { fix: null, time: min(8.2) },
+      { fix: null, time: min(23) },
+      { fix: at(m(30, 380), min(23.5)), time: min(23.5) },
     ]);
     expect(st).toMatchObject({ leg: 0, phase: 'walk', missed: true });
     expect(said).toContain('1:missed');

@@ -76,6 +76,14 @@ test.describe('guidance', () => {
       await page.waitForTimeout(250);
     }
     await expect(banner).toContainText('Turn right onto Unter den Linden.');
+    // The crossroads as it lies (the router's trace), not just an arrow: the way out bold, the
+    // roads straight on and to the left faint.
+    const drawn = banner.locator('svg[data-kind="junction"]');
+    await expect(drawn).toHaveCount(1);
+    await expect(drawn.locator('g path')).toHaveAttribute(
+      'd',
+      /^M12\.0 13\.0L12\.0 4\.0M12\.0 13\.0L3\.0 13\.0$|^M12\.0 13\.0L3\.0 13\.0M12\.0 13\.0L12\.0 4\.0$/,
+    );
     const lanes = banner.locator('.nav-lanes');
     await expect(lanes).toHaveAttribute('data-size', 'big');
     await expect(lanes.locator('span')).toHaveCount(3);
@@ -183,6 +191,8 @@ test.describe('guidance', () => {
     page,
     context,
   }) => {
+    // A whole drive in and out of a tunnel, by day and by night: past 30 s on a busy runner.
+    test.slow();
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const to = SEARCH_HIT;
     const go = (p: { lng: number; lat: number }) =>
@@ -302,7 +312,7 @@ test.describe('guidance', () => {
       .click();
     const card = page.locator('.card.route');
     await card.locator('.end-btn').first().click();
-    await page.getByRole('combobox', { name: 'Search start' }).fill('brandenburg');
+    await page.getByRole('combobox', { name: 'Search for a start' }).fill('brandenburg');
     await page.getByRole('option').filter({ hasText: 'Havel' }).click();
     await expect(card.locator('.summary strong')).toHaveText(/min|h/);
     // The route from here (asked at Start) does not come.
@@ -477,6 +487,43 @@ test.describe('guidance', () => {
     await expect(page.getByRole('button', { name: 'Show the whole route' })).toBeVisible();
   });
 
+  test('standing on the route by car faces the way on, not where the phone points', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation', 'accelerometer', 'gyroscope', 'magnetometer']);
+    const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
+    const go = (lat: number) =>
+      context.setGeolocation({ latitude: lat, longitude: from.lng, accuracy: 5 });
+    await go(from.lat);
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    await page.getByRole('button', { name: 'Start', exact: true }).click();
+    await expect(page.locator('.me.nav')).toHaveCount(1);
+    // In traffic on the first street, which runs south; the phone in its mount reads east.
+    for (let i = 1; i <= 4; i++) {
+      await page.evaluate(() => {
+        for (let n = 0; n < 40; n++) {
+          for (const type of ['deviceorientationabsolute', 'deviceorientation']) {
+            window.dispatchEvent(
+              new DeviceOrientationEvent(type, { alpha: 270, beta: 0, gamma: 0, absolute: true }),
+            );
+          }
+        }
+      });
+      await go(from.lat - 0.000005 * i);
+      await page.waitForTimeout(400);
+    }
+    const off = () =>
+      page.evaluate(() => Math.abs(((window.kosmos!.getBearing() - 180 + 540) % 360) - 180));
+    await expect.poll(off).toBeLessThan(15);
+  });
+
   test('runs the arrow on between uneven fixes, the camera with it', async ({ page, context }) => {
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const go = (lng: number, lat: number) =>
@@ -530,7 +577,11 @@ test.describe('guidance', () => {
       worst = Math.max(worst, still);
     }
     expect(moving.length).toBeGreaterThan(2);
-    expect(Math.abs(moving.at(-1)![1] - moving[0][1])).toBeGreaterThan(0.0001);
+    // At least half the speed driven (0.00009° a second), over the frames there were: a busy
+    // machine draws only a few, at times close together.
+    const span = (moving.at(-1)![0] - moving[0][0]) / 1000;
+    expect(span).toBeGreaterThan(0);
+    expect(Math.abs(moving.at(-1)![1] - moving[0][1]) / span).toBeGreaterThan(0.000045);
     expect(worst).toBeLessThan(250);
     // On screen the arrow stays where it is: the map moves under it.
     const xs = frames.map(([, , x]) => x);
@@ -615,13 +666,15 @@ test.describe('guidance', () => {
   }) => {
     // A slow wake lock: it arrives after guidance has ended.
     await page.evaluate(() => {
-      const w = window as unknown as { held: number };
+      const w = window as unknown as { held: number; came: number };
       w.held = 0;
+      w.came = 0;
       Object.defineProperty(navigator, 'wakeLock', {
         value: {
           request: () =>
             new Promise((done) =>
               setTimeout(() => {
+                w.came++;
                 w.held++;
                 done({ release: async () => void w.held-- });
               }, 4000),
@@ -645,8 +698,14 @@ test.describe('guidance', () => {
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await page.getByRole('button', { name: 'End' }).click();
     await page.getByRole('button', { name: /(Tap|Click) again to end navigation/ }).click();
-    await page.waitForTimeout(4500);
-    expect(await page.evaluate(() => (window as unknown as { held: number }).held)).toBe(0);
+    // Once the lock has come (a busy page's timer may be late), it is let go at once.
+    const lock = () =>
+      page.evaluate(() => {
+        const { came, held } = window as unknown as { held: number; came: number };
+        return { came, held };
+      });
+    await expect.poll(async () => (await lock()).came, { timeout: 15_000 }).toBe(1);
+    await expect.poll(async () => (await lock()).held).toBe(0);
   });
 
   test('shows the speed limit, the speed red when well over it', async ({
@@ -739,9 +798,12 @@ test.describe('guidance', () => {
     await page.waitForTimeout(1600);
     await expect(locate).toHaveAttribute('data-following', 'true');
     expect(Math.abs((await cam()).zoom - zoomed)).toBeLessThan(0.3);
-    // The needle: north up and flat, still following.
+    // The needle: north up and flat, still following, though a fix comes mid-turn.
     await needle.click();
-    await expect.poll(async () => Math.round((await cam()).bearing)).toBe(0);
+    await page.waitForTimeout(150);
+    await go(from.lng, from.lat - 0.00008);
+    await page.waitForTimeout(1200);
+    await expect.poll(async () => Math.abs(Math.round((await cam()).bearing))).toBe(0);
     await expect.poll(async () => Math.round((await cam()).pitch)).toBe(0);
     await expect(needle).toHaveAttribute('aria-label', 'Turn map with your way');
     await go(from.lng, from.lat - 0.003);
@@ -797,14 +859,19 @@ test.describe('guidance', () => {
     // it does not come off); Back closes them, guidance goes on.
     const points = page.locator('.ride-details .point-list li');
     await expect(points).toHaveCount(0);
-    await page.getByRole('button', { name: 'Show the route' }).click();
+    await page.getByRole('button', { name: 'Show stops ahead' }).click();
     await expect(points).toHaveText(['My location', 'Brandenburger Tor']);
     await expect(
       page.locator('.ride-details').getByRole('button', { name: /^Remove/ }),
     ).toHaveCount(0);
+    // On a phone the map buttons step aside for the list; beside the column they stay.
+    const locate = page.locator('.controls .ctl[data-follow]');
+    if (info.project.name === 'desktop') await expect(locate).toBeVisible();
+    else await expect(locate).toBeHidden();
     await shot(page, info, 'points');
     await page.keyboard.press('Escape');
     await expect(points).toHaveCount(0);
+    await expect(locate).toBeVisible();
     await expect(banner).toBeVisible();
     await expect(page.getByRole('button', { name: /^End$/ })).toBeVisible();
   });

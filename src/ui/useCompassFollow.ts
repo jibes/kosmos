@@ -1,3 +1,4 @@
+import { isAway } from './native';
 import type * as maplibregl from 'maplibre-gl';
 import { useEffect, type RefObject } from 'react';
 import type { Follow } from './Controls';
@@ -45,6 +46,11 @@ export function useCompassFollow(
         }
         // Another camera move (e.g. the fly-in after tapping locate) runs, or a finger is on
         // the map: try again next frame.
+        // Out of sight: nothing to turn for.
+        if (isAway()) {
+          frame = 0;
+          return;
+        }
         if (map.isMoving() || touching.current.size) {
           frame = requestAnimationFrame(turn);
           return;

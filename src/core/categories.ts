@@ -1,6 +1,7 @@
 import { TABLE } from './categoryTable';
 import { distance, type LngLat } from './geo';
 import { PLACE_WORDS } from './placeWords';
+import { poiType } from './placeKind';
 
 /**
  * Searching by kind of place ("restaurant", "Lebensmittel") instead of by name. The answer comes
@@ -115,10 +116,13 @@ export type Unnamed = (typeof UNNAMED)[number];
 export const unnamedKind = (subclass: unknown): Unnamed | undefined =>
   (UNNAMED as readonly unknown[]).includes(subclass) ? (subclass as Unnamed) : undefined;
 
-/** A place of the category, from a `poi` feature's properties: named, or of a nameless kind. */
+/**
+ * A place of the category, from a `poi` feature's properties: named, or of a nameless kind.
+ * By what it is (`poiType`): a church's subclass is its faith, its class the place of worship.
+ */
 export const isOf = (c: Category, p: Record<string, unknown>): boolean =>
   (!!p.name || !!unnamedKind(p.subclass)) &&
-  (TABLE[c].tags as readonly unknown[]).includes(p.subclass);
+  (TABLE[c].tags as readonly unknown[]).includes(poiType(p));
 
 export interface Poi extends LngLat {
   name: string;

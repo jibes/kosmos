@@ -40,7 +40,10 @@ interface Options {
   /** The user's own zoom and tilt, and whether a pinch or tilt is still to be read. */
   adjustRef: RefObject<Adjust>;
   lookedRef: RefObject<boolean>;
-  /** Set on every fix: moving fast enough for the route's direction to be the heading. */
+  /**
+   * Set on every fix: the way turns the arrow, not the compass (moving, or standing on the
+   * route by road).
+   */
   movingRef: RefObject<boolean>;
   updateTheme: (map: maplibregl.Map, s: Snap, time: number) => void;
   route: Route | undefined;
@@ -79,10 +82,30 @@ export function useGuidance(o: Options) {
     if (!o.active) setRerouteAt(null);
   }
 
+  /**
+   * A rotation the controls asked for (north up: 0) until the map is there: a fix arriving
+   * mid-ease would otherwise keep the bearing it had got to and stop it part-way round.
+   */
+  const aimRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!map) return;
+    const own = (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent) aimRef.current = null;
+    };
+    map.on('rotatestart', own);
+    return () => {
+      map.off('rotatestart', own);
+    };
+  }, [map]);
   /** Heading-up turns the map with the way; else it keeps the rotation the user gave it. */
   const cameraBearing = useCallback(
-    (m: maplibregl.Map, heading: number | null) =>
-      followRef.current === 'compass' ? heading : m.getBearing(),
+    (m: maplibregl.Map, heading: number | null) => {
+      if (followRef.current === 'compass') return heading;
+      const aim = aimRef.current;
+      if (aim !== null && Math.abs(m.getBearing() - aim) > 0.5) return aim;
+      aimRef.current = null;
+      return m.getBearing();
+    },
     [followRef],
   );
   const follow = useCallback(
@@ -115,14 +138,21 @@ export function useGuidance(o: Options) {
       }
       const s = nav.snap;
       // On the line the arrow rides the route; off it (or after arriving) it is where the fix
-      // is, and so is the camera: a missed turn must not leave the user off the screen.
-      const onLine = !!s && !nav.arrived && s.offset < offRouteLimit(f.accuracy, ways.current.mode);
+      // is, and so is the camera: a missed turn must not leave the user off the screen. Going
+      // back down the route is off it too: riding the line the arrow would stand, facing on.
+      const onLine =
+        !!s &&
+        !nav.arrived &&
+        nav.offSince === null &&
+        s.offset < offRouteLimit(f.accuracy, ways.current.mode);
       const center: [number, number] = onLine ? s.point : [f.lng, f.lat];
       const course = nav.moving && f.heading != null && !Number.isNaN(f.heading) ? f.heading : null;
+      // Standing on the route by road, it still faces the way on.
+      const held = onLine && ways.current.mode !== 'foot';
       const bearing = onLine
-        ? travelHeading(s.bearing, compass.current(), nav.moving)
+        ? travelHeading(s.bearing, compass.current(), nav.moving, held)
         : (course ?? compass.current());
-      movingRef.current = nav.moving;
+      movingRef.current = nav.moving || held;
       if (!nav.moving) meRef.current?.heading(bearing);
       if (s && map) updateTheme(map, s, nav.time);
       // Closer in as a turn comes (not for going straight on or setting off).
@@ -172,11 +202,13 @@ export function useGuidance(o: Options) {
       if (lookedRef.current) {
         if (map.isMoving()) return glideTo(null);
         lookedRef.current = false;
-        adjustRef.current = {
-          zoomBy:
-            map.getZoom() - navZoomFor(lastView.current.mode, nav.speed, lastView.current.toTurn),
-          pitch: map.getPitch(),
-        };
+        // Pinched in the way-back view: its zoom and flat map are no adjustment to keep.
+        if (!autoRef.current)
+          adjustRef.current = {
+            zoomBy:
+              map.getZoom() - navZoomFor(lastView.current.mode, nav.speed, lastView.current.toTurn),
+            pitch: map.getPitch(),
+          };
       }
       const away = s && !onLine && !nav.arrived ? s.point : null;
       const far = !!away && distance(f, { lng: away[0], lat: away[1] }) > OVERVIEW_M;
@@ -244,6 +276,7 @@ export function useGuidance(o: Options) {
     (bearing?: number) => {
       if (!map) return;
       glide?.release();
+      aimRef.current = bearing ?? null;
       if (overviewRef.current) fitNav(map, rest.current, motion(600));
       else if (followRef.current !== 'off') follow(map, motion(600), bearing);
     },

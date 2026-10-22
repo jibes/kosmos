@@ -23,6 +23,11 @@ describe('plus codes', () => {
 
   it('is not fooled by other words with a plus', () => {
     expect(plusCode('C++ meetup')).toBeNull();
+    // A short code always has two characters after its "+": these are names.
+    expect(plusCode('Lidl 24+')).toBeNull();
+    expect(plusCode('22+ Club')).toBeNull();
+    // Four before it are a short code, however many after.
+    expect(plusCode('GCP3+', { lat: 52.5, lng: 13.4 })?.at).not.toBeNull();
     expect(plusCode('Café Einstein')).toBeNull();
   });
 });
@@ -38,6 +43,9 @@ describe('postcodes', () => {
     expect(postcodeOf('1012ab')).toEqual({ code: '1012 AB', area: '1012' });
     expect(postcodeOf('1000-001')).toEqual({ code: '1000 001', area: '1000' });
     expect(postcodeOf('Main Street')).toBeNull();
+    // A house number and a street, a line and its number: no postcodes.
+    expect(postcodeOf('12 Main')).toBeNull();
+    expect(postcodeOf('Linie 12')).toBeNull();
     expect(postcodeOf('10117')).toBeNull();
   });
 });

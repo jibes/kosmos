@@ -178,5 +178,8 @@ describe('compass', () => {
     expect(travelHeading(90, 180, true)).toBe(90);
     expect(travelHeading(null, 180, true)).toBe(180);
     expect(travelHeading(90, null, false)).toBe(90);
+    // Standing on the route by car or bike: the way on, not the compass.
+    expect(travelHeading(90, 180, false, true)).toBe(90);
+    expect(travelHeading(null, 180, false, true)).toBe(180);
   });
 });

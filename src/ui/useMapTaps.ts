@@ -10,12 +10,14 @@ import {
   type Place,
 } from '../core/search';
 import { isStopPoi } from '../core/departures';
-import { LABEL_LAYERS, ROUTE_ALT_LAYER } from '../core/style';
+import { LABEL_LAYERS, POI_LAYERS, ROUTE_ALT_LAYER } from '../core/style';
 import { lang, t } from '../i18n';
 import { onLongPress } from './gestures';
+import { logEvent } from './usageLog';
+import { searchResultAt } from './useCategory';
+import type { StopAdder } from './useStops';
 import { motion } from './motion';
 import type { Trip } from './useRoute';
-import { MAX_STOPS } from '../core/stops';
 import { favouriteAt, placeOf } from './useFavourites';
 import { contactAt, placeOfContact } from './useContacts';
 
@@ -30,7 +32,7 @@ export type Enrich = () => Promise<Partial<Place> | null>;
 
 /** How far a label's place may lie from where its label stands, by kind of label. */
 const RADIUS_M: Record<string, number> = {
-  'label-poi': 150,
+  ...Object.fromEntries(POI_LAYERS.map((id) => [id, 150])),
   'search-names': 150,
   'search-dots': 150,
   'label-peak': 1000,
@@ -79,7 +81,7 @@ interface Options {
   setActive: (index: number) => void;
   setTrip: Dispatch<SetStateAction<Trip | null>>;
   /** A place as a stop on the way of the open route (`useStops`). */
-  addStopRef: RefObject<(p: Place) => void>;
+  addStopRef: RefObject<StopAdder>;
 }
 
 /** Zooms to where a group of marks comes apart, centred on it. */
@@ -112,7 +114,12 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
     const offerStop = (x: number, y: number) => {
       const { showToast, addStopRef, labelLang } = opts.current;
       const tr = tripRef.current;
-      if (!tr || tr.mode === 'transit' || (tr.via?.length ?? 0) >= MAX_STOPS) return;
+      if (!tr) return;
+      // Guiding, the stops reached count no more (`useStops`).
+      const canStop = addStopRef.current.can;
+      // A ride is guided by its timetable: its end changes on the route card, not on the way.
+      const canEnd = !(navRef.current && tr.mode === 'transit');
+      if (!canStop && !canEnd) return;
       const layers = LABEL_LAYERS.filter((id) => map.getLayer(id));
       const [f] = map.queryRenderedFeatures(
         [
@@ -136,10 +143,29 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
                 detail: '',
                 lng: f.geometry.coordinates[0],
                 lat: f.geometry.coordinates[1],
+                ...((POI_LAYERS.includes(f.layer.id) && isStopPoi(p)) || p.stop === true
+                  ? { stop: true }
+                  : {}),
               }
             : null;
-      if (place)
-        showToast(place.name, [{ label: t.addStop, run: () => addStopRef.current(place) }]);
+      if (!place) return;
+      // A label's address and id, as a tap without a route looks them up: for its card.
+      const label = !fav && !contact && f;
+      const enrich = label
+        ? () => addressOf(place.name, place, RADIUS_M[label.layer.id] ?? PLACE_RADIUS_M)
+        : undefined;
+      const { setTrip, select, setActive } = opts.current;
+      const goHere = () => {
+        logEvent('route.end', { navigating: navRef.current });
+        setActive(0);
+        setTrip((now) => (now ? { ...now, to: place } : now));
+        // A new destination is the selected place too: its pin and, on closing, its card.
+        if (!navRef.current) select(place, enrich);
+      };
+      showToast(place.name, [
+        ...(canStop ? [{ label: t.addStop, run: () => addStopRef.current.add(place) }] : []),
+        ...(canEnd ? [{ label: t.goHere, run: goHere }] : []),
+      ]);
     };
     const onClick = (e: maplibregl.MapMouseEvent) => {
       const { select, clear, setActive, labelLang } = opts.current;
@@ -184,6 +210,17 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
         select(placeOfContact(contact));
         return;
       }
+      // A search result's dot: that result, as its row would open it, not a fresh lookup.
+      const found = f?.layer.id.startsWith('search-') ? searchResultAt(Number(f.id)) : undefined;
+      if (found) {
+        select(
+          found,
+          found.distance === undefined || found.detail
+            ? undefined
+            : () => addressOf(found.unnamed ? '' : found.name, found),
+        );
+        return;
+      }
       const name = (props[`name:${labelLang}`] ?? props.name) as string | undefined;
       if (!f || !name) {
         clear();
@@ -195,7 +232,7 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
           : e.lngLat;
       const radius = RADIUS_M[f.layer.id] ?? PLACE_RADIUS_M;
       // A stop's label, or the dot of a stop a search found.
-      const stop = (f.layer.id === 'label-poi' && isStopPoi(props)) || props.stop === true;
+      const stop = (POI_LAYERS.includes(f.layer.id) && isStopPoi(props)) || props.stop === true;
       select({ name, detail: '', ...at, ...(stop ? { stop } : {}) }, () =>
         addressOf(name, at, radius),
       );
@@ -221,11 +258,20 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
           );
         };
         const { addStopRef } = opts.current;
-        const tr = tripRef.current;
-        const stop =
-          tr.mode !== 'transit' && (tr.via?.length ?? 0) < MAX_STOPS
-            ? [{ label: t.addStop, run: () => addStopRef.current(pin) }]
-            : [];
+        // A stop held on the map takes its address too, as a start or destination does.
+        const addPin = () => {
+          addStopRef.current.add(pin);
+          void spotOf(here)
+            .catch(() => null)
+            .then((extra) =>
+              setTrip((tr) =>
+                tr?.via?.includes(pin)
+                  ? { ...tr, via: tr.via.map((v) => (v === pin ? { ...pin, ...extra } : v)) }
+                  : tr,
+              ),
+            );
+        };
+        const stop = addStopRef.current.can ? [{ label: t.addStop, run: addPin }] : [];
         showToast(t.droppedPin, [
           { label: t.startHere, run: () => set('from') },
           ...stop,

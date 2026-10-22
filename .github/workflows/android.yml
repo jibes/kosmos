@@ -156,10 +156,17 @@ jobs:
             commit -q -m "Smoke screenshot for $GITHUB_SHA"
           git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-smoke
 
+  # The web app's checks and end-to-end tests, as the web deploy runs them: an APK carries the
+  # same app, so it is published only when they pass too.
+  web:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    uses: ./.github/workflows/ci.yml
+
   # Signs the tested APK with the release key and publishes it. Only on main, only after the
-  # smoke test passed; the key never meets npm, Gradle or the code under test.
+  # smoke test and the web app's tests passed; the key never meets npm, Gradle or the code under
+  # test.
   release:
-    needs: apk
+    needs: [apk, web]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     # The signing secrets belong in this environment, limited to main (repository settings).
     environment: release

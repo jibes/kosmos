@@ -1,4 +1,5 @@
-import { ARRIVE_M, type NavState, type Track } from './nav';
+import type { LngLat } from './geo';
+import { ARRIVE_M, snap, type NavState, type Track } from './nav';
 import type { Mode, Route } from './route';
 
 /**
@@ -9,12 +10,14 @@ import type { Mode, Route } from './route';
 /** A few at most: more is planning a tour, not a trip. */
 export const MAX_STOPS = 3;
 
-/** The stops with the one at `i` a place earlier, never before `first` (those reached). */
-export function moveStopUp<T>(via: readonly T[], i: number, first = 0): T[] {
-  if (i <= first || i >= via.length) return [...via];
-  const next = [...via];
-  [next[i - 1], next[i]] = [next[i], next[i - 1]];
-  return next;
+/**
+ * Where a new stop goes among those ahead (from `first`, those reached before it): in its
+ * order along the way, so a café 5 km on comes before a stop 80 km on, not after it.
+ */
+export function stopIndex(tr: Track, via: readonly LngLat[], place: LngLat, first = 0): number {
+  const at = snap(tr, place).along;
+  for (let i = first; i < via.length; i++) if (snap(tr, via[i]).along > at) return i;
+  return via.length;
 }
 
 /** The words for a stop by its name: banner, early alert ("In 300 m, stop at …"), arrival. */
@@ -49,6 +52,29 @@ export function nameStops(
         alert: words.alert(name),
         pre: words.pre(name),
         post: undefined,
+      };
+    }),
+  };
+}
+
+/**
+ * The stops said by their names now: a point held on the map gets its address after the route
+ * came. The same route back when every one already says its own.
+ */
+export function renameStops(route: Route, names: readonly string[], words: StopWords): Route {
+  const stale = (m: Route['maneuvers'][number]) =>
+    m.via !== undefined && m.instruction !== words.instruction(names[m.via] ?? '');
+  if (!route.maneuvers.some(stale)) return route;
+  return {
+    ...route,
+    maneuvers: route.maneuvers.map((m) => {
+      if (!stale(m)) return m;
+      const name = names[m.via!] ?? '';
+      return {
+        ...m,
+        instruction: words.instruction(name),
+        alert: words.alert(name),
+        pre: words.pre(name),
       };
     }),
   };

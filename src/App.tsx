@@ -11,10 +11,11 @@ import { isNative, openAppSettings } from './ui/native';
 import { NavView, NavWaiting } from './ui/NavView';
 import { PlaceCard } from './ui/PlaceCard';
 import { connectionStart, RideView, rideWords } from './ui/RideView';
-import { focusSearch } from './ui/a11y';
+import { showNearby } from './ui/nearby';
 import { ResultsSheet } from './ui/ResultsSheet';
 import { RouteCard } from './ui/RouteCard';
-import { SearchBar, useSearch } from './ui/SearchBar';
+import { SearchBar } from './ui/SearchBar';
+import { useSearch } from './ui/useSearch';
 import { Toasts, useToast } from './ui/Toasts';
 import { useLocation } from './ui/useLocation';
 import { useCompass } from './ui/useCompass';
@@ -50,8 +51,7 @@ import { addressOf, useMapTaps, type Enrich } from './ui/useMapTaps';
 import { useHint } from './ui/useHint';
 import { useTheme } from './ui/useTheme';
 import { systemVoice, useMuted } from './ui/voice';
-import { keepAwake } from './ui/wakeLock';
-import { usePip } from './ui/usePip';
+import { useNavSession } from './ui/useNavSession';
 import { useKeepMap } from './ui/useKeepMap';
 
 /** Map labels follow the browser language even where the UI falls back to English. */
@@ -64,7 +64,6 @@ interface Selection {
   loading: boolean;
 }
 
-/** After arriving, guidance (screen on, background location) ends by itself. */
 /** A second back press within this ends navigation. */
 const BACK_TWICE_MS = 3000;
 
@@ -181,18 +180,27 @@ export function App() {
     setTrip((tr) => (tr ? { ...tr, mode } : tr));
   }, []);
 
-  // Pin: the selected place.
+  // Pin: the selected place, or with a route open its destination, whichever point the list
+  // now ends with (moved, taken off, changed while guiding).
   const pin = useRef<maplibregl.Marker | null>(null);
-  const sel = selection?.place;
+  const end = trip ? trip.to : selection?.place;
   useEffect(() => {
     if (!map) return;
-    if (!sel) {
+    if (!end) {
       pin.current?.remove();
       return;
     }
     pin.current ??= pinMarker();
-    pin.current.setLngLat([sel.lng, sel.lat]).addTo(map);
-  }, [map, sel?.lng, sel?.lat]); // eslint-disable-line react-hooks/exhaustive-deps
+    pin.current.setLngLat([end.lng, end.lat]).addTo(map);
+  }, [map, end?.lng, end?.lat]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The card under the route's is its destination's, so closing the route shows that place.
+  // Quietly: not `select`, which would stop following while guiding.
+  const to = trip?.to;
+  const [lastTo, setLastTo] = useState(to);
+  if (to !== lastTo) {
+    setLastTo(to);
+    if (to && !to.here && selection?.place !== to) setSelection({ place: to, loading: false });
+  }
 
   useMapTaps(map, {
     labelLang: LABEL_LANG,
@@ -362,6 +370,8 @@ export function App() {
     trip,
     setTrip,
     guided,
+    way: riding ? undefined : shown[chosen],
+    current: route.made,
     nav,
     navigating,
     state: stopState,
@@ -420,6 +430,7 @@ export function App() {
     // A plan for "now" left open until its first vehicle has gone: the next ones instead.
     const tr = shown[chosen]?.transit;
     if (trip.mode === 'transit' && !trip.at && tr && departed(tr, Date.now())) {
+      setActive(0);
       route.retry();
       showToast(t.replanned);
       return;
@@ -446,6 +457,8 @@ export function App() {
     if (!isNative) start();
     void compass.start();
     if (trip.from) setTrip({ ...trip, from: null });
+    // Every stop ahead, before the route from here is asked (the last drive's count lingers).
+    stopState.setBehind(0);
     setNavigating(true);
     view.reset();
     // Heading-up behind the user, as drivers expect; the location button cycles from there.
@@ -477,21 +490,7 @@ export function App() {
     if (followRef.current !== 'off') setFollow('position');
     map?.easeTo({ pitch: 0, bearing: 0, padding: NO_PADDING, duration: motion(800) });
   }, [map, voice, setFollow]);
-  useEffect(() => {
-    if (!navigating) return;
-    background(true, () =>
-      showToast(
-        t.needPrecise,
-        openAppSettings ? [{ label: t.settings, run: openAppSettings }] : undefined,
-      ),
-    );
-    const release = keepAwake();
-    return () => {
-      release();
-      background(false);
-    };
-  }, [navigating, background, showToast]);
-  usePip(navigating);
+  useNavSession(navigating, background, showToast);
   useKeepMap(guided, roadMode, navigating && !riding);
 
   const locate = () => {
@@ -507,8 +506,8 @@ export function App() {
     start();
     void compass.start();
     if (navigating) return navControls.locate();
-    // A route open: following, the next tap shows all of it; the one after, the user again.
-    if (trip && route.status === 'ready' && follow !== 'off') {
+    // A route open (not while picking a point): following, the next tap shows all of it.
+    if (trip && route.status === 'ready' && picking === null && follow !== 'off') {
       setFollow('off');
       return routeLayer.fit();
     }
@@ -564,6 +563,9 @@ export function App() {
     else if (selection) clear();
     else if (search.folder) search.setFolder(null);
     else if (search.query) search.clear();
+    // The list open on an empty field (its keyboard already gone): it closes first.
+    else if (document.activeElement?.closest('.search'))
+      (document.activeElement as HTMLElement).blur();
     else return false;
     return true;
   });
@@ -572,8 +574,14 @@ export function App() {
   useAutoLocate(map, start, flyOnFix);
 
   useHint(map, showToast, dismissText, !!selection || !!trip || navigating);
-  useShared(map, select, search.setQuery);
+  useShared(map, select, search.searchFor, {
+    guiding: navigating,
+    open: !!trip,
+    close: closeRoute,
+    note: showToast,
+  });
 
+  const sel = selection?.place;
   const panelRef = usePanel(map, sel && !trip && !navigating ? sel : null, selection?.loading);
 
   return (
@@ -675,20 +683,7 @@ export function App() {
                   onClose={clear}
                   onToast={showToast}
                   onRoute={openRoute}
-                  onNearby={() => {
-                    const p = selection.place;
-                    logEvent('place.nearby');
-                    // Open on the kinds of place: what is near here.
-                    search.setFolder('kinds');
-                    map?.easeTo({
-                      center: [p.lng, p.lat],
-                      zoom: Math.max(map.getZoom(), 15),
-                      padding: routePadding(),
-                      duration: motion(600),
-                    });
-                    // In the tap itself, so a phone opens its keyboard; focus closes the card.
-                    focusSearch();
-                  }}
+                  onNearby={() => showNearby(map, selection.place, () => search.setFolder('kinds'))}
                 />
               )}
               {/* What a search put on the map, by distance; under a place card it waits. */}
@@ -729,6 +724,7 @@ export function App() {
                   bias={bias}
                   from={from}
                   onPick={pick}
+                  people={contacts?.list}
                   collapsed={false}
                   onFocus={() => undefined}
                   placeholder={

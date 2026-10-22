@@ -14,7 +14,7 @@ import {
 } from '../core/route';
 import { limitAt, limitIn, overLimit } from '../core/speedLimit';
 import { capital, fill, ordinal, t, units } from '../i18n';
-import { LaneIcon, TurnIcon } from './icons';
+import { JunctionIcon, LaneIcon, TurnIcon } from './icons';
 import { NavBar } from './NavBar';
 import { PointList, type PointListProps } from './PointList';
 import { TripDetails } from './TripDetails';
@@ -23,7 +23,8 @@ import type { RouteStatus } from './RouteCard';
 import type { LocationStatus } from './useLocation';
 import { useNavNotice } from './useNavNotice';
 import { useNow } from './useNow';
-import { useSpeedLimits } from './useSpeedLimits';
+import { useRouteTrace } from './useRouteTrace';
+import { openAppSettings } from './native';
 
 interface Props {
   route: Route;
@@ -86,7 +87,7 @@ export function NavView(props: Props) {
   const eta = started ? nav.eta : route.duration;
   const remaining = started ? nav.remaining : route.distance;
   const speed = speedIn(nav.speed, units);
-  const limits = useSpeedLimits(mode === 'car' ? route : undefined);
+  const { limits, junctions } = useRouteTrace(route, mode);
   // The limit where the car is on the route; off it, the road is another one.
   const limit = nav.snap && !nav.offRoute ? limitAt(limits, nav.snap.along) : null;
   const shownLimit = limit != null && Number.isFinite(limit) ? limitIn(limit, units) : null;
@@ -126,9 +127,16 @@ export function NavView(props: Props) {
     turn = 'arrive';
   } else if (rerouting) {
     // Not the old route's arrow: while asking it says nothing about where to turn.
-    title = shown = reroute === 'failed' ? t.rerouteFailed : t.rerouting;
+    // Off the route but nothing asked (standing in a car park, the next ask backed off).
+    title = shown =
+      reroute === 'failed' ? t.rerouteFailed : reroute === 'asking' ? t.rerouting : t.offRoute;
     turn = reroute === 'failed' ? 'uturn' : 'depart';
   }
+  // The junction as it lies, where the router's trace knows it; else the arrow for its kind.
+  const junction =
+    guiding && !heading && m && turn !== 'arrive'
+      ? junctions.get(started ? nav.next : 0)
+      : undefined;
   const big = heading ? nav.toRoute : toNext;
   const arrival = fill(t.arriveAt, { time: formatClock(new Date(now + eta * 1000), lang) });
   useNavNotice(
@@ -152,7 +160,8 @@ export function NavView(props: Props) {
           data-state={nav.arrived ? 'arrived' : rerouting ? 'rerouting' : 'go'}
         >
           {/* The whole banner opens the steps ahead; the button inside says so to a screen reader. */}
-          {guiding && (
+          {/* Off the route too, where a stop pulling the user back is taken off. */}
+          {!nav.arrived && (
             <button
               type="button"
               className="ride-toggle"
@@ -161,7 +170,11 @@ export function NavView(props: Props) {
               onClick={() => on.onOpen(!open)}
             />
           )}
-          <TurnIcon turn={turn} size={40} />
+          {junction ? (
+            <JunctionIcon junction={junction} size={40} />
+          ) : (
+            <TurnIcon turn={turn} size={40} />
+          )}
           <div>
             {guiding && big != null && <strong>{formatDistance(big, lang, units)}</strong>}
             {/* Only the instruction is announced: the distance changes with every fix. */}
@@ -195,7 +208,8 @@ export function NavView(props: Props) {
             </div>
           )}
         </section>
-        {open && guiding && (
+        {/* Off the route too: the stop pulling the user back can come off right there. */}
+        {open && !nav.arrived && (
           <TripDetails onClose={() => on.onOpen(false)}>
             <PointList {...points} />
             {along && (
@@ -272,11 +286,19 @@ export function NavWaiting({ status, location, destination, ...on }: WaitingProp
       : status === 'busy'
         ? t.routeBusy
         : status === 'failed'
-          ? t.routeFailed
-          : status === 'none'
+          ? navigator.onLine
+            ? t.routeDown
+            : t.routeFailed
+          : status === 'none' || status === 'noRoad' || status === 'tooFar'
             ? t.noRoute
             : t.routing;
-  const stuck = noFix || status === 'busy' || status === 'failed' || status === 'none';
+  const stuck =
+    noFix ||
+    status === 'busy' ||
+    status === 'failed' ||
+    status === 'none' ||
+    status === 'noRoad' ||
+    status === 'tooFar';
   return (
     <>
       <section className="nav-banner" data-state={stuck ? 'rerouting' : 'go'}>
@@ -287,6 +309,12 @@ export function NavWaiting({ status, location, destination, ...on }: WaitingProp
         {(status === 'busy' || status === 'failed') && (
           <button type="button" className="ride-new" onClick={on.onRetry}>
             {t.retry}
+          </button>
+        )}
+        {/* "Allow it in the settings": one tap there (the app; a browser has no such page). */}
+        {noFix && location === 'denied' && openAppSettings && (
+          <button type="button" className="ride-new" onClick={openAppSettings}>
+            {t.settings}
           </button>
         )}
       </section>

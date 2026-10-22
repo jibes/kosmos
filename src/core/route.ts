@@ -1,4 +1,4 @@
-import type { LngLat } from './geo';
+import { boundsOfLine, type LngLat } from './geo';
 import { parseLanes, type Lane } from './lanes';
 import type { Transit } from './transit';
 
@@ -102,7 +102,16 @@ export function routeUrl(
   avoidTolls = false,
   /** Stops on the way, in order: the route arrives at each and sets off again. */
   via: readonly LngLat[] = [],
+  /**
+   * Both ends on public roads within `END_RADIUS_M`, not just the road nearest: asked once
+   * after "no path" (442). Hotel grounds behind a private gate can be reached but never left,
+   * a pedestrian quarter's street (Temple Bar) left but never reached; a road round them can.
+   */
+  publicEnds = false,
 ) {
+  const end = publicEnds
+    ? { radius: END_RADIUS_M, search_filter: { min_road_class: 'residential' } }
+    : {};
   const options =
     mode === 'car' && avoidTolls
       ? { auto: { use_tolls: 0, exclude_tolls: true } }
@@ -116,9 +125,10 @@ export function routeUrl(
         ...(from.heading != null && Number.isFinite(from.heading)
           ? { heading: Math.round(((from.heading % 360) + 360) % 360), heading_tolerance: 45 }
           : {}),
+        ...end,
       },
       ...via.map((v) => ({ lat: +v.lat.toFixed(6), lon: +v.lng.toFixed(6) })),
-      { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
+      { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6), ...end },
     ],
     costing: COSTING[mode],
     ...(options ? { costing_options: options } : {}),
@@ -288,13 +298,7 @@ function toRoute(trip: VTrip | undefined): Route | null {
     }
   }
   if (coords.length < 2) return null;
-  let [w, s, e, n] = [180, 90, -180, -90];
-  for (const [x, y] of coords) {
-    w = Math.min(w, x);
-    e = Math.max(e, x);
-    s = Math.min(s, y);
-    n = Math.max(n, y);
-  }
+  const [w, s, e, n] = boundsOfLine(coords);
   return {
     coords,
     distance: (trip.summary?.length ?? 0) * metres,
@@ -320,10 +324,40 @@ export function parseValhalla(json: unknown): Route[] {
     .filter((x): x is Route => !!x);
 }
 
-export type RouteError = 'none' | 'busy' | 'failed';
+/**
+ * `none`: no way between the two ends; `noRoad`: none for this way of travel near one of them
+ * (a car park's private road, a footpath only); `tooFar`: past the router's limit for it.
+ */
+export type RouteError = 'none' | 'busy' | 'failed' | 'noRoad' | 'tooFar';
 
 /** Valhalla answers "no route" with HTTP 400; the public server says "busy" with 429. */
-export function classifyError(status: number): RouteError {
+/** Valhalla's own error codes, where they tell more than the status. */
+const NO_ROAD = new Set([170, 171]);
+const TOO_FAR = new Set([150, 154, 155, 156, 157]);
+/** Valhalla found roads at both ends but no way between them. */
+export const NO_PATH = 442;
+/** How far round an end a road may be taken when the nearest leads nowhere, metres. */
+export const END_RADIUS_M = 150;
+
+/** The router's error code in its answer, if any. */
+export function errorCodeOf(json: unknown): number | undefined {
+  let body = json;
+  // The app's own HTTP hands a body it could not read as JSON over as text.
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return undefined;
+    }
+  }
+  const c = (body as { error_code?: unknown } | null)?.error_code;
+  return typeof c === 'number' ? c : undefined;
+}
+
+export function classifyError(status: number, json?: unknown): RouteError {
+  const code = errorCodeOf(json);
+  if (code !== undefined && NO_ROAD.has(code)) return 'noRoad';
+  if (code !== undefined && TOO_FAR.has(code)) return 'tooFar';
   if (status === 429 || status === 503) return 'busy';
   if (status === 400 || status === 404) return 'none';
   return 'failed';
@@ -355,7 +389,9 @@ export function formatDistance(m: number, lang: string, units: Units = 'metric')
       const [size, unit] = units === 'us' ? [FOOT, 'ft'] : [YARD, 'yd'];
       const v = m / size;
       const step = v < 300 ? 10 : 50;
-      return `${Math.max(0, Math.round(v / step) * step)} ${unit}`;
+      // Never more than 0.1 mi says just after (176 yd, 528 ft): a countdown never goes up.
+      const most = units === 'us' ? 500 : 170;
+      return `${Math.min(most, Math.max(0, Math.round(v / step) * step))} ${unit}`;
     }
     // Where rounding would reach the next step ("10.0 mi"), the next step's way of saying it.
     return `${nf(m / MILE, m < 9.95 * MILE ? 1 : 0)} mi`;
@@ -379,7 +415,8 @@ export function spokenDistance(
   if (units !== 'metric') {
     if (m < MILE / 10) {
       const [size, unit] = units === 'us' ? [FOOT, 'ft' as const] : [YARD, 'yd' as const];
-      return { value: Math.max(50, Math.round(m / size / 50) * 50), unit };
+      const most = units === 'us' ? 500 : 150;
+      return { value: Math.min(most, Math.max(50, Math.round(m / size / 50) * 50)), unit };
     }
     return { value: Math.round((m / MILE) * 10) / 10, unit: 'mi' };
   }

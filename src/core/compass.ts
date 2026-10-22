@@ -98,13 +98,16 @@ export function filterHeading(
 
 /**
  * Direction to show: the route's course while moving (see `NavState.moving`), else the
- * compass, since standing or walking slowly GPS course is noise.
+ * compass, since standing or walking slowly GPS course is noise. `held`: on the route by car
+ * or bike, where standing (traffic, a light) faces the way on, and a phone in a mount is no
+ * compass; a walker turning on the spot still turns it.
  */
 export function travelHeading(
   course: number | null,
   compass: number | null,
   moving: boolean,
+  held = false,
 ): number | null {
-  if (moving && course != null) return course;
+  if ((moving || held) && course != null) return course;
   return compass ?? course;
 }

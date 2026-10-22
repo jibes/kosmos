@@ -91,7 +91,13 @@ export function parseContacts(raw: string | null): Contact[] {
           !!c &&
           typeof c.name === 'string' &&
           typeof c.address === 'string' &&
-          (c.lng === undefined || (Number.isFinite(c.lng) && Number.isFinite(c.lat))),
+          (c.lng === undefined
+            ? c.lat === undefined
+            : Number.isFinite(c.lng) &&
+              Number.isFinite(c.lat) &&
+              Math.abs(c.lat) <= 90 &&
+              Math.abs(c.lng) <= 180) &&
+          (c.missed === undefined || c.missed === true),
       )
       .slice(0, CONTACTS_MAX);
   } catch {

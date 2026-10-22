@@ -1,7 +1,5 @@
 import { distance } from './geo';
-import { track } from './nav';
 import type { Maneuver, Route } from './route';
-import { townAhead, type Town } from './towns';
 
 /** The eight ways a road can lead, clockwise from north. */
 export type Compass = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
@@ -55,24 +53,17 @@ const add = (text: string | undefined, more: string) =>
 
 /** Leaving, arriving and coming off a roundabout name no way of their own. */
 const NO_WAY = new Set([1, 2, 3, 4, 5, 6, EXIT]);
-/** Junctions on main roads: ramps, exits, forks and merges (Valhalla's types). */
-const JUNCTION = new Set([18, 19, 20, 21, 22, 23, 24, 25, 37, 38]);
-/** A turn onto a road this long before the next step leads somewhere: worth a town's name. */
-const LONG_LEG_M = 2_000;
 
 /**
  * Where a maneuver leads, said by where the signs point rather than only the road's name or
  * number, which run both ways. Every maneuver with a signed destination (`toward`) gets it as
  * `wayOut`, added to its words unless the router said it already. Roundabouts also take the
- * signs of their exit. Without a sign, roundabouts, junctions and turns onto a long road take
- * the next town the route reaches (`towns`, from the map's place labels), as a sign there
- * would most likely say; a roundabout without either the direction its exit road leads.
+ * signs of their exit. Only a sign names a place: a guessed town is often not the one on the
+ * sign. Without one the road's own name and number stand (the banner's `road`), and a
+ * roundabout says the direction its exit road leads.
  */
-export function narrateWays(route: Route, words: ExitWords, towns: Town[] = []): Route {
+export function narrateWays(route: Route, words: ExitWords): Route {
   const ms = route.maneuvers;
-  const tr = towns.length ? track(route) : null;
-  const townAt = (begin: number) =>
-    tr ? townAhead(tr, tr.along[Math.min(begin, tr.along.length - 1)], towns) : null;
   const maneuvers = ms.map((m, i): Maneuver => withJunction(way(m, i), words));
   return { ...route, maneuvers };
 
@@ -80,13 +71,7 @@ export function narrateWays(route: Route, words: ExitWords, towns: Town[] = []):
     if (NO_WAY.has(m.type)) return m;
     const out =
       m.type === ENTER ? (ms.slice(i + 1).find((x) => x.type === EXIT) ?? ms[i + 1]) : undefined;
-    const signed = m.toward ?? out?.toward;
-    const named =
-      !signed &&
-      (out || JUNCTION.has(m.type) || (m.type >= 9 && m.type <= 16 && m.distance >= LONG_LEG_M))
-        ? townAt((out ?? m).begin)
-        : null;
-    const toward = signed ?? named ?? undefined;
+    const toward = m.toward ?? out?.toward;
     const deg = !toward && out ? headingFrom(route.coords, out.begin) : null;
     // A roundabout shows the numbers signed at its exit, as it does the places.
     if (out && !m.refs && out.refs) m = { ...m, refs: out.refs };

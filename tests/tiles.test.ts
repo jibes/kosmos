@@ -35,6 +35,16 @@ describe('tilesIn', () => {
     expect(world.length).toBe(48);
   });
 
+  it('finds the tiles with the middle just east of the antimeridian, wrapped or not', () => {
+    const taveuni = { lng: -179.995, lat: -17.8 };
+    for (const east of [-179.98, 180.02]) {
+      const t = tilesIn({ west: 179.99, east, south: -17.81, north: -17.79 }, taveuni);
+      expect(t.length).toBeGreaterThan(0);
+      expect(t[0].x).toBe(0);
+      expect(new Set(t.map((x) => x.x))).toEqual(new Set([0, 2 ** 14 - 1]));
+    }
+  });
+
   it('wraps around the antimeridian', () => {
     const fiji = { lng: 179.999, lat: -17.8 };
     const t = tilesIn({ west: 179.99, east: -179.99, south: -17.81, north: -17.79 }, fiji);

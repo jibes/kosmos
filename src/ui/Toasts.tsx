@@ -53,18 +53,23 @@ export function Toasts({
       {toast && (
         <div className="toast surface">
           <span>{toast.text}</span>
-          {toast.actions?.map((a) => (
-            <button
-              key={a.label}
-              type="button"
-              onClick={() => {
-                dismiss();
-                a.run();
-              }}
-            >
-              {a.label}
-            </button>
-          ))}
+          {/* The choices stay together: a line of their own when they do not fit beside it. */}
+          {toast.actions && (
+            <span className="toast-actions">
+              {toast.actions.map((a) => (
+                <button
+                  key={a.label}
+                  type="button"
+                  onClick={() => {
+                    dismiss();
+                    a.run();
+                  }}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </span>
+          )}
         </div>
       )}
     </div>

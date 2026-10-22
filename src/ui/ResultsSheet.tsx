@@ -114,7 +114,13 @@ export function ResultsSheet({
                 <KindIcon kind={p.kind ?? 'place'} />
                 <span className="r-name">{p.name}</span>
                 <span className="r-detail">
-                  {p.distance !== undefined ? formatDistance(p.distance, lang, units) : p.detail}
+                  {/* Several of one name ("Lidl"): where each is tells them apart. */}
+                  {[
+                    p.distance !== undefined ? formatDistance(p.distance, lang, units) : '',
+                    p.detail,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </span>
               </button>
             </li>

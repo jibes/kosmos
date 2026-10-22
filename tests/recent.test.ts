@@ -88,5 +88,9 @@ describe('recent searches', () => {
     expect(recentPlaceOf({ name: 'Pin', detail: '', ...at }, 'Pin')).toBeNull();
     // The user's own position is no place to find again.
     expect(recentPlaceOf({ name: 'My location', detail: '', ...at, here: true }, 'Pin')).toBeNull();
+    // A station stays one: its card shows departures when opened from the list.
+    expect(recentPlaceOf({ name: 'Hbf', detail: '', ...at, stop: true }, 'Pin')).toMatchObject({
+      stop: true,
+    });
   });
 });

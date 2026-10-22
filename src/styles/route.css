@@ -84,6 +84,14 @@
   color: var(--muted);
   cursor: grab;
   touch-action: none;
+  position: relative;
+}
+
+/* 44 px to hold, wider than it looks. */
+.grip::after {
+  content: '';
+  position: absolute;
+  inset: 0 -6px;
 }
 
 .grip:active {
@@ -191,7 +199,8 @@ span.end-btn {
 }
 
 .route-msg button,
-.depart button {
+.depart button,
+.departures-note button {
   min-height: 44px;
   padding: 0 8px;
   color: var(--accent);
@@ -601,9 +610,37 @@ span.end-btn {
   inset: -4px 0;
 }
 
-.chip[aria-pressed='true'] {
+.chip[aria-pressed='true'],
+.chip[data-chosen] {
   background: var(--accent);
   color: #fff;
+}
+
+/* Any other kind: a chip that opens the list of them. */
+select.chip {
+  border: 0;
+  font: inherit;
+  font-size: 14px;
+  appearance: none;
+  padding-right: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 55%,
+    calc(100% - 10px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  background-color: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+select.chip[data-chosen] {
+  background-color: var(--accent);
+}
+
+select.chip option {
+  color: var(--text);
+  background: var(--surface);
 }
 
 .along-list {
@@ -628,4 +665,31 @@ span.end-btn {
 .along-add {
   grid-column: 3;
   grid-row: 1 / span 2;
+}
+
+/* Where to buy tickets: the operators of the connection, each a link to its website. */
+.tickets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 10px 0 0;
+  font-size: 14px;
+}
+
+.tickets span {
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.tickets a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 22px;
+  background: var(--hover-strong);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
 }

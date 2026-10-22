@@ -1,3 +1,4 @@
+import { isAway } from './native';
 import type * as maplibregl from 'maplibre-gl';
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import type { userMarker } from './markers';
@@ -22,7 +23,8 @@ export function useDotInView(
     const f = fixRef.current;
     const seen = !map || !f || map.getBounds().contains([f.lng, f.lat]);
     meRef.current?.away(!seen);
-    compass.need(seen || keepRef.current);
+    // Out of sight (the app put away while guiding keeps its page running) nothing shows it.
+    compass.need(!isAway() && (seen || keepRef.current));
   }, [map, meRef, compass]);
   useEffect(() => {
     fixRef.current = fix;
@@ -32,8 +34,12 @@ export function useDotInView(
   useEffect(() => {
     if (!map) return;
     map.on('moveend', apply);
+    window.addEventListener('kosmosaway', apply);
+    document.addEventListener('visibilitychange', apply);
     return () => {
       map.off('moveend', apply);
+      window.removeEventListener('kosmosaway', apply);
+      document.removeEventListener('visibilitychange', apply);
     };
   }, [map, apply]);
 }

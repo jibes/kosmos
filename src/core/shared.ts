@@ -30,6 +30,56 @@ function pairIn(text: string | null | undefined): LngLat | null {
   return m ? point(Number(m[1]), Number(m[2])) : null;
 }
 
+/**
+ * One coordinate written with degrees ("52°30'58.7\"N", "N 52° 30.978'", "52,5163° N"):
+ * hemisphere letters before or after (German O for east), minutes and seconds optional.
+ */
+const DEG = String.raw`(\d{1,3}(?:[.,]\d+)?)\s*[°º˚]\s*(?:(\d{1,2}(?:[.,]\d+)?)\s*['′’]\s*(?:(\d{1,2}(?:[.,]\d+)?)\s*(?:"|″|''|”))?)?`;
+const SEP = String.raw`\s*[,;/]?\s*`;
+/** Letters before each ("N 52° 30.978' E 13° 22.662'") or after each, or none. */
+const DMS_PRE = new RegExp(String.raw`^([NSEWO])?\s*${DEG}${SEP}([NSEWO])?\s*${DEG}$`, 'i');
+const DMS_POST = new RegExp(String.raw`^${DEG}\s*([NSEWO])?${SEP}${DEG}\s*([NSEWO])?$`, 'i');
+/** Decimal degrees with hemisphere letters and no degree sign: "52.5163N 13.3777E". */
+const HEMI = /^(\d{1,3}\.\d+)\s*([NS])\s*[,;/]?\s*(\d{1,3}\.\d+)\s*([EWO])$/i;
+
+const num = (s: string | undefined) => (s ? Number(s.replace(',', '.')) : 0);
+
+/** A point written in degrees, minutes and seconds, or with hemisphere letters; else null. */
+export function degreesIn(text: string): LngLat | null {
+  const t = text.trim();
+  const h = HEMI.exec(t);
+  if (h) {
+    const lat = num(h[1]) * (/s/i.test(h[2]) ? -1 : 1);
+    const lng = num(h[3]) * (/w/i.test(h[4]) ? -1 : 1);
+    return point(lat, lng);
+  }
+  let parts: { hemi: string; d: string; min?: string; sec?: string }[];
+  let m = DMS_PRE.exec(t);
+  if (m) {
+    parts = [
+      { hemi: m[1] ?? '', d: m[2], min: m[3], sec: m[4] },
+      { hemi: m[5] ?? '', d: m[6], min: m[7], sec: m[8] },
+    ];
+  } else if ((m = DMS_POST.exec(t))) {
+    parts = [
+      { hemi: m[4] ?? '', d: m[1], min: m[2], sec: m[3] },
+      { hemi: m[8] ?? '', d: m[5], min: m[6], sec: m[7] },
+    ];
+  } else return null;
+  // 60 minutes or seconds is not a coordinate.
+  if (parts.some((p) => num(p.min) >= 60 || num(p.sec) >= 60)) return null;
+  const [a, b] = parts.map((p) => {
+    const hemi = p.hemi.toUpperCase();
+    const value = num(p.d) + num(p.min) / 60 + num(p.sec) / 3600;
+    return { hemi, value: /[SW]/.test(hemi) ? -value : value };
+  });
+  // Hemisphere letters say which is which; without them latitude comes first.
+  const isLng = (p: { hemi: string }) => /[EWO]/.test(p.hemi);
+  const [lat, lng] = isLng(a) && !isLng(b) ? [b, a] : [a, b];
+  if (isLng(lat) || /[NS]/.test(lng.hemi)) return null;
+  return point(lat.value, lng.value);
+}
+
 const zoomOf = (z: string | null | undefined) => {
   const n = Number(z);
   return Number.isFinite(n) && n > 0 && n <= 22 ? n : undefined;
@@ -123,6 +173,8 @@ export function parseShared(text: string): Shared | null {
     }
   }
   const words = t.replace(URL_RE, ' ').replace(/\s+/g, ' ').trim();
+  const deg = degreesIn(words);
+  if (deg) return { at: deg };
   const at = pairIn(words);
   if (at && words.replace(PAIR, '').replace(/[\s,;°NSEW]/gi, '') === '') return { at };
   return words.length >= 2 ? { query: words.slice(0, 200) } : null;

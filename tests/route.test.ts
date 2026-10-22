@@ -59,6 +59,28 @@ describe('routeUrl', () => {
     });
   });
 
+  it('asks from the public roads at both ends, not a gated car park, when told to', () => {
+    const url = new URL(
+      routeUrl(
+        { lng: 13.4, lat: 52.5 },
+        { lng: 13.5, lat: 52.6 },
+        'car',
+        'en',
+        2,
+        'metric',
+        false,
+        [{ lng: 13.45, lat: 52.55 }],
+        true,
+      ),
+    );
+    const [start, stop, end] = JSON.parse(url.searchParams.get('json')!).locations;
+    const pub = { radius: 150, search_filter: { min_road_class: 'residential' } };
+    expect(start).toMatchObject(pub);
+    expect(end).toMatchObject(pub);
+    // A stop on the way is where the user wants to be, service road or not.
+    expect(stop).toEqual({ lat: 52.55, lon: 13.45 });
+  });
+
   it('keeps a walk to footways and sidewalks, off roads without them', () => {
     const body = (mode: 'foot' | 'bike' | 'car') =>
       JSON.parse(
@@ -222,6 +244,10 @@ describe('parseValhalla', () => {
 
 describe('formatting', () => {
   it('rounds distances like a person would say them', () => {
+    // Just under 0.1 mi never reads (or is said) as more than 0.1 mi just after.
+    expect(formatDistance(160.9, 'en', 'uk')).toBe('170 yd');
+    expect(formatDistance(160.9, 'en', 'us')).toBe('500 ft');
+    expect(spokenDistance(160.9, 'uk')).toEqual({ value: 150, unit: 'yd' });
     expect(formatDistance(12, 'en')).toBe('10 m');
     expect(formatDistance(437, 'en')).toBe('440 m');
     expect(formatDistance(4234, 'en')).toBe('4.2 km');
@@ -332,6 +358,13 @@ describe('formatting', () => {
     expect(classifyError(429)).toBe('busy');
     expect(classifyError(400)).toBe('none');
     expect(classifyError(500)).toBe('failed');
+    // The router's own code says more than its status.
+    expect(classifyError(400, { error_code: 171, error: 'No suitable edges near location' })).toBe(
+      'noRoad',
+    );
+    expect(classifyError(400, '{"error_code":154}')).toBe('tooFar');
+    expect(classifyError(400, { error_code: 442 })).toBe('none');
+    expect(classifyError(400, 'not json')).toBe('none');
     expect(turnOf(10)).toBe('right');
     expect(turnOf(16)).toBe('slight-left');
     expect(turnOf(26)).toBe('roundabout');

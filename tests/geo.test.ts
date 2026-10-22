@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  boundsOfLine,
   directionsUrl,
   distance,
   formatLngLat,
@@ -49,5 +50,22 @@ describe('geo', () => {
     const paris = { lng: 2.3522, lat: 48.8566 };
     expect(distance(berlin, paris) / 1000).toBeCloseTo(877.5, 0);
     expect(distance(berlin, berlin)).toBe(0);
+  });
+});
+
+describe('boundsOfLine', () => {
+  it('is the narrow box over the 180th meridian, not round the world', () => {
+    expect(
+      boundsOfLine([
+        [179.99, -16.8],
+        [-179.99, -16.79],
+      ]),
+    ).toEqual([179.99, -16.8, 180.01, -16.79]);
+    expect(
+      boundsOfLine([
+        [13.3, 52.5],
+        [13.4, 52.6],
+      ]),
+    ).toEqual([13.3, 52.5, 13.4, 52.6]);
   });
 });

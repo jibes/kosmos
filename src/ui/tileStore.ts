@@ -14,6 +14,8 @@ const SCHEME = 'kosmos';
 const DB = 'kosmos-tiles';
 /** A TileJSON this old is asked again first; offline the kept one serves. */
 const SOURCE_MS = 4000;
+/** A tile fetched for later gives up after this, as the app's other requests do. */
+const PREFETCH_TIMEOUT_MS = 20_000;
 
 let db: Promise<IDBDatabase> | null = null;
 const open = () =>
@@ -23,8 +25,19 @@ const open = () =>
       req.result.createObjectStore('data');
       req.result.createObjectStore('meta', { keyPath: 'k' });
     };
-    req.onsuccess = () => done(req.result);
-    req.onerror = () => fail(req.error);
+    req.onsuccess = () => {
+      const d = req.result;
+      // Closed under it (site data cleared, storage pressure): opened anew on the next ask.
+      d.onclose = d.onversionchange = () => {
+        d.close();
+        db = null;
+      };
+      done(d);
+    };
+    req.onerror = () => {
+      db = null;
+      fail(req.error);
+    };
   }));
 
 const done = <T>(req: IDBRequest<T>) =>
@@ -51,25 +64,29 @@ async function read(k: string): Promise<{ data: ArrayBuffer; meta: Meta } | null
 /** The kept total, known after the first look, so room is made without a scan each time. */
 let total: number | null = null;
 
-async function write(k: string, data: ArrayBuffer, keep: boolean) {
+/** `got`: when it came from the network; only the keep flag changing leaves it as it was. */
+async function write(k: string, data: ArrayBuffer, keep: boolean, got = Date.now()) {
   const d = await open();
   const now = Date.now();
   const tx = d.transaction(['data', 'meta'], 'readwrite');
   tx.objectStore('data').put(data, k);
   const old = await done(tx.objectStore('meta').get(k) as IDBRequest<Meta | undefined>);
-  const meta: Meta = { k, at: now, got: now, size: data.byteLength, keep: keep || old?.keep };
+  const meta: Meta = { k, at: now, got, size: data.byteLength, keep: keep || old?.keep };
   tx.objectStore('meta').put(meta);
   if (total !== null) total += data.byteLength - (old?.size ?? 0);
   if (total === null || total > OFFLINE_MAX_BYTES) void makeRoom();
 }
 
-/** Shown again: kept longer. Written at most once a day, as it is shown all the time. */
+/**
+ * Shown again: kept longer. Written at most once a day, as it is shown all the time; the record
+ * read anew in the same transaction, so a write since (the world's keep flag) is never undone.
+ */
 async function touch(meta: Meta) {
   if (Date.now() - meta.at < 86_400_000) return;
   const d = await open();
-  d.transaction('meta', 'readwrite')
-    .objectStore('meta')
-    .put({ ...meta, at: Date.now() });
+  const metas = d.transaction('meta', 'readwrite').objectStore('meta');
+  const now = await done(metas.get(meta.k) as IDBRequest<Meta | undefined>);
+  if (now) metas.put({ ...now, at: Date.now() });
 }
 
 let tidying = false;
@@ -82,19 +99,44 @@ async function makeRoom() {
       d.transaction('meta').objectStore('meta').getAll() as IDBRequest<Meta[]>,
     );
     total = all.reduce((n, m) => n + m.size, 0);
-    const gone = toEvict(all);
-    if (!gone.length) return;
+    if (total <= OFFLINE_MAX_BYTES) return;
+    // Down to 90 %, so the next tiles shown do not each start another scan of them all.
+    const gone = new Set(toEvict(all, OFFLINE_MAX_BYTES * 0.9));
+    if (!gone.size) return;
     const tx = d.transaction(['data', 'meta'], 'readwrite');
     for (const k of gone) {
       tx.objectStore('data').delete(k);
       tx.objectStore('meta').delete(k);
     }
-    const freed = all.filter((m) => gone.includes(m.k)).reduce((n, m) => n + m.size, 0);
+    const freed = all.filter((m) => gone.has(m.k)).reduce((n, m) => n + m.size, 0);
     total -= freed;
-    logEvent('tiles.evict', { n: gone.length });
+    logEvent('tiles.evict', { n: gone.size });
   } finally {
     tidying = false;
   }
+}
+
+/**
+ * Lets go of every area viewed and every trip kept, never the world; for About's button.
+ * Says how many bytes that freed.
+ */
+export async function clearViewed(): Promise<number> {
+  const d = await open();
+  const all = await done(d.transaction('meta').objectStore('meta').getAll() as IDBRequest<Meta[]>);
+  const gone = all.filter((m) => !m.keep);
+  const tx = d.transaction(['data', 'meta'], 'readwrite');
+  for (const m of gone) {
+    tx.objectStore('data').delete(m.k);
+    tx.objectStore('meta').delete(m.k);
+  }
+  await new Promise<void>((ok, fail) => {
+    tx.oncomplete = () => ok();
+    tx.onerror = () => fail(tx.error);
+  });
+  const freed = gone.reduce((n, m) => n + m.size, 0);
+  total = all.reduce((n, m) => n + m.size, 0) - freed;
+  logEvent('tiles.clear', { n: gone.length });
+  return freed;
 }
 
 /** How much is kept, for the About sheet. */
@@ -106,14 +148,26 @@ export async function keptBytes(): Promise<number> {
 /**
  * A tile (or a font range) by its URL: kept, else from the network and kept; a stale one is
  * shown and fetched anew behind. `keep` holds it through any lack of room (the world).
+ * `fresh` (fetching for later) waits for a stale one's new copy instead, so a download of
+ * many keeps to its own pace and can be stopped.
  */
-export async function storedFetch(url: string, keep = false, signal?: AbortSignal) {
+export async function storedFetch(url: string, keep = false, signal?: AbortSignal, fresh = false) {
   const k = tileKey(url);
   const hit = await read(k).catch(() => null);
   if (hit) {
     void touch(hit.meta).catch(() => undefined);
-    if (keep && !hit.meta.keep) void write(k, hit.data, true).catch(() => undefined);
-    if (Date.now() - hit.meta.got > TILE_STALE_MS && navigator.onLine) {
+    const stale = Date.now() - hit.meta.got > TILE_STALE_MS && navigator.onLine;
+    if (stale && fresh) {
+      const data = await network(url, signal).catch(() => null);
+      if (data) {
+        await write(k, data, keep).catch(() => undefined);
+        return data;
+      }
+    }
+    if (keep && !hit.meta.keep) {
+      void write(k, hit.data, true, hit.meta.got).catch(() => undefined);
+    }
+    if (stale && !fresh) {
       void network(url)
         .then((data) => write(k, data, keep))
         .catch(() => undefined);
@@ -131,30 +185,32 @@ async function network(url: string, signal?: AbortSignal) {
   return res.arrayBuffer();
 }
 
-/** Kept already (prefetching skips it). */
-export async function isKept(url: string) {
-  const d = await open();
-  const n = await done(d.transaction('meta').objectStore('meta').count(tileKey(url)));
-  return n > 0;
-}
-
-/** The TileJSON: asked first, the kept one offline or when the network is slow. */
+/**
+ * The TileJSON: asked first; the kept one offline or when the network is slow. With none kept,
+ * the network is waited for however long it takes, or a slow first start had no map at all.
+ */
 async function source(url: string, signal: AbortSignal) {
   const k = `source|${url}`;
-  const late = new AbortController();
-  signal.addEventListener('abort', () => late.abort());
-  const timer = setTimeout(() => late.abort(), SOURCE_MS);
-  try {
-    const data = await network(url, late.signal);
+  const asked = network(url, signal).then((data) => {
     void write(k, data, true).catch(() => undefined);
     return data;
-  } catch (e) {
-    const hit = await read(k).catch(() => null);
-    if (hit) return hit.data;
-    throw e;
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((ok) => (timer = setTimeout(() => ok(null), SOURCE_MS)));
+  try {
+    const first = await Promise.race([asked, late]);
+    if (first) return first;
+  } catch {
+    // Offline or refused: the kept one, below.
   } finally {
     clearTimeout(timer);
   }
+  const hit = await read(k).catch(() => null);
+  if (hit) {
+    asked.catch(() => undefined);
+    return hit.data;
+  }
+  return asked;
 }
 
 /**
@@ -189,8 +245,9 @@ export function registerTileStore() {
 }
 
 /**
- * Many tiles fetched for later (the world, a trip), a few at a time, each kept one skipped.
- * Ends early when `stop` says so (guidance ended, the network gone); says how many came.
+ * Many tiles fetched for later (the world, a trip), a few at a time: a kept one is only shown
+ * again (so making room keeps it) or, stale, fetched anew. Ends early when `stop` says so
+ * (guidance ended, the network gone); says how many are kept and how many failed.
  */
 export async function prefetch(
   urls: string[],
@@ -201,8 +258,9 @@ export async function prefetch(
     /** How many are done (kept, fetched or missing), now and then. */
     progress?: (done: number, total: number) => void;
   } = {},
-): Promise<number> {
+): Promise<{ got: number; failed: number }> {
   let got = 0;
+  let failed = 0;
   let i = 0;
   let handled = 0;
   let told = 0;
@@ -218,16 +276,16 @@ export async function prefetch(
     while (i < urls.length && !o.stop?.()) {
       const url = urls[i++];
       try {
-        if (o.keep || !(await isKept(url))) {
-          await storedFetch(url, o.keep);
-          got++;
-        }
+        // Each request ends: a stalled connection would otherwise hold the download for good.
+        await storedFetch(url, o.keep, AbortSignal.timeout(PREFETCH_TIMEOUT_MS), true);
+        got++;
       } catch {
         // Missing (an empty sea tile) or the network gone: the next one.
+        failed++;
       }
       tell();
     }
   };
   await Promise.all(Array.from({ length: o.at ?? 4 }, worker));
-  return got;
+  return { got, failed };
 }

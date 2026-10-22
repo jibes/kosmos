@@ -26,6 +26,10 @@ const ZOOMED = 1;
  * A category (or chain) search on the map: its dots, "show them all", and noticing when the map has
  * moved away from where it looked, so the user can search the new area.
  */
+/** The places the search's dots stand for, by their feature id (their place in the list). */
+let onMap: Place[] = [];
+export const searchResultAt = (id: number): Place | undefined => onMap[id];
+
 export function useCategory(
   map: maplibregl.Map | null,
   lang: string,
@@ -72,6 +76,7 @@ export function useCategory(
   const hot = useRef<number | null>(null);
   const dots = useCallback(
     (places: Place[]) => {
+      onMap = places;
       const source = map?.getSource(SEARCH_SOURCE) as maplibregl.GeoJSONSource | undefined;
       // New results: none stands out yet (states outlive the data, by id).
       if (source) map?.removeFeatureState({ source: SEARCH_SOURCE });

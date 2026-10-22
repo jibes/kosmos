@@ -44,6 +44,16 @@ export function parseLookupPlace(
 }
 
 /** Websites without the scheme read better; links still need it. */
+/**
+ * A phone number as a `tel:` link: the first of several (`;`), digits and the leading plus
+ * only, without the trunk "(0)" written after the country code ("+49 (0)30 …").
+ */
+export const telOf = (phone: string) => {
+  const first = phone.split(';')[0].trim();
+  const intl = first.startsWith('+') ? first.replace(/\(0\)/g, '') : first;
+  return `tel:${intl.replace(/[^\d+]/g, '')}`;
+};
+
 export const withScheme = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://${url}`);
 
 export function parseLookup(json: unknown): Details {

@@ -19,7 +19,8 @@ adb shell am start -W -n "$PKG/.MainActivity"
 # release build forwards nothing else from the WebView), at most 60 s, then a little longer for
 # the first tiles to draw.
 for _ in $(seq 1 30); do
-  adb logcat -d | grep -q "kosmos:ready" && break
+  # Not grep -q: quitting early breaks the pipe, and pipefail would never let the loop end.
+  adb logcat -d | grep "kosmos:ready" > /dev/null && break
   sleep 2
 done
 sleep 8
@@ -54,11 +55,18 @@ fi
 
 # A place handed over by another app, through the app's own intent filters: a geo: link, then
 # a shared message. Both are taken (the app logs which kind, never the place), with no crash.
+# `am start` may exit non-zero though the intent reached the running app (delivered to the
+# top-most instance); what counts is that the app logged it, checked below, so its own exit
+# status is only shown, never the end of the run.
+deliver() {
+  local out
+  out=$(adb shell am start -W -p "$PKG" "$@" 2>&1) || echo "am start: $out"
+}
 adb logcat -c
-adb shell am start -W -p "$PKG" -a android.intent.action.VIEW -d "'geo:52.5163,13.3777?z=17'" >/dev/null
+deliver -a android.intent.action.VIEW -d "'geo:52.5163,13.3777?z=17'"
 sleep 4
-adb shell am start -W -p "$PKG" -a android.intent.action.SEND -t text/plain \
-  --es android.intent.extra.TEXT "'Brandenburger Tor, Pariser Platz, Berlin'" >/dev/null
+deliver -a android.intent.action.SEND -t text/plain \
+  --es android.intent.extra.TEXT "'Brandenburger Tor, Pariser Platz, Berlin'"
 sleep 4
 adb logcat -d > "$OUT/logcat-shared.txt"
 for kind in point words; do
@@ -105,7 +113,7 @@ guide() {
   adb shell cmd location set-location-enabled true
   for _ in $(seq 1 20); do
     adb emu geo fix 13.4050 52.5200 >/dev/null
-    adb logcat -d | grep -q "navigation: first fix" && break
+    adb logcat -d | grep "navigation: first fix" > /dev/null && break
     sleep 2
   done
   adb logcat -d > "$OUT/logcat-$name.txt"

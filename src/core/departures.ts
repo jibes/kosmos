@@ -63,7 +63,7 @@ export const GONE_MS = 60_000;
 
 /**
  * The departures in a stoptimes answer, soonest first: the same vehicle once (a station's
- * stops overlap), none already gone, at most `DEPARTURES_SHOWN`.
+ * stops overlap), none already gone; all of them, so a card left open has more to come.
  */
 export function parseDepartures(json: unknown, now: number): Departure[] {
   const times = (json as { stopTimes?: MStopTime[] } | null)?.stopTimes;
@@ -92,7 +92,7 @@ export function parseDepartures(json: unknown, now: number): Departure[] {
       cancelled: !!(st.cancelled || st.tripCancelled),
     });
   }
-  return out.sort((a, b) => a.time - b.time).slice(0, DEPARTURES_SHOWN);
+  return out.sort((a, b) => a.time - b.time);
 }
 
 /** OpenMapTiles `poi` values of stops and stations, as a tapped label's feature has them. */
@@ -117,6 +117,9 @@ export const isStopOsm = (key: string | undefined, value: string | undefined) =>
   (key === 'highway' && value === 'bus_stop') ||
   (key === 'amenity' && ['bus_station', 'ferry_terminal'].includes(value ?? ''));
 
-/** The departures still to come at `now`: a card left open does not list those gone. */
+/**
+ * The departures still to come at `now`, at most `DEPARTURES_SHOWN`: a card left open does not
+ * list those gone, and the later ones asked for take their place.
+ */
 export const stillToCome = (list: Departure[], now: number) =>
-  list.filter((d) => d.time >= now - GONE_MS);
+  list.filter((d) => d.time >= now - GONE_MS).slice(0, DEPARTURES_SHOWN);

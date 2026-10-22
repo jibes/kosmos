@@ -65,6 +65,17 @@ describe('opening hours', () => {
     expect(nearDeviceClock(here * 15 + 120, now)).toBe(false);
     expect(nearDeviceClock(here * 15 - 120, now)).toBe(false);
   });
+
+  it('counts round the clock across the date line (Samoa is UTC+13 at 172° W)', () => {
+    const tz = process.env.TZ;
+    process.env.TZ = 'Pacific/Apia';
+    try {
+      expect(nearDeviceClock(-171.76, new Date(2026, 9, 15, 10))).toBe(true);
+      expect(nearDeviceClock(13.4, new Date(2026, 9, 15, 10))).toBe(false);
+    } finally {
+      process.env.TZ = tz;
+    }
+  });
 });
 
 describe('weekRows', () => {

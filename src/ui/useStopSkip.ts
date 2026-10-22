@@ -36,9 +36,11 @@ export function useStopSkip(o: SkipOptions) {
     opts.current = o;
   });
   const watch = useRef<StopWatch | null>(null);
-  const kept = useRef(new Set<number>());
+  /** By their points: a stop's index shifts as others are taken off or added. */
+  const kept = useRef(new Set<string>());
   const asking = useRef<{
     stop: number;
+    at: string;
     timer: ReturnType<typeof setTimeout>;
     text: string;
   } | null>(null);
@@ -53,15 +55,20 @@ export function useStopSkip(o: SkipOptions) {
   }, [navigating]);
 
   useEffect(() => {
-    if (!navigating || !fix || behind >= via.length) return;
-    const stop = via[behind];
-    // Reached or skipped meanwhile: the question is moot.
-    if (asking.current && asking.current.stop < behind) {
+    if (!navigating) return;
+    // Reached, skipped or taken off meanwhile: the question is moot.
+    const at = (p: Place | undefined) => (p ? `${p.lng},${p.lat}` : '');
+    if (
+      asking.current &&
+      (asking.current.stop < behind || at(via[asking.current.stop]) !== asking.current.at)
+    ) {
       clearTimeout(asking.current.timer);
       opts.current.dismissText(asking.current.text);
       asking.current = null;
     }
-    if (asking.current || kept.current.has(behind)) return;
+    if (!fix || behind >= via.length) return;
+    const stop = via[behind];
+    if (asking.current || kept.current.has(at(stop))) return;
     const next = leavingStop(watch.current, behind, distance(fix, stop), offRoute, mode);
     watch.current = next.watch;
     if (!next.leaving) return;
@@ -85,9 +92,9 @@ export function useStopSkip(o: SkipOptions) {
     const keep = () => {
       done();
       logEvent('stop.keep');
-      kept.current.add(i);
+      kept.current.add(at(stop));
     };
-    asking.current = { stop: i, timer: setTimeout(skip, SKIP_DELAY_MS), text };
+    asking.current = { stop: i, at: at(stop), timer: setTimeout(skip, SKIP_DELAY_MS), text };
     if (!say(fill(t.saySkipStop, { name: stop.name, n: SKIP_DELAY_MS / 1000 }))) {
       vibrate(BUZZ.warn);
     }

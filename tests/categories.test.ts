@@ -65,6 +65,14 @@ describe('categories', () => {
     expect(isOf('bus_stop', { name: 'Unter den Linden', subclass: 'bus_stop' })).toBe(true);
   });
 
+  it("finds a church by what it is, though the tiles' subclass is its faith", () => {
+    const dom = { name: 'Berliner Dom', class: 'place_of_worship', subclass: 'christian' };
+    expect(categoriesFor('Kirche')).toContain('worship');
+    expect(isOf('worship', dom)).toBe(true);
+    // A pitch's subclass is its sport.
+    expect(isOf('sport', { name: 'Platz 1', class: 'pitch', subclass: 'soccer' })).toBe(true);
+  });
+
   it('offers what a beginning may mean, exact words first, at most two', () => {
     expect(categoriesFor('Lebens')).toEqual(['groceries']);
     expect(categoriesFor('bar')[0]).toBe('bar');

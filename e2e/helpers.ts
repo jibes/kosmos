@@ -119,7 +119,9 @@ export async function openRoute(page: Page, context: BrowserContext) {
     .getByRole('button', { name: /^Route$/ })
     .click();
   const card = page.locator('.card.route');
-  await expect(card.locator('.summary strong')).toHaveText(/min/);
+  // A search and one or two router answers (a toll-free way asked after the first), on a
+  // browser maybe just started: more than the default 5 s on a busy runner.
+  await expect(card.locator('.summary strong')).toHaveText(/min/, { timeout: 15_000 });
   return card;
 }
 

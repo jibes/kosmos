@@ -489,7 +489,8 @@
   right: 16px;
 }
 
-.about svg {
+/* The logo, not the close button's cross. */
+.about-body > svg {
   border-radius: 14px;
   box-shadow: var(--shadow);
 }
@@ -621,10 +622,13 @@
 }
 
 /* A note to read lets taps through to the map; one with a choice takes them. */
+/* Too many choices for one line (a dropped pin with a route open): they wrap below the text,
+   never under the map's buttons. */
 .toast {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 2px 14px;
   max-width: 100%;
   padding: 10px 16px;
   border-radius: 18px;
@@ -632,6 +636,12 @@
   font-weight: 500;
   text-wrap: balance;
   animation: drop-in 0.32s var(--ease);
+}
+
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
 }
 
 .toast:has(button),

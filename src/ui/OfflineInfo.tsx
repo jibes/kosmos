@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { fill, locale, t } from '../i18n';
 import { useFetching, type Fetching } from './offlineState';
-import { keptBytes } from './tileStore';
+import { clearViewed, keptBytes } from './tileStore';
 import { lastWorld } from './useKeepMap';
 
 const MB = 1024 * 1024;
+const mb = new Intl.NumberFormat(locale, { style: 'unit', unit: 'megabyte' });
 const size = (bytes: number) =>
-  bytes < MB ? '< 1 MB' : `${Math.round(bytes / MB).toLocaleString(locale)} MB`;
+  bytes < MB ? `< ${mb.format(1)}` : mb.format(Math.round(bytes / MB));
 const count = (n: number) => n.toLocaleString(locale);
 
 /** One download under way: what, how far, as a bar and in words. */
@@ -41,6 +42,21 @@ export function OfflineInfo() {
       clearInterval(id);
     };
   }, [busy]);
+  // A second tap within a few seconds clears, as nothing brings the areas back offline.
+  const [asking, setAsking] = useState(false);
+  useEffect(() => {
+    if (!asking) return;
+    const id = window.setTimeout(() => setAsking(false), 4000);
+    return () => clearTimeout(id);
+  }, [asking]);
+  const clear = () => {
+    if (!asking) return setAsking(true);
+    setAsking(false);
+    void clearViewed()
+      .then(() => keptBytes())
+      .then(setBytes)
+      .catch(() => undefined);
+  };
   const last = lastWorld();
   return (
     <dd className="offline-map">
@@ -62,6 +78,13 @@ export function OfflineInfo() {
         </small>
       )}
       {trip && <Progress text={t.tripFetching} f={trip} />}
+      {!busy && !!bytes && (
+        <div>
+          <button type="button" className="save-log" onClick={clear}>
+            {asking ? t.offlineClearSure : t.offlineClear}
+          </button>
+        </div>
+      )}
     </dd>
   );
 }

@@ -143,13 +143,10 @@ export function SearchRow({ it, lang, placed, busy, onForgetContacts }: RowProps
     case 'place': {
       const { place } = it;
       const far = it.away ?? place.distance;
-      const line = [
-        far !== undefined ? formatDistance(far, lang, units) : '',
-        it.away !== undefined ? place.detail : '',
-      ]
+      // How far, and where: several of the same name are told apart by it.
+      const detail = [far !== undefined ? formatDistance(far, lang, units) : '', place.detail]
         .filter(Boolean)
         .join(' · ');
-      const detail = far !== undefined ? line : place.detail;
       return (
         <>
           {it.fav ? <StarIcon filled /> : <KindIcon kind={place.kind ?? 'place'} />}

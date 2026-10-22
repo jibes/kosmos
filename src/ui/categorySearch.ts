@@ -8,13 +8,12 @@ import { isStopPoi } from '../core/departures';
 import { kindOfPoi } from '../core/placeKind';
 import type { LngLat } from '../core/geo';
 import type { Place } from '../core/search';
-import { lang as uiLang, t } from '../i18n';
+import { t } from '../i18n';
 import { wide } from './layout';
 import { MAP_SOURCE } from '../core/style';
 import { DETAIL_ZOOM, tilePoint, tilesIn, tileUrl, type TileId } from '../core/tiles';
 import { placesAlong, tilesAlong } from '../core/alongRoute';
 import type { Track } from '../core/nav';
-import type { Town } from '../core/towns';
 
 /** A first search from a view wider than this zooms in once, so the results can be told apart. */
 const SEARCH_ZOOM = 12;
@@ -260,7 +259,7 @@ export async function findAlong(
   }));
 }
 
-/** The map's tiles, once known, for reading along a route away from the map (`useRoute`). */
+/** The map's tiles, once known, for keeping them away from the map (`useKeepMap`). */
 let tileTemplate: string | undefined;
 export const tilesTemplate = () => tileTemplate;
 export function knowTiles(map: maplibregl.Map) {
@@ -272,31 +271,4 @@ export function knowTiles(map: maplibregl.Map) {
   return () => {
     map.off('sourcedata', set);
   };
-}
-
-/** Zoom 10 holds every town and village; a band this wide catches those beside the road. */
-const TOWN_ZOOM = 10;
-const TOWN_BAND = { band: 2_000, reach: 150_000 };
-const TOWN_TILES = 40;
-
-/**
- * The towns along a route (`core/towns.ts`), from the map's own place labels: what a road sign
- * there would most likely name. Empty when the map's tiles are not known or do not come.
- */
-export async function townsAlong(tr: Track): Promise<Town[]> {
-  if (!tileTemplate) return [];
-  const tiles = tilesAlong(tr, 0, TOWN_BAND, TOWN_TILES, TOWN_ZOOM);
-  const got = await Promise.allSettled(
-    tiles.map((tile) => places(tileUrl(tileTemplate!, tile), tile, 'place')),
-  );
-  return got.flatMap((r) =>
-    r.status === 'fulfilled'
-      ? r.value.flatMap((s): Town[] => {
-          const kind = s.props.class;
-          const name = s.props[`name:${uiLang}`] ?? s.props.name;
-          if ((kind !== 'city' && kind !== 'town' && kind !== 'village') || !name) return [];
-          return [{ name: String(name), kind, lng: s.lng, lat: s.lat }];
-        })
-      : [],
-  );
 }

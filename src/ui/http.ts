@@ -53,7 +53,9 @@ export async function getJson(url: string, signal: AbortSignal, body?: string) {
     // Sent as plain text, the POST stays a "simple" request for CORS: no preflight.
     const init = { signal: ctrl.signal, ...(body ? { method: 'POST', body } : {}) };
     const res = await fetch(url, init);
-    return { ok: res.ok, status: res.status, json: res.ok ? await res.json() : null };
+    // A refusal's body says why (the router's error code), when it is JSON at all.
+    const json = await res.json().catch(() => null);
+    return { ok: res.ok, status: res.status, json };
   } finally {
     clearTimeout(timer);
     signal.removeEventListener('abort', stop);

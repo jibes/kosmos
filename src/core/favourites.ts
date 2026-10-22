@@ -22,10 +22,17 @@ export const FAVOURITES_MAX = 200;
 /** The same place: its OSM id, or its name a few steps away (a label tapped again). */
 const SAME_M = 50;
 
-type Spot = Pick<Favourite, 'name' | 'lng' | 'lat' | 'osm' | 'label'>;
-/** A place opened from a renamed favourite carries the new name: either name knows it. */
+type Spot = Pick<Favourite, 'name' | 'lng' | 'lat' | 'osm' | 'label'> & { own?: string };
+/**
+ * A place opened from a renamed favourite carries the user's name, and the place's own (`own`)
+ * for when the user's changes: any of them knows it.
+ */
 const sameName = (a: Spot, b: Spot) =>
-  a.name === b.name || (!!a.label && a.label === b.name) || (!!b.label && b.label === a.name);
+  a.name === b.name ||
+  (!!a.label && a.label === b.name) ||
+  (!!b.label && b.label === a.name) ||
+  (!!a.own && a.own === b.name) ||
+  (!!b.own && b.own === a.name);
 
 export const sameFavourite = (a: Spot, b: Spot) =>
   a.osm && b.osm ? a.osm === b.osm : sameName(a, b) && distance(a, b) <= SAME_M;
@@ -71,6 +78,29 @@ export function toggleFavourite(
   return [kept, ...list].slice(0, FAVOURITES_MAX);
 }
 
+/**
+ * A favourite starred before its card's lookup came: the address and OSM id it lacks, from
+ * that place now. Nothing it has is changed, but for the name of the one starred (`was`) when
+ * the lookup named the place (a dropped pin, by what is there).
+ */
+export function completeFavourite(
+  list: Favourite[],
+  p: Pick<Favourite, 'name' | 'lng' | 'lat' | 'detail' | 'osm'>,
+  was?: Favourite,
+): Favourite[] {
+  return list.map((f) => {
+    const renamed = f === was && !sameFavourite(f, p) && distance(f, p) <= SAME_M;
+    if (!renamed && !sameFavourite(f, p)) return f;
+    if (!renamed && !((!f.detail && p.detail) || (!f.osm && p.osm))) return f;
+    return {
+      ...f,
+      ...(renamed ? { name: p.name } : {}),
+      detail: f.detail || p.detail,
+      ...(f.osm || !p.osm ? {} : { osm: p.osm }),
+    };
+  });
+}
+
 /** What storage holds, anything malformed dropped. */
 export function parseFavourites(raw: string | null): Favourite[] {
   if (!raw) return [];
@@ -88,7 +118,13 @@ export function parseFavourites(raw: string | null): Favourite[] {
           Math.abs(f.lat) <= 90 &&
           Math.abs(f.lng) <= 180 &&
           typeof f.at === 'number' &&
-          (f.label === undefined || typeof f.label === 'string'),
+          (f.label === undefined || typeof f.label === 'string') &&
+          (f.osm === undefined || typeof f.osm === 'string') &&
+          (f.kind === undefined || typeof f.kind === 'string') &&
+          (f.stop === undefined || typeof f.stop === 'boolean'),
+      )
+      .map((f) =>
+        f.label && f.label.length > LABEL_MAX ? { ...f, label: f.label.slice(0, LABEL_MAX) } : f,
       )
       .slice(0, FAVOURITES_MAX);
   } catch {
@@ -109,8 +145,14 @@ export function favouriteFeatures(list: Favourite[]): GeoJSON.FeatureCollection 
   };
 }
 
-/** Favourites from a backup added to those there are: the same place is kept as it is here. */
+/**
+ * Favourites from a backup added to those there are: the same place is kept as it is here,
+ * and none here makes way for one restored (the newest restored first while there is room).
+ */
 export function mergeFavourites(here: Favourite[], restored: Favourite[]): Favourite[] {
-  const added = restored.filter((r) => !here.some((f) => sameFavourite(f, r)));
-  return [...here, ...added].sort((a, b) => b.at - a.at).slice(0, FAVOURITES_MAX);
+  const added = restored
+    .filter((r) => !here.some((f) => sameFavourite(f, r)))
+    .sort((a, b) => b.at - a.at)
+    .slice(0, Math.max(0, FAVOURITES_MAX - here.length));
+  return [...here, ...added].sort((a, b) => b.at - a.at);
 }

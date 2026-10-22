@@ -12,8 +12,12 @@ const PAIR_RES = [20, 1, 0.05, 0.0025, 0.000125];
 const GRID_ROWS = 5;
 const GRID_COLS = 4;
 
-/** A Plus Code anywhere in the text ("9C5M8RJW+Q2", "8RJW+Q2 Dublin"), and the rest of it. */
-const PLUS = /(?:^|\s)([23456789CFGHJMPQRVWX]{2,8}\+[23456789CFGHJMPQRVWX]{0,7})(?=\s|,|$)/i;
+/**
+ * A Plus Code anywhere in the text ("9C5M8RJW+Q2", "8RJW+Q2 Dublin"), and the rest of it. Two
+ * characters before the "+" need two after it ("Lidl 24+" and "22+ Club" are names).
+ */
+const C = '[23456789CFGHJMPQRVWX]';
+const PLUS = new RegExp(`(?:^|\\s)(${C}{4,8}\\+${C}{0,7}|${C}{2,3}\\+${C}{2,7})(?=\\s|,|$)`, 'i');
 
 /** The middle of a full code's area; null for a code that is not one. */
 function decodeFull(code: string): LngLat | null {
@@ -113,9 +117,10 @@ export function postcodeOf(text: string): { code: string; area: string } | null 
   // The Netherlands: four digits, two letters.
   m = /^(\d{4})([A-Z]{2})$/.exec(c);
   if (m) return { code: `${m[1]} ${m[2]}`, area: m[1] };
-  // Elsewhere written with a space or a dash between its parts: the first part names the area.
+  // Elsewhere written with a space or a dash between its parts (113 51, 1000-001): the first
+  // part names the area. Both have a digit: "12 Main" is a house number, "Linie 12" a line.
   m = /^([A-Z0-9]{2,5})[\s-]([A-Z0-9]{2,4})$/.exec(raw);
-  if (m && /\d/.test(m[1])) return { code: `${m[1]} ${m[2]}`, area: m[1] };
+  if (m && /\d/.test(m[1]) && /\d/.test(m[2])) return { code: `${m[1]} ${m[2]}`, area: m[1] };
   return null;
 }
 

@@ -72,6 +72,8 @@ export function snap(
   fix: LngLat,
   hint = 0,
   reach?: { from: number; ahead: number },
+  /** Only these shape points (segments `from` to `to`), when the caller knows where to look. */
+  within?: { from: number; to: number },
 ): Snap {
   const p = project([fix.lng, fix.lat], tr.lat0);
   const best = { d: Infinity, seg: 0, f: 0 };
@@ -91,9 +93,12 @@ export function snap(
       if (d < best.d) Object.assign(best, { d, seg: i, f });
     }
   };
-  // Forward window of about a kilometre of shape points first, as far as one could have got.
-  scan(hint, hint + 200, reach ? reach.from + reach.ahead : Infinity);
-  if (best.d > 50) scan(0, tr.xy.length);
+  if (within) scan(within.from, within.to);
+  else {
+    // Forward window of about a kilometre of shape points first, as far as one could have got.
+    scan(hint, hint + 200, reach ? reach.from + reach.ahead : Infinity);
+    if (best.d > 50) scan(0, tr.xy.length);
+  }
   const [a, b] = [
     tr.route.coords[best.seg],
     tr.route.coords[best.seg + 1] ?? tr.route.coords[best.seg],
@@ -107,6 +112,45 @@ export function snap(
     point: [a[0] + best.f * (b[0] - a[0]), a[1] + best.f * (b[1] - a[1])],
     bearing: (Math.atan2(bx - ax, by - ay) / RAD + 360) % 360,
   };
+}
+
+/** The coarse marks along the route `snapNear` looks from (metres apart). */
+const MARK_M = 1_000;
+
+/**
+ * Many points snapped onto the route, each `null` beyond `near` metres from it: a point far
+ * from the line through marks about a kilometre apart is far from the road, and a near one is
+ * snapped onto the few kilometres of road round it only. Snapping each onto the whole road
+ * (places along a long drive) took a minute and froze the app.
+ */
+export function snapNear(tr: Track, points: LngLat[], near: number): (Snap | null)[] {
+  const marks: number[] = [0];
+  for (let i = 1; i < tr.along.length; i++) {
+    if (tr.along[i] - tr.along[marks[marks.length - 1]] >= MARK_M) marks.push(i);
+  }
+  if (marks[marks.length - 1] !== tr.along.length - 1) marks.push(tr.along.length - 1);
+  return points.map((pt) => {
+    const [px, py] = project([pt.lng, pt.lat], tr.lat0);
+    let best = -1;
+    let bestD = Infinity;
+    // The road between two marks strays from the straight line joining them by less than a
+    // mark's way (a long straight stretch is that line itself).
+    for (let k = 0; k + 1 < marks.length; k++) {
+      const [ax, ay] = tr.xy[marks[k]];
+      const [bx, by] = tr.xy[marks[k + 1]];
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      const f = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+      const d = Math.hypot(px - (ax + f * dx), py - (ay + f * dy));
+      if (d < bestD) [bestD, best] = [d, k];
+    }
+    if (best < 0 || bestD > near + MARK_M) return null;
+    const from = marks[Math.max(0, best - 1)];
+    const to = marks[Math.min(marks.length - 1, best + 2)] + 1;
+    const s = snap(tr, pt, 0, undefined, { from, to });
+    return s.offset <= near ? s : null;
+  });
 }
 
 /**
@@ -264,11 +308,15 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
   // Too coarse to tell which road, let alone which side of a turn: wait for a better fix.
   if (fix.accuracy > COARSE_M) return { ...prev, weak: true };
   const s = snap(tr, fix, prev.snap?.segment ?? 0, reachOf(prev, fix));
-  // Never let a noisy fix move progress backwards by more than a few metres.
+  const limit = offRouteLimit(fix.accuracy, tr.mode);
+  // Never let a noisy fix move progress backwards by more than a few metres; progress from a
+  // fix off the route (snapped anywhere along it) is none to hold.
   const along =
-    prev.snap && s.along < prev.snap.along - 30 && s.offset > 20 ? prev.snap.along : s.along;
+    prev.snap && prev.snap.offset <= limit && s.along < prev.snap.along - 30 && s.offset > 20
+      ? prev.snap.along
+      : s.along;
   const total = tr.along[tr.along.length - 1];
-  const onLine = s.offset <= offRouteLimit(fix.accuracy, tr.mode);
+  const onLine = s.offset <= limit;
   const joined = prev.joined || onLine;
   // Still getting to the route (it starts on the road nearest to where it was asked from):
   // heading for its start is not off it; only moving well away from it is.
@@ -281,7 +329,9 @@ export function step(tr: Track, prev: NavState, fix: Fix): NavState {
     off = toRoute > approach + LEAVE_M;
   }
   // The wrong way along the route: going back down it, or a course against it.
-  const peak = Math.max(prev.peak, along);
+  // The furthest along the route, on it only: a fix off it may snap to a far part of the route
+  // (a side road beside its way back), and correct driving after would count as going back.
+  const peak = onLine ? Math.max(prev.peak, along) : prev.peak;
   const course = fix.heading != null && Number.isFinite(fix.heading) ? fix.heading : null;
   const against =
     onLine && course !== null && prev.moving && Math.abs(angleDiff(course, s.bearing)) > AGAINST_DEG
@@ -352,6 +402,32 @@ export interface RerouteMark {
   lat: number;
   time: number;
   count: number;
+}
+
+/** A course this old still says which way a car stopped in traffic faces. */
+export const COURSE_KEEP_MS = 120_000;
+/** Above this a fix's own course is the way of travel (below it GPS course is noise), m/s. */
+const COURSE_SPEED = 2;
+
+export interface Course {
+  heading: number;
+  at: number;
+}
+
+/**
+ * The way of travel a reroute leaves in: the fix's own course while moving, else the last one
+ * while it is recent, as a car stopped in traffic still faces it. Without one the router may
+ * start the new route backwards, and it is off again at once.
+ */
+export function courseOf(
+  fix: { heading?: number | null; speed?: number | null },
+  last: Course | null,
+  now: number,
+): Course | null {
+  const h = fix.heading;
+  if (h != null && !Number.isNaN(h) && (fix.speed ?? 0) > COURSE_SPEED)
+    return { heading: h, at: now };
+  return last && now - last.at < COURSE_KEEP_MS ? last : null;
 }
 
 const movedOn = (last: RerouteMark, fix: Fix) =>

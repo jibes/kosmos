@@ -27,6 +27,8 @@ export interface Place extends LngLat {
   kind?: PlaceKind;
   /** The OSM object (`N123`, `W456`), when the search knows it; details are looked up by it. */
   osm?: string;
+  /** Opened from a favourite by the user's name for it: the place's own, to know it again. */
+  own?: string;
 }
 
 export interface SearchBias extends LngLat {

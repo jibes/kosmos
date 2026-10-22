@@ -22,13 +22,15 @@ export const lastWorld = (): { at: number; z: number } | null => {
   }
 };
 
+type Connection = EventTarget & { type?: string; saveData?: boolean };
+const connection = () => (navigator as Navigator & { connection?: Connection }).connection;
+
 /**
  * May the world be fetched now, and to which zoom: on Wi-Fi (or a wired computer), never
  * saving data; an automated browser only when a test asks.
  */
 function worldZoom(): number | null {
-  const c = (navigator as Navigator & { connection?: { type?: string; saveData?: boolean } })
-    .connection;
+  const c = connection();
   if (c?.saveData) return null;
   if (navigator.webdriver) {
     const asked = stored(WORLD_TEST_KEY);
@@ -47,32 +49,58 @@ function worldZoom(): number | null {
 export function useKeepMap(route: Route | undefined, mode: Mode, navigating: boolean) {
   useEffect(() => {
     let id = 0;
+    let running = false;
+    let wait = 2000;
     const run = async () => {
+      clearTimeout(id);
       const z = worldZoom();
-      if (z === null || !worldDue(lastWorld(), Date.now(), z)) return;
+      if (running || z === null || !worldDue(lastWorld(), Date.now(), z)) return;
       const template = tilesTemplate();
-      // The map's tiles not known yet (slow to open, offline at first): a little later.
+      // The map's tiles not known yet (slow to open, offline at first): later, less often.
       if (!template) {
-        id = window.setTimeout(run, 2000);
+        id = window.setTimeout(run, wait);
+        wait = Math.min(wait * 2, 120_000);
         return;
       }
+      running = true;
       let stopped = false;
-      const got = await prefetch(
+      const { got, failed } = await prefetch(
         worldTiles(z).map((tile) => tileUrl(template, tile)),
         {
           keep: true,
           at: 2,
-          stop: () => (stopped ||= !navigator.onLine),
+          // Off Wi-Fi (out of the house) or offline: stopped, to go on another time.
+          stop: () => (stopped ||= !navigator.onLine || worldZoom() === null),
           progress: (done, total) => setFetching('world', { done, total }),
         },
       );
+      running = false;
       setFetching('world', null);
-      if (!stopped) store(WORLD_KEY, JSON.stringify({ at: Date.now(), z }));
-      logEvent('tiles.world', { z, got, done: !stopped });
+      // Most failing is no world kept (Wi-Fi without the internet, a hotel's login page): again
+      // next time, not in a month.
+      const kept = !stopped && failed * 2 < got + failed;
+      if (kept) {
+        store(WORLD_KEY, JSON.stringify({ at: Date.now(), z }));
+        // Asked once kept: else the browser may drop the store when space runs low.
+        void navigator.storage?.persist?.().catch(() => undefined);
+      }
+      logEvent('tiles.world', { z, got, failed, done: kept });
     };
     // An automated browser that asked (`worldZoom`) need not wait.
     id = window.setTimeout(run, navigator.webdriver ? 500 : WORLD_AFTER_MS);
-    return () => clearTimeout(id);
+    // Opened on mobile data: Wi-Fi coming later (or the connection back) starts it then.
+    const later = () => {
+      clearTimeout(id);
+      id = window.setTimeout(run, 5000);
+    };
+    const c = connection();
+    window.addEventListener('online', later);
+    c?.addEventListener?.('change', later);
+    return () => {
+      clearTimeout(id);
+      window.removeEventListener('online', later);
+      c?.removeEventListener?.('change', later);
+    };
   }, []);
 
   const guiding = useRef(navigating);
@@ -81,13 +109,14 @@ export function useKeepMap(route: Route | undefined, mode: Mode, navigating: boo
   });
   useEffect(() => {
     const template = tilesTemplate();
-    if (!navigating || !route || !template) return;
+    // Saving data: the trip's tiles are hundreds; only what is shown is kept then.
+    if (!navigating || !route || !template || connection()?.saveData) return;
     let live = true;
     const urls = tripTiles(track(route, mode)).map((tile) => tileUrl(template, tile));
     void prefetch(urls, {
       stop: () => !live || !guiding.current || !navigator.onLine,
       progress: (done, total) => setFetching('trip', { done, total }),
-    }).then((got) => {
+    }).then(({ got }) => {
       setFetching('trip', null);
       if (live && navigator.onLine) logEvent('tiles.trip', { n: urls.length, got });
     });

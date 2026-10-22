@@ -17,6 +17,8 @@ test.describe('routes', () => {
   inWorld();
 
   test('routes to a place, with steps, by travel mode', async ({ page, context }, info) => {
+    // Every way of travel in turn: past 30 s on a slow runner.
+    test.slow();
     const card = await openRoute(page, context);
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     await expect(card.getByRole('radio', { name: 'Car' })).toHaveAttribute('aria-checked', 'true');
@@ -58,10 +60,20 @@ test.describe('routes', () => {
     );
   });
 
+  test('shows the ways at once, not waiting for the towns on their signs', async ({
+    page,
+    context,
+  }) => {
+    // The towns come from zoom-10 tiles; these never answer.
+    await page.route(/\/planet\/[^/]+\/10\/\d+\/\d+\.pbf/, () => undefined);
+    const card = await openRoute(page, context);
+    await expect(card.locator('.summary strong')).toHaveText(/min/, { timeout: 2000 });
+  });
+
   test('changes the start and the destination of a route', async ({ page, context }) => {
     const card = await openRoute(page, context);
     await card.locator('.end-btn').first().click();
-    const start = page.getByRole('combobox', { name: 'Search start' });
+    const start = page.getByRole('combobox', { name: 'Search for a start' });
     await expect(start).toBeFocused();
     await start.fill('brandenburg');
     await page.getByRole('option').nth(1).click();
@@ -80,7 +92,7 @@ test.describe('routes', () => {
 
     // The destination can be changed from the route view too.
     await card.locator('.end-btn').nth(1).click();
-    const dest = page.getByRole('combobox', { name: 'Search destination' });
+    const dest = page.getByRole('combobox', { name: 'Search for a destination' });
     await expect(dest).toBeFocused();
     await dest.fill('brandenburg');
     await page.getByRole('option', { name: /Havel/ }).click();
@@ -198,6 +210,10 @@ test.describe('routes', () => {
     await expect(legs.locator('.ride time').first()).toHaveAttribute('data-late');
     await expect(legs.locator('.walk')).toHaveCount(2);
     await expect(card.locator('.summary')).toContainText('Direct');
+    // Tickets from the operator of the ride, on its own website.
+    const tickets = card.getByRole('link', { name: 'Tickets from BVG, on its website' });
+    await expect(tickets).toHaveAttribute('href', 'https://www.bvg.de/');
+    await expect(tickets).toHaveAttribute('target', '_blank');
     // Two connections and walking the whole way; each tile names its lines with their vehicle.
     const tiles = card.locator('.alts [role=radio]');
     await expect(tiles).toHaveCount(3);
@@ -237,6 +253,8 @@ test.describe('routes', () => {
     page,
     context,
   }, info) => {
+    // The whole trip, minute by minute: past 30 s on a slow runner.
+    test.slow();
     await page.evaluate(() => {
       const w = window as unknown as { spoken: string[]; offset: number };
       w.spoken = [];
@@ -463,7 +481,7 @@ test.describe('routes', () => {
       const [lat, lng] = transitRequests.at(-1)!.get('fromPlace')!.split(',').map(Number);
       expect(lat).toBeCloseTo(stopLat, 4);
       expect(lng).toBeCloseTo(from.lng, 4);
-      await expect(banner).toContainText('No route found');
+      await expect(banner).toContainText('No public transport connection');
       await expect(banner).toContainText('U6 is cancelled');
       await expect(banner.getByRole('button', { name: 'New connection' })).toBeEnabled();
     } finally {
@@ -494,6 +512,8 @@ test.describe('routes', () => {
   });
 
   test('keeps the chosen route when a reroute fails', async ({ page, context }) => {
+    // Twelve seconds off the route alone, then the failed reroute: past 30 s on a slow runner.
+    test.slow();
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const go = (lng: number, lat: number) =>
       context.setGeolocation({ latitude: lat, longitude: lng, accuracy: 5 });
@@ -560,10 +580,82 @@ test.describe('routes', () => {
     expect(Math.abs(pin.y + pin.height - end.y)).toBeLessThan(16);
   });
 
+  test('a note with many choices stays clear of the map buttons', async ({ page, context }) => {
+    // A small phone, where the choices of a dropped pin do not fit on one line.
+    await page.setViewportSize({ width: 360, height: 740 });
+    const card = await openRoute(page, context);
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await idle(page);
+    // High on the map, clear of the card.
+    await page.mouse.click(180, 160, { button: 'right' });
+    const note = page.locator('.toast');
+    await expect(note.getByRole('button')).toHaveCount(3);
+    const box = (await note.boundingBox())!;
+    // Every choice inside the note, and the note left of the location button.
+    for (const b of await note.getByRole('button').all()) {
+      const r = (await b.boundingBox())!;
+      expect(r.x + r.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    }
+    const locate = (await page.locator('.controls > button').first().boundingBox())!;
+    const overlaps =
+      box.x < locate.x + locate.width &&
+      box.x + box.width > locate.x &&
+      box.y < locate.y + locate.height &&
+      box.y + box.height > locate.y;
+    expect(overlaps).toBe(false);
+  });
+
+  test("the destination's pin follows the list: a stop moved to the end, the end taken off", async ({
+    page,
+    context,
+  }) => {
+    const card = await openRoute(page, context);
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    // A stop where the map is held.
+    await idle(page);
+    const at = await screenAt(page, CENTER.lng, CENTER.lat);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
+    // It takes its address, and Undo still takes it off after that.
+    await expect(card.locator('.point-list li').nth(1)).toContainText('Unter den Linden 5');
+    await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+    await expect(card.locator('.point-list li')).toHaveCount(2);
+    await page.mouse.click(at.x, at.y, { button: 'right' });
+    await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
+    await expect(card.locator('.point-list li')).toHaveCount(3);
+    /** How far the pin's tip stands from the trip's end as the router was last asked, px. */
+    const offEnd = () =>
+      page.evaluate((to) => {
+        const pin = document.querySelector('.pin')!.getBoundingClientRect();
+        const p = window.kosmos!.project(to as [number, number]);
+        return Math.hypot(pin.x + pin.width / 2 - p.x, pin.bottom - p.y);
+      }, routeRequests.at(-1)!.to);
+    await expect.poll(offEnd).toBeLessThan(3);
+    // The stop moved to the end by the keyboard: the route and the pin go there.
+    const grip = card.getByRole('button', { name: 'Move Unter den Linden 5', exact: true });
+    await grip.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(card.locator('.end-btn').last()).toHaveText('Unter den Linden 5');
+    await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(CENTER.lng, 2);
+    await expect.poll(offEnd).toBeLessThan(3);
+    await expect(page.locator('.pin')).toHaveCount(1);
+    // That end taken off: the one before is the end again, and so is the pin.
+    const last = card.locator('.point-list li').last();
+    await last.getByRole('button', { name: /^Remove/ }).click();
+    await expect(card.locator('.point-list li')).toHaveCount(2);
+    await expect.poll(() => routeRequests.at(-1)?.to[0]).toBeCloseTo(SEARCH_HIT.lng, 4);
+    await expect.poll(offEnd).toBeLessThan(3);
+    // Closed, the card under it is the destination's.
+    await card.getByRole('button', { name: 'Close' }).first().click();
+    await expect(page.locator('.card h2').first()).toHaveText(SEARCH_HIT.name);
+  });
+
   test('goes by way of stops: added from the card or the map, taken off again', async ({
     page,
     context,
   }) => {
+    // Eight route requests and a drag: near 30 s on its own, past it on a busy runner.
+    test.slow();
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
     await page.getByRole('combobox').fill('brandenburger');
@@ -576,24 +668,47 @@ test.describe('routes', () => {
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     // From the card: a stop found by name.
     await card.getByRole('button', { name: /Add stop/ }).click();
-    await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+    await page.getByRole('combobox', { name: 'Search for a stop' }).fill('brandenburg');
     await page.getByRole('option').filter({ hasText: 'Havel' }).click();
     await expect(card.locator('.point-list li')).toHaveCount(3);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(1);
     await expect(card.locator('.summary strong')).toHaveText(/min|h/);
     await expect(page.locator('.stop-dot')).toHaveText(['1']);
+    // The steps say the stop by its name, and arrive only at the end.
+    await card.locator('.steps summary').click();
+    await expect(card.locator('.steps')).toContainText('Stop at Brandenburg');
+    await expect(card.locator('.steps li').filter({ hasText: /^Arrive at/ })).toHaveCount(1);
+    await card.locator('.steps summary').click();
     // From the map: a point held there.
+    // Close in: fitted to the whole way, the point lies under the destination's pin and the dot.
+    await page.evaluate(
+      ([lng, lat]) => window.kosmos!.jumpTo({ center: [lng, lat], zoom: 15 }),
+      [CENTER.lng, CENTER.lat],
+    );
     await idle(page);
+    // Clear of the card, which grows tall on a phone with three points (beside it in the side
+    // layout: nothing to do).
+    const cardBox = (await card.boundingBox())!;
+    const held = await screenAt(page, CENTER.lng, CENTER.lat);
+    const inside = held.x >= cardBox.x && held.x <= cardBox.x + cardBox.width;
+    const under = inside ? held.y - (cardBox.y - 120) : 0;
+    if (under > 0) {
+      await page.evaluate((dy) => window.kosmos!.panBy([0, dy], { duration: 0 }), under);
+      await idle(page);
+    }
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
     await page.mouse.click(at.x, at.y, { button: 'right' });
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
     await expect(card.locator('.point-list li')).toHaveCount(4);
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(2);
-    // Where it was held, give or take the map settling under the pointer.
-    expect(routeRequests.at(-1)!.via[1][0]).toBeCloseTo(CENTER.lng, 2);
+    // Where it was held, give or take the map settling under the pointer; nearer along the way
+    // than the first stop, so before it.
+    expect(routeRequests.at(-1)!.via[0][0]).toBeCloseTo(CENTER.lng, 2);
+    // Its address, once looked up, as a start or destination held on the map has.
+    await expect(card.locator('.point-list li').nth(1)).toContainText('Unter den Linden 5');
     await expect(page.locator('.stop-dot')).toHaveText(['1', '2']);
     // The second dragged above the first by its grip: the router asked in the new order.
-    const grip = card.getByRole('button', { name: 'Move Dropped pin', exact: true });
+    const grip = card.getByRole('button', { name: /^Move Brandenburg an/ });
     // Measured once the card has settled: it grows as the stops come in.
     await expect
       .poll(async () => {
@@ -602,14 +717,16 @@ test.describe('routes', () => {
         return Math.abs((await grip.boundingBox())!.y - y);
       })
       .toBeLessThan(1);
-    const above = (await card.getByRole('button', { name: /^Move Brandenburg an/ }).boundingBox())!;
+    const above = (await card
+      .getByRole('button', { name: 'Move Unter den Linden 5', exact: true })
+      .boundingBox())!;
     const box = (await grip.boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2, above.y + above.height / 2, { steps: 8 });
     await page.mouse.up();
-    await expect(card.locator('.point-list li').nth(1)).toContainText('Dropped pin');
-    await expect.poll(() => routeRequests.at(-1)?.via[0][0]).toBeCloseTo(CENTER.lng, 2);
+    await expect(card.locator('.point-list li').nth(1)).toContainText('Brandenburg an');
+    await expect.poll(() => routeRequests.at(-1)?.via[1][0]).toBeCloseTo(CENTER.lng, 2);
     // Public transport goes straight there: no stops asked, none offered.
     await card.getByRole('radio', { name: 'Public transport' }).click();
     await expect(card.getByRole('radio', { name: 'Public transport' })).toHaveAttribute(
@@ -621,7 +738,7 @@ test.describe('routes', () => {
     await card.getByRole('radio', { name: 'Car' }).click();
     await expect(card.locator('.point-list li')).toHaveCount(4);
     // Taken off again: straight there.
-    await card.getByRole('button', { name: 'Remove Dropped pin' }).click();
+    await card.getByRole('button', { name: 'Remove Unter den Linden 5' }).click();
     await card.getByRole('button', { name: /^Remove Brandenburg an/ }).click();
     // Two left: neither comes off.
     await expect(card.getByRole('button', { name: /^Remove / })).toHaveCount(0);
@@ -643,7 +760,7 @@ test.describe('routes', () => {
       .click();
     const card = page.locator('.card.route');
     await card.getByRole('button', { name: /Add stop/ }).click();
-    await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+    await page.getByRole('combobox', { name: 'Search for a stop' }).fill('brandenburg');
     await page.getByRole('option').filter({ hasText: 'Havel' }).click();
     await expect(card.locator('.summary strong')).toHaveText(/min|h/);
     await idle(page);
@@ -658,7 +775,12 @@ test.describe('routes', () => {
         const w = window as unknown as { frames: number[][]; watching: boolean };
         w.frames = [];
         w.watching = true;
+        // From the drop on: before it, the rows are still making room (and slower runners
+        // are still sliding them there).
+        let dropped = false;
+        window.addEventListener('pointerup', () => (dropped = true), { capture: true, once: true });
         const tick = () => {
+          if (!dropped) return void requestAnimationFrame(tick);
           const top = (q: string) =>
             Math.round(document.querySelector(q)!.getBoundingClientRect().top);
           w.frames.push([top('.card.route'), top('.point-list li'), top('.point-list')]);
@@ -690,11 +812,12 @@ test.describe('routes', () => {
     await expect(card).not.toHaveAttribute('aria-busy', 'true', { timeout: 5000 });
     const seen = await frames();
     // The card stays put, and the row dropped first is in its place at once, not sliding in.
+    expect(seen.length).toBeGreaterThan(0);
     expect(new Set(seen.map(([c]) => c)).size).toBe(1);
     expect(seen.filter(([, row, list]) => row !== list)).toEqual([]);
   });
 
-  test('adds a stop while guiding: a label tapped, a new route by way of it', async ({
+  test('adds a stop while guiding, or ends there instead: a label tapped, one route', async ({
     page,
     context,
   }) => {
@@ -716,25 +839,27 @@ test.describe('routes', () => {
     await expect.poll(() => page.evaluate(() => Math.round(window.kosmos!.getPitch()))).toBe(55);
     const cafe = { lng: CENTER.lng + 140 / 67800, lat: CENTER.lat - 170 / 111200 };
     let at = { x: 0, y: 0 };
-    await expect
-      .poll(
-        async () => {
-          await jump(page, { ...cafe, zoom: 17 });
-          at = await screenAt(page, cafe.lng, cafe.lat);
-          return page.evaluate(
-            ({ x, y }) =>
-              window
-                .kosmos!.queryRenderedFeatures([
-                  [x - 10, y - 10],
-                  [x + 10, y + 10],
-                ])
-                .some((f) => f.properties.name === 'Café Einstein'),
-            at,
-          );
-        },
-        { timeout: 15_000 },
-      )
-      .toBe(true);
+    const seeCafe = () =>
+      expect
+        .poll(
+          async () => {
+            await jump(page, { ...cafe, zoom: 17 });
+            at = await screenAt(page, cafe.lng, cafe.lat);
+            return page.evaluate(
+              ({ x, y }) =>
+                window
+                  .kosmos!.queryRenderedFeatures([
+                    [x - 10, y - 10],
+                    [x + 10, y + 10],
+                  ])
+                  .some((f) => f.properties.name === 'Café Einstein'),
+              at,
+            );
+          },
+          { timeout: 15_000 },
+        )
+        .toBe(true);
+    await seeCafe();
     const asked = routeRequests.length;
     await page.mouse.click(at.x, at.y);
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
@@ -746,12 +871,22 @@ test.describe('routes', () => {
     await expect(banner).toBeVisible();
     await expect(page.locator('.stop-dot')).toHaveText(['1']);
     // The steps ahead list it: taken off again, straight there from here.
-    await banner.getByRole('button', { name: 'Show the route' }).click();
+    await banner.getByRole('button', { name: 'Show stops ahead' }).click();
     const list = page.locator('.ride-details .point-list li').filter({ hasText: 'Café' });
     await expect(list).toHaveText([/Café Einstein/]);
     await list.getByRole('button', { name: /^Remove Café/ }).click();
     await expect.poll(() => routeRequests.at(-1)?.via.length).toBe(0);
     await expect(page.locator('.stop-dot')).toHaveCount(0);
+    await expect(banner).toBeVisible();
+    // Changed plans: the café is where the trip now ends, one route there from here.
+    await banner.getByRole('button', { name: 'Show stops ahead' }).click();
+    await seeCafe();
+    const before = routeRequests.length;
+    await page.mouse.click(at.x, at.y);
+    await page.locator('.toast').getByRole('button', { name: 'Go here' }).click();
+    await expect.poll(() => routeRequests.length).toBe(before + 1);
+    expect(routeRequests.at(-1)!.to[0]).toBeCloseTo(cafe.lng, 4);
+    expect(routeRequests.at(-1)!.via).toEqual([]);
     await expect(banner).toBeVisible();
   });
 
@@ -790,7 +925,7 @@ test.describe('routes', () => {
         .click();
       const card = page.locator('.card.route');
       await card.getByRole('button', { name: /Add stop/ }).click();
-      await page.getByRole('combobox', { name: 'Search a stop' }).fill('brandenburg');
+      await page.getByRole('combobox', { name: 'Search for a stop' }).fill('brandenburg');
       await page.getByRole('option').filter({ hasText: 'Havel' }).click();
       await expect(card.locator('.summary strong')).toHaveText(/min|h/);
       await page.getByRole('button', { name: 'Start', exact: true }).click();
@@ -842,6 +977,57 @@ test.describe('routes', () => {
     await expect(card.getByRole('radio', { name: 'Walk' })).toHaveAttribute('aria-checked', 'true');
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     await expect(start).toBeEnabled();
+  });
+
+  test('says when no road for the way of travel is near an end', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    // What Valhalla answers for a point only private or footpaths reach.
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) =>
+      route.request().url().includes('auto')
+        ? route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ error_code: 171, error: 'No suitable edges near location' }),
+          })
+        : route.fallback(),
+    );
+    await page.getByRole('combobox').fill('brandenburger');
+    await page.getByRole('option').first().click();
+    await page
+      .locator('.card')
+      .getByRole('button', { name: /^Route$/ })
+      .click();
+    const card = page.locator('.card.route');
+    await expect(card.locator('.route-msg')).toContainText(
+      'No road for cars near the start or the destination',
+    );
+    // The other ways are offered as for no route at all.
+    await expect(card.getByRole('group', { name: 'Try another way' })).toBeVisible();
+  });
+
+  test('asks again from the public roads when a gated car park has no way out', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    // As Valhalla answers from hotel grounds behind a private gate: roads at both ends, no path.
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {
+      const body = JSON.parse(new URL(route.request().url()).searchParams.get('json') ?? '{}');
+      return body.locations[0].search_filter
+        ? route.fallback()
+        : route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ error_code: 442, error: 'No path could be found for input' }),
+          });
+    });
+    const asked = routeRequests.length;
+    const card = await openRoute(page, context);
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await expect(card.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
+    expect(routeRequests.slice(asked).some((r) => r.publicEnds)).toBe(true);
   });
 
   test('a route to a dropped pin takes its address once it comes', async ({ page, context }) => {

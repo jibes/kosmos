@@ -8,6 +8,8 @@ import {
   renameFavourite,
   titleOf,
   toggleFavourite,
+  completeFavourite,
+  sameFavourite,
   type Favourite,
 } from '../core/favourites';
 import type { Place } from '../core/search';
@@ -42,6 +44,18 @@ export function toggleFavouritePlace(p: Place) {
   set(toggleFavourite(list, p, Date.now()));
 }
 
+/** A favourite taken off by mistake, back as it was (its own name too). */
+export function putBackFavourite(f: Favourite) {
+  // Starred again meanwhile: that one stays, never two.
+  if (!list.some((x) => sameFavourite(x, f))) set([f, ...list]);
+}
+
+/** The address and OSM id a favourite starred too soon lacks, from its card's place. */
+export function completeFavouritePlace(p: Place, was?: Favourite) {
+  const next = completeFavourite(list, p, was);
+  if (next.some((f, i) => f !== list[i])) set(next);
+}
+
 /** Its own name for a starred place, or the place's again (empty). */
 export function renameFavouritePlace(p: Place, label: string) {
   logEvent('favourite.rename', { named: !!label.trim() });
@@ -69,6 +83,7 @@ const placeRest = ({ lng, lat, osm, kind, stop }: Favourite) => ({
 export const placeOf = (f: Favourite): Place => ({
   name: titleOf(f),
   detail: f.label ? [f.name, f.detail].filter(Boolean).join(', ') : f.detail,
+  ...(f.label ? { own: f.name } : {}),
   ...placeRest(f),
 });
 

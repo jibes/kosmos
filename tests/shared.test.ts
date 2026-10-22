@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseShared } from '../src/core/shared';
+import { parseShared, degreesIn } from '../src/core/shared';
 
 describe('shared links', () => {
   it('reads geo: links', () => {
@@ -73,5 +73,43 @@ describe('shared links', () => {
     expect(parseShared('geo:0,0')).toBeNull();
     expect(parseShared('  ')).toBeNull();
     expect(parseShared('geo:95,13')).toBeNull();
+  });
+});
+
+describe('degreesIn', () => {
+  const near = (p: { lat: number; lng: number } | null, lat: number, lng: number) => {
+    expect(p).not.toBeNull();
+    expect(p!.lat).toBeCloseTo(lat, 4);
+    expect(p!.lng).toBeCloseTo(lng, 4);
+  };
+  it('reads degrees, minutes and seconds', () => {
+    near(degreesIn(`52°30'58.7"N 13°22'39.7"E`), 52.516306, 13.377694);
+    near(degreesIn(`52° 30′ 58.7″ N, 13° 22′ 39.7″ E`), 52.516306, 13.377694);
+  });
+  it('reads degrees and decimal minutes, letters first', () => {
+    near(degreesIn(`N 52° 30.978' E 013° 22.662'`), 52.5163, 13.3777);
+  });
+  it('takes south, west and the German O for east', () => {
+    near(degreesIn(`33°51'35"S 151°12'40"E`), -33.859722, 151.211111);
+    near(degreesIn(`53°20'N 6°15'W`), 53.333333, -6.25);
+    near(degreesIn(`52,5163° N 13,3777° O`), 52.5163, 13.3777);
+  });
+  it('puts them in order by their letters', () => {
+    near(degreesIn(`13°22'39.7"E 52°30'58.7"N`), 52.516306, 13.377694);
+  });
+  it('reads decimal degrees with hemisphere letters', () => {
+    near(degreesIn('52.5163N 13.3777E'), 52.5163, 13.3777);
+    near(degreesIn('34.0522 N, 118.2437 W'), 34.0522, -118.2437);
+  });
+  it('refuses what is not a point', () => {
+    expect(degreesIn(`52°75'N 13°E`)).toBeNull();
+    expect(degreesIn(`52°N 13°N`)).toBeNull();
+    expect(degreesIn('Hauptstraße 52')).toBeNull();
+    expect(degreesIn(`95°N 13°E`)).toBeNull();
+  });
+  it('is a point when shared or typed', () => {
+    expect(parseShared(`52°30'58.7"N 13°22'39.7"E`)).toMatchObject({
+      at: { lat: expect.closeTo(52.5163, 3) },
+    });
   });
 });

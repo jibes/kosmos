@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { distance, type LngLat } from '../core/geo';
+import { courseOf, type Course } from '../core/nav';
 import {
   classifyError,
+  errorCodeOf,
+  NO_PATH,
   parseValhalla,
   routeUrl,
   needsTollFree,
@@ -12,14 +15,12 @@ import {
   type TravelMode,
 } from '../core/route';
 import { narrateWays, type ExitWords } from '../core/roundabout';
-import { track } from '../core/nav';
-import type { Town } from '../core/towns';
-import { townsAlong } from './categorySearch';
-import { nameStops, type StopWords } from '../core/stops';
+import { nameStops, renameStops, type StopWords } from '../core/stops';
 import type { Place } from '../core/search';
 import { parseMotis, transitUrl } from '../core/transit';
 import { fill, t, units } from '../i18n';
 import { getJson } from './http';
+import { logEvent } from './usageLog';
 import type { RouteStatus } from './RouteCard';
 
 export interface Trip {
@@ -39,6 +40,8 @@ interface Result {
   error: RouteError;
   /** The last answer failed and the route being driven was kept. */
   kept?: boolean;
+  /** The key its routes were made for: a kept one's own, not the one asked since. */
+  made: string;
   /** Counts answers, so a caller can tell when the one it asked for came. */
   n: number;
 }
@@ -49,20 +52,15 @@ const MOVE_TOLERANCE_M = 150;
 const REFRESH_MS = 60_000;
 const NO_ROUTES: Route[] = [];
 
+/** A router's answer with the routes read from it. */
+type Answer = Awaited<ReturnType<typeof getJson>> & { routes: Route[]; publicEnds?: boolean };
+
 /** The way out of a roundabout, in the UI's language, as the router's own words are. */
 const EXIT_WORDS: ExitWords = {
   toward: (place) => fill(t.exitToward, { place }),
   heading: (way) => fill(t.exitHeading, { way: t[`way_${way}`] }),
   junction: (n) => fill(t.sayJunction, { n }),
 };
-
-/** Towns a road sign would name, read in the time a route may wait for them, else none. */
-const TOWNS_MS = 2500;
-const towns = (route: Route, mode: Mode): Promise<Town[]> =>
-  Promise.race([
-    townsAlong(track(route, mode)).catch(() => []),
-    new Promise<Town[]>((done) => setTimeout(() => done([]), TOWNS_MS)),
-  ]);
 
 /** A stop said by its name. */
 const STOP_WORDS: StopWords = {
@@ -84,12 +82,20 @@ const tripKey = (trip: Trip) =>
     .join(';')}|${trip.from ? `${trip.from.lng},${trip.from.lat}` : 'me'}`;
 
 /**
+ * Two trips from here to the same end, its stops changed: the way followed still leads there
+ * meanwhile. Not for a new destination: the old way would arrive, and end the trip, at the old.
+ */
+const sameEnd = (a: string, b: string) =>
+  a.endsWith('|me') && b.endsWith('|me') && a.split('|')[2] === b.split('|')[2];
+
+/**
  * A failed reroute must not take the route away from someone who is following it, nor a failed
- * new connection the one being ridden (asked from elsewhere, under another key).
+ * new connection the one being ridden (asked from elsewhere, under another key), nor a failed
+ * refresh the route card's.
  */
 const keepWhileNavigating = (
   prev: Result | null,
-  next: Omit<Result, 'n'>,
+  next: Omit<Result, 'n' | 'made'>,
   pinned: boolean,
   transit: boolean,
 ): Result => {
@@ -97,14 +103,14 @@ const keepWhileNavigating = (
   // Across a key change only for a connection (its new start is the stop), or a stop added
   // while guiding from here: a road route from a chosen start is no way from where the user
   // now is.
-  const fromHere = (k: string) => k.endsWith('|me');
-  const same =
-    prev?.key === next.key ||
-    (transit && !!prev) ||
-    (fromHere(next.key) && fromHere(prev?.key ?? ''));
-  return pinned && !next.routes.length && same && prev?.routes.length
+  const same = prev?.key === next.key || (transit && !!prev) || sameEnd(next.key, prev?.key ?? '');
+  // An open road route asked again as the user moved on: a server not answering leaves it
+  // shown.
+  const refresh =
+    !transit && prev?.key === next.key && (next.error === 'failed' || next.error === 'busy');
+  return (pinned ? same : refresh) && !next.routes.length && prev?.routes.length
     ? { ...prev!, key: next.key, kept: true, n }
-    : { ...next, n };
+    : { ...next, made: next.key, n };
 };
 
 /** Asks the router once per trip; following the user's location never polls it. */
@@ -136,6 +142,11 @@ export function useRoute(
     setOpen(!!trip);
     if (!trip) setResult(null);
   }
+  // The way last driven, for a reroute asked while standing in traffic.
+  const course = useRef<Course | null>(null);
+  useEffect(() => {
+    if (here) course.current = courseOf(here, course.current, Date.now());
+  }, [here]);
   const last = useRef<{ key: string; from: LngLat; attempt: number; at: number } | null>(null);
   const inflight = useRef<AbortController | null>(null);
   const key = trip ? tripKey(trip) : '';
@@ -163,13 +174,19 @@ export function useRoute(
     inflight.current = ctrl;
     const behind = pinned ? behindRef.current : 0;
     const via = viaOf(trip).slice(behind);
+    // The usage log: which way a reroute was asked to leave in.
+    if (pinned && trip.mode !== 'transit') {
+      const c = course.current;
+      logEvent('route.heading', { sent: !!c, kept: !!c && c.at < Date.now() - 1500 });
+    }
     const names = viaOf(trip).map((v) => v.name);
-    const road = (alternates: number, noTolls: boolean) =>
+    const road = (alternates: number, noTolls: boolean, publicEnds = false): Promise<Answer> =>
       getJson(
-        // A reroute while guiding: one route, leaving in the direction of travel.
+        // A reroute while guiding: one route, leaving in the direction of travel (the one last
+        // driven while standing in traffic).
         routeUrl(
-          pinned && !trip.from && here?.heading != null && (here.speed ?? 0) > 2
-            ? { ...from, heading: here.heading }
+          pinned && !trip.from && course.current
+            ? { ...from, heading: course.current.heading }
             : from,
           trip.to,
           trip.mode as Mode,
@@ -178,28 +195,35 @@ export function useRoute(
           units,
           noTolls,
           via,
+          publicEnds,
         ),
         ctrl.signal,
-      ).then(async (r) => ({
-        ...r,
-        routes: r.ok
-          ? await Promise.all(
-              parseValhalla(r.json).map(async (x) =>
-                nameStops(
-                  narrateWays(x, EXIT_WORDS, await towns(x, trip.mode as Mode)),
-                  names,
-                  behind,
-                  STOP_WORDS,
-                ),
-              ),
-            )
-          : [],
-      }));
+      ).then((r) => {
+        // No path between the roads found at the ends (a gated car park): once more from the
+        // public roads nearest them.
+        if (!r.ok && !publicEnds && errorCodeOf(r.json) === NO_PATH) {
+          logEvent('route.retry', { mode: trip.mode, why: 'publicEnds' });
+          return road(alternates, noTolls, true);
+        }
+        return {
+          ...r,
+          publicEnds,
+          routes: r.ok
+            ? parseValhalla(r.json).map((x) =>
+                nameStops(narrateWays(x, EXIT_WORDS), names, behind, STOP_WORDS),
+              )
+            : [],
+        };
+      });
     const ask =
       trip.mode === 'transit'
         ? getJson(transitUrl(from, trip.to, lang, trip.at ?? null), ctrl.signal).then((r) => ({
             ...r,
-            routes: r.ok ? parseMotis(r.json) : [],
+            routes: r.ok
+              ? parseMotis(r.json).map((x) =>
+                  x.transit ? { ...x, transit: { ...x.transit, planned: Date.now() } } : x,
+                )
+              : [],
           }))
         : pinned
           ? road(0, trip.mode === 'car' && tollFreeRef.current)
@@ -207,13 +231,16 @@ export function useRoute(
               // Every way found by car has toll roads: one more request for a way without, so
               // there is always one to choose (marked by its absence of coins).
               if (trip.mode !== 'car' || !needsTollFree(r.routes)) return r;
-              const free = await road(0, true).catch(() => null);
+              // From the public roads at once when the first needed them: no "no path" again.
+              const free = await road(0, true, r.publicEnds).catch(() => null);
               return { ...r, routes: withTollFree(r.routes, free?.routes ?? []) };
             });
     ask
-      .then(({ ok, status, routes }) => {
+      .then(({ ok, status, routes, json }) => {
         if (ctrl.signal.aborted) return;
-        const error = ok ? 'none' : classifyError(status);
+        const error = ok ? 'none' : classifyError(status, json);
+        // The usage log: why the router said no (never where).
+        if (!ok) logEvent('route.fail', { mode: trip.mode, status, code: errorCodeOf(json) ?? 0 });
         setResult((prev) =>
           keepWhileNavigating(prev, { key, routes, error }, pinned, trip.mode === 'transit'),
         );
@@ -231,6 +258,18 @@ export function useRoute(
       });
   }, [trip, here, key, lang, attempt, pinned]);
 
+  // A stop's name come after its route (a point held on the map, then its address): said by it.
+  // Not while guiding, where a new route object would start guidance over.
+  const names = trip ? viaOf(trip).map((v) => v.name) : [];
+  const [namedFor, setNamedFor] = useState(names.join('\n'));
+  if (!pinned && names.join('\n') !== namedFor) {
+    setNamedFor(names.join('\n'));
+    if (result?.made === key && result.routes.length) {
+      const routes = result.routes.map((r) => renameStops(r, names, STOP_WORDS));
+      if (routes.some((r, i) => r !== result.routes[i])) setResult({ ...result, routes });
+    }
+  }
+
   const current = !!trip && result?.key === key;
   let status: RouteStatus = 'loading';
   if (current && result) {
@@ -238,14 +277,23 @@ export function useRoute(
   } else if (trip && !trip.from && !here) {
     status = 'locating';
   }
-  // A new connection asked for while riding: the one followed stays until the answer comes.
-  const waiting = pinned && trip?.mode === 'transit' && !!result?.routes.length;
+  // A new connection asked for while riding, or the stops changed while guiding from here: the
+  // way followed stays until the new one comes, so guidance never blanks.
+  const waiting =
+    pinned && !!result?.routes.length && (trip?.mode === 'transit' || sameEnd(key, result.key));
   const routes = current && result ? result.routes : waiting ? result!.routes : NO_ROUTES;
   return {
     routes,
     status,
     key,
     settled: result?.n ?? 0,
+    /** The routes are for the trip as it is now, not the one followed while asking. */
+    current,
+    /**
+     * Made for the trip as it is now: a route kept after a failed request for changed stops
+     * numbers them by its own list, not the trip's.
+     */
+    made: current && result?.made === key,
     kept: !!result?.kept,
     retry: () => setAttempt((a) => a + 1),
   };

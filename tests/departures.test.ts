@@ -73,7 +73,9 @@ describe('departures', () => {
       { stopTimes: [st('2026-10-16T09:50:00Z', '2026-10-16T09:50:00Z'), same, same, ...many] },
       now,
     );
-    expect(list).toHaveLength(DEPARTURES_SHOWN);
+    // All asked for, the one gone and the doubled one left out; shown at most six.
+    expect(list).toHaveLength(11);
+    expect(stillToCome(list, now)).toHaveLength(DEPARTURES_SHOWN);
     expect(list[0].time).toBe(at('2026-10-16T10:03:00Z'));
     expect(list[1].time).toBe(at('2026-10-16T10:10:00Z'));
     expect(parseDepartures({}, now)).toEqual([]);
@@ -101,5 +103,11 @@ describe('stillToCome', () => {
     });
     const left = stillToCome([at(1), at(5.5), at(10)], 6 * 60_000);
     expect(left.map((d) => d.time / 60_000)).toEqual([5.5, 10]);
+    // Later ones asked for take the places of those gone.
+    const later = stillToCome(
+      Array.from({ length: 12 }, (_, i) => at(i)),
+      4 * 60_000,
+    );
+    expect(later.map((d) => d.time / 60_000)).toEqual([3, 4, 5, 6, 7, 8]);
   });
 });

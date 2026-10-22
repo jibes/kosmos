@@ -97,7 +97,7 @@ export function useLocation() {
    * carries on until the service delivers its first fix, so a service that cannot start (no
    * permission, refused) never leaves guidance without positions while the app is open.
    */
-  const native = useRef<{ on: boolean; handle: PluginListenerHandle | null }>({
+  const native = useRef<{ on: boolean; handle: PluginListenerHandle | null; denied?: boolean }>({
     on: false,
     handle: null,
   });
@@ -109,6 +109,7 @@ export function useLocation() {
       const bg = native.current;
       if (on && !bg.on) {
         bg.on = true;
+        bg.denied = false;
         let first = true;
         void plugin
           .addListener('location', (loc) => {
@@ -143,15 +144,18 @@ export function useLocation() {
           })
           .catch((e: unknown) => {
             const code = (e as { code?: string } | null)?.code;
-            if (code === 'NOT_AUTHORIZED') setStatus('denied');
-            else if (bg.on) start();
+            if (code === 'NOT_AUTHORIZED') {
+              bg.denied = true;
+              setStatus('denied');
+            } else if (bg.on) start();
           });
       } else if (!on && bg.on) {
         bg.on = false;
         void bg.handle?.remove();
         bg.handle = null;
         void plugin.stop();
-        start();
+        // Refused just now: the WebView's own watch would only ask again at once.
+        if (!bg.denied) start();
       }
     },
     [start, stop],

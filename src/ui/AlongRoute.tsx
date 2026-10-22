@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { TRIP_KINDS } from '../core/alongRoute';
 import type { Category } from '../core/categories';
+import { kindsInOrder } from '../core/searchList';
 import { formatDistance, type Mode, type Route } from '../core/route';
 import type { Place } from '../core/search';
 import { fill, t, units } from '../i18n';
@@ -11,6 +12,8 @@ import { logEvent } from './usageLog';
 export interface AlongSearch {
   /** Places of a kind along the rest of `route` from `from` metres (`findAlong`). */
   find: (route: Route, mode: Mode, from: number, kind: Category) => Promise<AlongPlace[] | null>;
+  /** The places found, on the map; none clears them. */
+  show: (places: Place[]) => void;
   /** A stop by way of the place; absent while no more can be added. */
   onAdd?: (place: Place) => void;
 }
@@ -25,6 +28,9 @@ interface Props extends AlongSearch {
   heading?: boolean;
 }
 
+/** Every kind of place but those offered as chips, the common ones first, then by name. */
+const OTHER_KINDS = () => kindsInOrder((c) => t[`cat_${c}`]).filter((c) => !TRIP_KINDS.includes(c));
+
 type Found = { kind: Category; from: number; hits: AlongPlace[] } | 'loading' | 'failed' | null;
 
 /**
@@ -32,7 +38,7 @@ type Found = { kind: Category; from: number; hits: AlongPlace[] } | 'loading' | 
  * nearest along the way first, each with its detour and a way to make it a stop. The distances
  * count on as the trip goes on; places passed drop off.
  */
-export function AlongRoute({ route, mode, from, lang, find, onAdd, heading = true }: Props) {
+export function AlongRoute({ route, mode, from, lang, find, show, onAdd, heading = true }: Props) {
   const [kind, setKind] = useState<Category | null>(null);
   const [found, setFound] = useState<Found>(null);
   const fromRef = useRef(from);
@@ -63,6 +69,13 @@ export function AlongRoute({ route, mode, from, lang, find, onAdd, heading = tru
     };
   }, [kind, route, mode, find]);
 
+  const hits = found && typeof found === 'object' && found.kind === kind ? found.hits : null;
+  // Found places on the map while their list shows; gone with it.
+  useEffect(() => {
+    show(hits?.map((h) => h.place) ?? []);
+  }, [hits, show]);
+  useEffect(() => () => show([]), [show]);
+
   const shown =
     found && typeof found === 'object' && found.kind === kind
       ? found.hits
@@ -86,10 +99,25 @@ export function AlongRoute({ route, mode, from, lang, find, onAdd, heading = tru
             {t[`cat_${c}`]}
           </button>
         ))}
+        {/* Any other kind of place, as the search knows them. */}
+        <select
+          className="chip along-more"
+          aria-label={t.alongOther}
+          value={kind && !TRIP_KINDS.includes(kind) ? kind : ''}
+          data-chosen={(!!kind && !TRIP_KINDS.includes(kind)) || undefined}
+          onChange={(e) => setKind((e.target.value || null) as Category | null)}
+        >
+          <option value="">{t.alongOther}</option>
+          {OTHER_KINDS().map((c) => (
+            <option key={c} value={c}>
+              {t[`cat_${c}`]}
+            </option>
+          ))}
+        </select>
       </div>
       {kind && (
         <ul className="along-list" aria-live="polite">
-          {found === 'loading' && <li className="r-empty r-loading" aria-label={t.routing} />}
+          {found === 'loading' && <li className="r-empty r-loading" aria-label={t.searching} />}
           {found === 'failed' && <li className="r-empty">{t.alongFailed}</li>}
           {found && typeof found === 'object' && !shown.length && (
             <li className="r-empty">{t.noneAlong}</li>

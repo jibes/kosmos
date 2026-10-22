@@ -53,6 +53,14 @@ export interface Palette {
   favourite: string;
   /** The user's contacts at their addresses. */
   contact: string;
+  /** The map's own places, a disc each in its kind's colour (`POI_GROUP`). */
+  poiTransport: string;
+  poiFood: string;
+  poiShop: string;
+  poiCulture: string;
+  poiPark: string;
+  poiHealth: string;
+  poiOther: string;
 }
 
 export type Theme = 'light' | 'dark';
@@ -98,6 +106,13 @@ export const palettes: Record<Theme, Palette> = {
     routeCasing: '#ffffff',
     favourite: '#a86400',
     contact: '#0f7d6c',
+    poiTransport: '#2f6db5',
+    poiFood: '#c05a17',
+    poiShop: '#8a4fb8',
+    poiCulture: '#86653a',
+    poiPark: '#3b8048',
+    poiHealth: '#c23b3b',
+    poiOther: '#5d6a86',
   },
   dark: {
     space: '#05060a',
@@ -139,5 +154,12 @@ export const palettes: Record<Theme, Palette> = {
     routeCasing: '#0b0d12',
     favourite: '#f2b23c',
     contact: '#4fd1b8',
+    poiTransport: '#6aa1e0',
+    poiFood: '#ec9150',
+    poiShop: '#b98ae0',
+    poiCulture: '#c9a46b',
+    poiPark: '#6cbc7a',
+    poiHealth: '#ee7a7a',
+    poiOther: '#9aa6c2',
   },
 };

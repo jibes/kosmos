@@ -42,6 +42,11 @@ test.describe('search', () => {
     expect(Math.abs(tip.dx)).toBeLessThan(2);
     expect(Math.abs(tip.dy)).toBeLessThan(5);
     await shot(page, info, 'selected');
+    // The text stays in the field behind the card; the map moved far away asks nothing anew.
+    const asked = photonSearches.length;
+    await jump(page, { lng: CENTER.lng + 2, lat: CENTER.lat + 1, zoom: 9 });
+    await page.waitForTimeout(800);
+    expect(photonSearches.length).toBe(asked);
     await card.getByRole('button', { name: /close|schließen/i }).click();
     await expect(card).toHaveCount(0);
     await expect(page.locator('.pin')).toHaveCount(0);
@@ -223,7 +228,9 @@ test.describe('search', () => {
         layer,
       );
     await expect.poll(() => named('search-names')).toContain('Borchardt');
-    expect(await named('label-poi')).not.toContain('Borchardt');
+    for (const layer of ['label-poi', 'label-poi-15', 'label-poi-16']) {
+      expect(await named(layer)).not.toContain('Borchardt');
+    }
 
     // Typed in German, groceries: supermarket and bakery in view.
     await jump(page, { ...CENTER, zoom: 15 });
@@ -390,16 +397,16 @@ test.describe('search', () => {
     const recents = page.locator('.r-recent');
     // Nothing yet: the kinds of place, a list of its own, none preselected.
     await input.focus();
-    await expect(options.first()).toHaveAccessibleName('Kinds of place, opens a list');
+    await expect(options.first()).toHaveAccessibleName('Categories, opens a list');
     await expect(options.first()).toHaveText('Categories');
     await expect(page.locator('[role=option][aria-selected=true]')).toHaveCount(0);
     await options.first().click();
     // In it: back first, then what people look for most; Escape goes back out.
-    await expect(options.first()).toHaveAccessibleName('Back: Kinds of place');
+    await expect(options.first()).toHaveAccessibleName('Back: Categories');
     await expect(options.nth(1)).toContainText('Restaurants');
-    await expect(page.locator('.search [role=status]')).toContainText('Kinds of place:');
+    await expect(page.locator('.search [role=status]')).toContainText('Categories:');
     await input.press('Escape');
-    await expect(options.first()).toHaveAccessibleName('Kinds of place, opens a list');
+    await expect(options.first()).toHaveAccessibleName('Categories, opens a list');
 
     await input.fill('brandenburger');
     await options.filter({ hasText: SEARCH_HIT.name }).click();
@@ -594,6 +601,10 @@ test.describe('search', () => {
       await page.waitForTimeout(800);
     }
     expect(nominatimSearches.length).toBe(asked);
+    // Meanwhile it says another is asked, not to try again.
+    await expect(page.locator('.results .r-empty')).toHaveText(
+      'Search is not answering. Asking another one…',
+    );
     // Left alone, the text is a settled query: one search answers it.
     await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name, {
       timeout: 10_000,
@@ -618,6 +629,25 @@ test.describe('search', () => {
     expect(nominatimSearches.at(-1)!.get('q')).toBe('brandenburger');
     await hit.click();
     await expect(page.locator('.card').getByRole('heading')).toHaveText(SEARCH_HIT.name);
+  });
+
+  test('takes a slow Photon answer when it comes, though another was asked', async ({
+    page,
+    context,
+  }) => {
+    test.slow();
+    // Photon answers after 7 s; Nominatim, asked at 5 s, finds nothing.
+    await context.route(/photon\.komoot\.io\/api\//, async (route) => {
+      await new Promise((go) => setTimeout(go, 7000));
+      await route.fallback();
+    });
+    await context.route(/nominatim\.openstreetmap\.org\/search/, (route) =>
+      route.fulfill({ contentType: 'application/json', body: '[]' }),
+    );
+    await page.getByRole('combobox').fill('brandenburger');
+    await expect(page.getByRole('option').first()).toContainText(SEARCH_HIT.name, {
+      timeout: 15_000,
+    });
   });
 
   test('says so when no search answers, and Enter asks again', async ({ page, context }) => {
@@ -761,6 +791,18 @@ test.describe('search', () => {
     await rows.first().click();
     await expect(page.locator('.card').getByRole('heading')).toHaveText('Toilet');
     await expect(page.locator('.card')).toContainText('Unter den Linden 5');
+    // Its dot on the map opens the same, never asking the search for the word "Toilet".
+    await page.locator('.card').getByRole('button', { name: /close/i }).click();
+    await idle(page);
+    const dot = await page.evaluate(() => {
+      const [f] = window.kosmos!.queryRenderedFeatures({ layers: ['search-dots'] });
+      const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      return window.kosmos!.project([lng, lat]);
+    });
+    const asked = photonSearches.length;
+    await page.mouse.click(dot.x, dot.y);
+    await expect(page.locator('.card').getByRole('heading')).toHaveText('Toilet');
+    expect(photonSearches.slice(asked).filter((q) => /toilet/i.test(q))).toEqual([]);
   });
 
   test('asks the search again for the same words somewhere else', async ({ page }) => {
@@ -833,13 +875,13 @@ test.describe('search', () => {
     await expect(place).toHaveCount(0);
     await expect(input).toBeFocused();
 
-    // The route card's own close from the keyboard lands in the search too.
+    // The route card's own close from the keyboard goes back to the place, as Escape does.
     await input.fill('brandenburg');
     await page.getByRole('option').filter({ hasText: SEARCH_HIT.name }).first().click();
     await place.getByRole('button', { name: /^Route$/ }).press('Enter');
     await expect(card).toBeVisible();
     await card.getByRole('button', { name: 'Close' }).press('Enter');
     await expect(card).toHaveCount(0);
-    await expect(input).toBeFocused();
+    await expect(place.getByRole('heading')).toBeFocused();
   });
 });

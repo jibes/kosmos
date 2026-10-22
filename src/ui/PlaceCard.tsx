@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatLngLat, osmUrl, plainLngLat } from '../core/geo';
 import type { Place } from '../core/search';
 import { lang, locale, t } from '../i18n';
@@ -12,9 +12,15 @@ import {
   ShareIcon,
   StarIcon,
 } from './icons';
-import { renameFavouritePlace, toggleFavouritePlace, useFavourites } from './useFavourites';
+import {
+  completeFavouritePlace,
+  putBackFavourite,
+  renameFavouritePlace,
+  toggleFavouritePlace,
+  useFavourites,
+} from './useFavourites';
 import { rememberPlace } from './useRecent';
-import { favouriteOf, LABEL_MAX, titleOf } from '../core/favourites';
+import { favouriteOf, LABEL_MAX, titleOf, type Favourite } from '../core/favourites';
 import { copy, share } from './native';
 import { Departures } from './Departures';
 import { PlaceDetails } from './PlaceDetails';
@@ -25,22 +31,44 @@ interface Props {
   place: Place;
   loading: boolean;
   onClose: () => void;
-  onToast: (msg: string) => void;
+  onToast: (msg: string, actions?: { label: string; run: () => void }[]) => void;
   onRoute: () => void;
   /** Search around this place: the map goes there and the search field opens. */
   onNearby: () => void;
 }
 
 export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby }: Props) {
-  const [copied, setCopied] = useState(false);
   const details = usePlaceDetails(place.osm, lang);
   const heading = useFocusOnMount<HTMLHeadingElement>();
 
   const fav = favouriteOf(useFavourites(), place);
   const starred = !!fav;
+  // Starred while its address was still coming: kept with it once it is here, by the name the
+  // lookup found too (a dropped pin's is what is there).
+  const early = useRef<Favourite | undefined>(undefined);
+  useEffect(() => {
+    if (loading) {
+      early.current = fav;
+      return;
+    }
+    const was = early.current;
+    early.current = undefined;
+    if (!fav && was) completeFavouritePlace(place, was);
+    else if (fav && ((!fav.detail && place.detail) || (!fav.osm && place.osm))) {
+      completeFavouritePlace(place);
+    }
+  }, [loading, fav, place]);
   // A renamed favourite goes by the user's name, however its card was opened.
   const name = fav ? titleOf(fav) : place.name;
   const [naming, setNaming] = useState(false);
+  const cancelled = useRef(false);
+  // The field closed: focus back on the heading, not lost to the page.
+  const wasNaming = useRef(false);
+  useEffect(() => {
+    if (wasNaming.current && !naming) heading.current?.focus();
+    wasNaming.current = naming;
+    if (naming) cancelled.current = false;
+  }, [naming, heading]);
   const rename = (label: string) => {
     renameFavouritePlace(place, label);
     setNaming(false);
@@ -55,10 +83,10 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
     if (result === 'copied') onToast(t.linkCopied);
   };
 
+  // Said in the live region like a copied link, not only swapped in the button.
   const onCopy = async () => {
     await copy(plainLngLat(place));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1400);
+    onToast(t.coordsCopied);
   };
 
   return (
@@ -76,12 +104,14 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
               onKeyDown={(e) => {
                 if (e.key === 'Enter') rename(e.currentTarget.value);
                 if (e.key === 'Escape') {
-                  // Only the field: the card stays open.
+                  // Only the field, and nothing kept: the card stays open.
                   e.stopPropagation();
+                  cancelled.current = true;
                   setNaming(false);
                 }
               }}
-              onBlur={(e) => naming && rename(e.currentTarget.value)}
+              // The field going away blurs it too: an Escape keeps the name as it was.
+              onBlur={(e) => naming && !cancelled.current && rename(e.currentTarget.value)}
             />
           ) : (
             <h2 ref={heading} tabIndex={-1}>
@@ -103,6 +133,9 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
           onClick={() => {
             if (!starred) rememberPlace(place);
             toggleFavouritePlace(place);
+            // Off by mistake: back in one tap, with its own name.
+            if (fav)
+              onToast(t.favouriteRemoved, [{ label: t.undo, run: () => putBackFavourite(fav) }]);
           }}
         >
           <StarIcon filled={starred} />
@@ -134,8 +167,8 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
       {details && <PlaceDetails details={details} lng={place.lng} />}
       <Departures place={place} lang={lang} />
       <button type="button" className="coords" title={t.copy} onClick={onCopy}>
-        {copied ? t.copied : formatLngLat(place, 5, locale)}
-        {!copied && <CopyIcon size={13} />}
+        {formatLngLat(place, 5, locale)}
+        <CopyIcon size={13} />
         <span className="sr-only">, {t.copy}</span>
       </button>
       <div className="actions">

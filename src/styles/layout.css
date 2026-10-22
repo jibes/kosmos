@@ -145,6 +145,11 @@
 /* ---------- Wide screens: panel moves to the top left ---------- */
 
 @media (min-width: 900px), (orientation: landscape) and (min-width: 560px) {
+  /* Beside the column, the map buttons are clear of the trip list. */
+  .ui:has(.ride-details) .controls {
+    visibility: visible;
+  }
+
   :root {
     --gutter: 16px;
     /* The side column: panel, banner, bar. ui/layout.ts mirrors it as sideWidth(). */

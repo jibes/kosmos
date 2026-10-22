@@ -32,6 +32,8 @@ public class MainActivity extends BridgeActivity {
         pip = on;
         // Android 12+ enters by itself on the way home, animated from the app's own frame.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setPictureInPictureParams(pipParams());
+        // Guidance over (arrived, or ended) in the small window: it would show a bare map.
+        if (!on && isInPictureInPictureMode()) moveTaskToBack(true);
     }
 
     /** Portrait, as the banner over the map reads best upright. */

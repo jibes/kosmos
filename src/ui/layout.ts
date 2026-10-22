@@ -16,8 +16,23 @@ const WIDE_GUTTER = 16;
 /** The side column's width (panel, banner, bar): `--side-w` in styles.css. */
 export const sideWidth = () => Math.min(400, Math.max(320, innerWidth * 0.48));
 
-/** Where the map beside the column begins, plus a margin. */
-const beside = (margin: number) => Math.round(WIDE_GUTTER + sideWidth() + margin);
+/**
+ * The left safe-area inset (a notch or camera with the phone held sideways): CSS alone
+ * resolves it, so a probe placed by it is measured.
+ */
+let probe: HTMLElement | null = null;
+const safeLeft = () => {
+  if (!probe) {
+    probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;top:0;left:var(--safe-left);visibility:hidden';
+    probe.setAttribute('aria-hidden', 'true');
+    document.body.append(probe);
+  }
+  return probe.getBoundingClientRect().left;
+};
+
+/** Where the map beside the column begins (`--side-end`), plus a margin. */
+const beside = (margin: number) => Math.round(WIDE_GUTTER + safeLeft() + sideWidth() + margin);
 
 /** Keeps a selected place clear of the panel that describes it, before the card is measured. */
 export const padding = () =>

@@ -2,13 +2,21 @@ import * as maplibregl from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { Theme } from '../core/palette';
-import { ROUTE_SOURCE, SEARCH_SOURCE, FAV_SOURCE, CONTACT_SOURCE, buildStyle } from '../core/style';
+import {
+  ROUTE_SOURCE,
+  SEARCH_SOURCE,
+  ALONG_SOURCE,
+  FAV_SOURCE,
+  CONTACT_SOURCE,
+  buildStyle,
+} from '../core/style';
 import { DEFAULT_VIEW, VIEW_KEY, parseView, serializeView } from '../core/view';
 import { mapFontFaces } from './fonts';
 import { motion } from './motion';
 import { nativeLog } from './native';
 import { registerTileStore, storeRequests } from './tileStore';
 import { t } from '../i18n';
+import { registerPoiIcons } from './poiIcons';
 
 // MapLibre resolves its worker next to its own module, which bundling moves; point it at the copy.
 maplibregl.setWorkerUrl(new URL(workerUrl, document.baseURI).href);
@@ -84,10 +92,13 @@ export function useMap(
       console.info('kosmos:ready');
       nativeLog('info', 'kosmos:ready');
     });
+    // The places' icons, before their first tile is laid out.
+    const icons = registerPoiIcons(m);
     // Exposed for end-to-end tests and the curious.
     (window as unknown as { kosmos?: maplibregl.Map }).kosmos = m;
     setMap(m);
     return () => {
+      icons();
       m.remove();
       setMap(null);
     };
@@ -100,10 +111,11 @@ export function useMap(
     initial.current = { theme, labelLang };
     map.setStyle(buildStyle({ theme, lang: labelLang, fontFaces: mapFontFaces() }), {
       diff: true,
-      // The route and search dots live in the map, not in the style; carry them over a theme swap.
+      // The route and the dots of searches and marks live in the map, not in the style; carry
+      // them over a theme swap.
       transformStyle: (prev, next) => {
         const sources = { ...next.sources };
-        for (const id of [ROUTE_SOURCE, SEARCH_SOURCE, FAV_SOURCE, CONTACT_SOURCE]) {
+        for (const id of [ROUTE_SOURCE, SEARCH_SOURCE, ALONG_SOURCE, FAV_SOURCE, CONTACT_SOURCE]) {
           const kept = prev?.sources[id];
           if (kept) sources[id] = kept;
         }

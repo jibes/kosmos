@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { CENTER } from './fixtures/scene';
-import { SEARCH_HIT } from './fixtures/offline-world';
+import { SEARCH_HIT, offlineWorld } from './fixtures/offline-world';
 import { idle, inWorld, jump, openRoute, watchPages } from './helpers';
 
 watchPages();
@@ -12,6 +12,8 @@ test.describe('the map kept on the device', () => {
     page,
     context,
   }) => {
+    // A trip's tiles fetched, then the map read from them offline: past 30 s on a busy machine.
+    test.slow();
     // The usage log says when the way is kept (nothing shows it on the map).
     await page.evaluate(() => localStorage.setItem('kosmos.logging.v1', '1'));
     await page.reload();
@@ -60,5 +62,42 @@ test.describe('the map kept on the device', () => {
     const about = page.locator('.offline-map');
     await expect(about).toContainText('kept on this device');
     await expect(about).toContainText('The whole world (zoom 0–1) kept on');
+    // Areas viewed can go, on a second tap; the world stays and serves offline still.
+    const clear = about.getByRole('button', { name: 'Remove areas viewed' });
+    await clear.click();
+    await about.getByRole('button', { name: /Tap again to remove/ }).click();
+    await expect(clear).toBeVisible();
+    await expect(about).toContainText('The whole world (zoom 0–1) kept on');
+    const left = await page.evaluate(
+      () =>
+        new Promise<string[]>((ok) => {
+          const req = indexedDB.open('kosmos-tiles');
+          req.onsuccess = () => {
+            const all = req.result.transaction('meta').objectStore('meta').getAll();
+            all.onsuccess = () =>
+              ok((all.result as { k: string; keep?: boolean }[]).map((m) => String(!!m.keep)));
+          };
+        }),
+    );
+    expect(left.length).toBeGreaterThan(0);
+    expect(left).not.toContain('false');
+  });
+});
+
+test.describe('the first start', () => {
+  test.use({ serviceWorkers: 'block' });
+
+  test('waits for a slow TileJSON when none is kept yet', async ({ page, context }) => {
+    test.slow();
+    await offlineWorld(context);
+    // Slower than the 4 s after which a kept one would serve; none is kept on a first start.
+    await context.route('https://tiles.openfreemap.org/planet', async (route) => {
+      await new Promise((go) => setTimeout(go, 6000));
+      await route.fallback();
+    });
+    await page.goto('./');
+    await idle(page);
+    const drawn = await page.evaluate(() => window.kosmos!.queryRenderedFeatures().length);
+    expect(drawn).toBeGreaterThan(0);
   });
 });

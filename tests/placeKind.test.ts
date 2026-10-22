@@ -10,6 +10,17 @@ describe('kind of place', () => {
     expect(kindOfOsm('public_transport', 'platform')).toBe('bus');
     expect(kindOfOsm('railway', 'subway_entrance')).toBe('subway');
     expect(kindOfOsm('aeroway', 'aerodrome')).toBe('plane');
+    // Search rows show what the map shows: fuel, a cash machine, a pitch.
+    expect(kindOfOsm('amenity', 'fuel')).toBe('fuel');
+    expect(kindOfOsm('amenity', 'atm')).toBe('money');
+    expect(kindOfOsm('leisure', 'pitch')).toBe('sport');
+    expect(kindOfOsm('shop', 'bicycle')).toBe('shop');
+    expect(kindOfPoi({ class: 'bicycle', subclass: 'bicycle' })).toBe('bike');
+    expect(kindOfPoi({ class: 'bakery', subclass: 'bakery' })).toBe('shop');
+    // A nameless toilet or tap among category results: its own icon, not a pin.
+    expect(kindOfPoi({ class: 'toilets', subclass: 'toilets' })).toBe('toilets');
+    expect(kindOfPoi({ class: 'drinking_water', subclass: 'drinking_water' })).toBe('water');
+    expect(kindOfOsm('amenity', 'recycling')).toBe('recycling');
   });
 
   it('tells other kinds, streets, towns and addresses', () => {
@@ -32,6 +43,11 @@ describe('kind of place', () => {
     expect(kindOfPoi({ class: 'bus', subclass: 'bus_stop' })).toBe('bus');
     expect(kindOfPoi({ class: 'shop', subclass: 'electronics' })).toBe('shop');
     expect(kindOfPoi({ class: 'cafe', subclass: 'cafe' })).toBe('cafe');
-    expect(kindOfPoi({ class: 'toilets', subclass: 'toilets' })).toBe('place');
+    expect(kindOfPoi({ class: 'office', subclass: 'company' })).toBe('place');
+    // The same as the map's icons: a church by its faith, a pitch by its class.
+    expect(kindOfPoi({ class: 'place_of_worship', subclass: 'christian' })).toBe('church');
+    expect(kindOfPoi({ class: 'place_of_worship', subclass: 'hindu' })).toBe('culture');
+    expect(kindOfPoi({ class: 'pitch', subclass: 'tennis' })).toBe('sport');
+    expect(kindOfPoi({ class: 'aerialway', subclass: 'station' })).toBe('cable');
   });
 });

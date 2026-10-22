@@ -97,7 +97,9 @@ const ZONE_SLACK_H = 2;
 export function nearDeviceClock(lng: number, now: Date): boolean {
   const offset = (month: number) => new Date(now.getFullYear(), month, 1).getTimezoneOffset();
   const standard = -Math.max(offset(0), offset(6)) / 60;
-  return Math.abs(standard - lng / 15) <= ZONE_SLACK_H;
+  // Round the clock: Samoa (UTC+13) at 172° W is under an hour away, not 24.
+  const d = ((((standard - lng / 15) % 24) + 36) % 24) - 12;
+  return Math.abs(d) <= ZONE_SLACK_H;
 }
 
 /** Minutes since Monday 00:00 in local time. */
