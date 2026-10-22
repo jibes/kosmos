@@ -191,6 +191,8 @@ test.describe('guidance', () => {
     page,
     context,
   }) => {
+    // A whole drive in and out of a tunnel, by day and by night: past 30 s on a busy runner.
+    test.slow();
     const from = { lng: CENTER.lng + 0.01, lat: CENTER.lat + 0.01 };
     const to = SEARCH_HIT;
     const go = (p: { lng: number; lat: number }) =>

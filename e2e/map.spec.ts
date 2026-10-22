@@ -163,7 +163,10 @@ test.describe('map', () => {
     await page.goto('./');
     await expect(page.locator('.me')).toBeVisible();
     // From the globe it flies there; the button is not switched to following.
-    await expect.poll(() => page.evaluate(() => window.kosmos!.getZoom())).toBeGreaterThan(14);
+    // The flight from the globe is long, and longer still on a busy runner.
+    await expect
+      .poll(() => page.evaluate(() => window.kosmos!.getZoom()), { timeout: 15_000 })
+      .toBeGreaterThan(14);
     await expect(page.locator('.controls > button').first()).toHaveAttribute('data-follow', 'off');
   });
 

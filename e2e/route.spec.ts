@@ -580,6 +580,31 @@ test.describe('routes', () => {
     expect(Math.abs(pin.y + pin.height - end.y)).toBeLessThan(16);
   });
 
+  test('a note with many choices stays clear of the map buttons', async ({ page, context }) => {
+    // A small phone, where the choices of a dropped pin do not fit on one line.
+    await page.setViewportSize({ width: 360, height: 740 });
+    const card = await openRoute(page, context);
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await idle(page);
+    // High on the map, clear of the card.
+    await page.mouse.click(180, 160, { button: 'right' });
+    const note = page.locator('.toast');
+    await expect(note.getByRole('button')).toHaveCount(3);
+    const box = (await note.boundingBox())!;
+    // Every choice inside the note, and the note left of the location button.
+    for (const b of await note.getByRole('button').all()) {
+      const r = (await b.boundingBox())!;
+      expect(r.x + r.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    }
+    const locate = (await page.locator('.controls > button').first().boundingBox())!;
+    const overlaps =
+      box.x < locate.x + locate.width &&
+      box.x + box.width > locate.x &&
+      box.y < locate.y + locate.height &&
+      box.y + box.height > locate.y;
+    expect(overlaps).toBe(false);
+  });
+
   test("the destination's pin follows the list: a stop moved to the end, the end taken off", async ({
     page,
     context,
