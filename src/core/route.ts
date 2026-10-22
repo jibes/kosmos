@@ -102,7 +102,13 @@ export function routeUrl(
   avoidTolls = false,
   /** Stops on the way, in order: the route arrives at each and sets off again. */
   via: readonly LngLat[] = [],
+  /**
+   * Both ends on public roads, not service roads: asked once after "no path" (442), as a car
+   * park or hotel grounds behind a private gate can be reached but never left.
+   */
+  publicEnds = false,
 ) {
+  const end = publicEnds ? { search_filter: { min_road_class: 'residential' } } : {};
   const options =
     mode === 'car' && avoidTolls
       ? { auto: { use_tolls: 0, exclude_tolls: true } }
@@ -116,9 +122,10 @@ export function routeUrl(
         ...(from.heading != null && Number.isFinite(from.heading)
           ? { heading: Math.round(((from.heading % 360) + 360) % 360), heading_tolerance: 45 }
           : {}),
+        ...end,
       },
       ...via.map((v) => ({ lat: +v.lat.toFixed(6), lon: +v.lng.toFixed(6) })),
-      { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6) },
+      { lat: +to.lat.toFixed(6), lon: +to.lng.toFixed(6), ...end },
     ],
     costing: COSTING[mode],
     ...(options ? { costing_options: options } : {}),
@@ -324,6 +331,8 @@ export type RouteError = 'none' | 'busy' | 'failed' | 'noRoad' | 'tooFar';
 /** Valhalla's own error codes, where they tell more than the status. */
 const NO_ROAD = new Set([170, 171]);
 const TOO_FAR = new Set([150, 154, 155, 156, 157]);
+/** Valhalla found roads at both ends but no way between them. */
+export const NO_PATH = 442;
 
 /** The router's error code in its answer, if any. */
 export function errorCodeOf(json: unknown): number | undefined {

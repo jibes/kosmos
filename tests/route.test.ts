@@ -59,6 +59,28 @@ describe('routeUrl', () => {
     });
   });
 
+  it('asks from the public roads at both ends, not a gated car park, when told to', () => {
+    const url = new URL(
+      routeUrl(
+        { lng: 13.4, lat: 52.5 },
+        { lng: 13.5, lat: 52.6 },
+        'car',
+        'en',
+        2,
+        'metric',
+        false,
+        [{ lng: 13.45, lat: 52.55 }],
+        true,
+      ),
+    );
+    const [start, stop, end] = JSON.parse(url.searchParams.get('json')!).locations;
+    const pub = { search_filter: { min_road_class: 'residential' } };
+    expect(start).toMatchObject(pub);
+    expect(end).toMatchObject(pub);
+    // A stop on the way is where the user wants to be, service road or not.
+    expect(stop).toEqual({ lat: 52.55, lon: 13.45 });
+  });
+
   it('keeps a walk to footways and sidewalks, off roads without them', () => {
     const body = (mode: 'foot' | 'bike' | 'car') =>
       JSON.parse(

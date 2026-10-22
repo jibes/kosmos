@@ -225,6 +225,8 @@ export const routeRequests: {
   to: Pt;
   via: Pt[];
   noTolls?: boolean;
+  /** Asked again from the public roads at both ends (after "no path"). */
+  publicEnds?: boolean;
 }[] = [];
 
 /** Serves tiles, glyphs and search from the synthetic scene; nothing leaves the machine. */
@@ -377,7 +379,8 @@ export async function offlineWorld(context: BrowserContext) {
     const [s, e] = [points[0], points.at(-1)];
     const via: Pt[] = points.slice(1, -1);
     const noTolls = !!body.costing_options?.auto?.exclude_tolls;
-    routeRequests.push({ costing: body.costing, from: s, to: e, via, noTolls });
+    const publicEnds = !!body.locations[0].search_filter;
+    routeRequests.push({ costing: body.costing, from: s, to: e, via, noTolls, publicEnds });
     const speed = { auto: 30, bicycle: 15, pedestrian: 5 }[body.costing as string] ?? 30;
     // By way of stops: one leg to each, as the router arrives at each and sets off again.
     if (via.length) {

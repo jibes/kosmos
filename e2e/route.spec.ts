@@ -918,6 +918,30 @@ test.describe('routes', () => {
     await expect(card.getByRole('group', { name: 'Try another way' })).toBeVisible();
   });
 
+  test('asks again from the public roads when a gated car park has no way out', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
+    // As Valhalla answers from hotel grounds behind a private gate: roads at both ends, no path.
+    await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) => {
+      const body = JSON.parse(new URL(route.request().url()).searchParams.get('json') ?? '{}');
+      return body.locations[0].search_filter
+        ? route.fallback()
+        : route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ error_code: 442, error: 'No path could be found for input' }),
+          });
+    });
+    const asked = routeRequests.length;
+    const card = await openRoute(page, context);
+    await expect(card.locator('.summary strong')).toHaveText(/min/);
+    await expect(card.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
+    expect(routeRequests.slice(asked).some((r) => r.publicEnds)).toBe(true);
+  });
+
   test('a route to a dropped pin takes its address once it comes', async ({ page, context }) => {
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });

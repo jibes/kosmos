@@ -4,6 +4,7 @@ import { courseOf, type Course } from '../core/nav';
 import {
   classifyError,
   errorCodeOf,
+  NO_PATH,
   parseValhalla,
   routeUrl,
   needsTollFree,
@@ -48,6 +49,9 @@ const MOVE_TOLERANCE_M = 150;
 /** Moving on with a road route open asks again at most this often. */
 const REFRESH_MS = 60_000;
 const NO_ROUTES: Route[] = [];
+
+/** A router's answer with the routes read from it. */
+type Answer = Awaited<ReturnType<typeof getJson>> & { routes: Route[] };
 
 /** The way out of a roundabout, in the UI's language, as the router's own words are. */
 const EXIT_WORDS: ExitWords = {
@@ -169,7 +173,7 @@ export function useRoute(
       logEvent('route.heading', { sent: !!c, kept: !!c && c.at < Date.now() - 1500 });
     }
     const names = viaOf(trip).map((v) => v.name);
-    const road = (alternates: number, noTolls: boolean) =>
+    const road = (alternates: number, noTolls: boolean, publicEnds = false): Promise<Answer> =>
       getJson(
         // A reroute while guiding: one route, leaving in the direction of travel (the one last
         // driven while standing in traffic).
@@ -184,16 +188,25 @@ export function useRoute(
           units,
           noTolls,
           via,
+          publicEnds,
         ),
         ctrl.signal,
-      ).then((r) => ({
-        ...r,
-        routes: r.ok
-          ? parseValhalla(r.json).map((x) =>
-              nameStops(narrateWays(x, EXIT_WORDS), names, behind, STOP_WORDS),
-            )
-          : [],
-      }));
+      ).then((r) => {
+        // No path between the roads found at the ends (a gated car park): once more from the
+        // public roads nearest them.
+        if (!r.ok && !publicEnds && errorCodeOf(r.json) === NO_PATH) {
+          logEvent('route.retry', { mode: trip.mode, why: 'publicEnds' });
+          return road(alternates, noTolls, true);
+        }
+        return {
+          ...r,
+          routes: r.ok
+            ? parseValhalla(r.json).map((x) =>
+                nameStops(narrateWays(x, EXIT_WORDS), names, behind, STOP_WORDS),
+              )
+            : [],
+        };
+      });
     const ask =
       trip.mode === 'transit'
         ? getJson(transitUrl(from, trip.to, lang, trip.at ?? null), ctrl.signal).then((r) => ({
