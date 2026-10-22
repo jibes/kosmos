@@ -74,7 +74,7 @@ describe('routeUrl', () => {
       ),
     );
     const [start, stop, end] = JSON.parse(url.searchParams.get('json')!).locations;
-    const pub = { search_filter: { min_road_class: 'residential' } };
+    const pub = { radius: 150, search_filter: { min_road_class: 'residential' } };
     expect(start).toMatchObject(pub);
     expect(end).toMatchObject(pub);
     // A stop on the way is where the user wants to be, service road or not.
