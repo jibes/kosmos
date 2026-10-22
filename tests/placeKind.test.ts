@@ -17,6 +17,10 @@ describe('kind of place', () => {
     expect(kindOfOsm('shop', 'bicycle')).toBe('shop');
     expect(kindOfPoi({ class: 'bicycle', subclass: 'bicycle' })).toBe('bike');
     expect(kindOfPoi({ class: 'bakery', subclass: 'bakery' })).toBe('shop');
+    // A nameless toilet or tap among category results: its own icon, not a pin.
+    expect(kindOfPoi({ class: 'toilets', subclass: 'toilets' })).toBe('toilets');
+    expect(kindOfPoi({ class: 'drinking_water', subclass: 'drinking_water' })).toBe('water');
+    expect(kindOfOsm('amenity', 'recycling')).toBe('recycling');
   });
 
   it('tells other kinds, streets, towns and addresses', () => {
@@ -39,6 +43,6 @@ describe('kind of place', () => {
     expect(kindOfPoi({ class: 'bus', subclass: 'bus_stop' })).toBe('bus');
     expect(kindOfPoi({ class: 'shop', subclass: 'electronics' })).toBe('shop');
     expect(kindOfPoi({ class: 'cafe', subclass: 'cafe' })).toBe('cafe');
-    expect(kindOfPoi({ class: 'toilets', subclass: 'toilets' })).toBe('place');
+    expect(kindOfPoi({ class: 'office', subclass: 'company' })).toBe('place');
   });
 });

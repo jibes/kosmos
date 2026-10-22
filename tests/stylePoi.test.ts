@@ -39,6 +39,12 @@ describe("the map's places' icons", () => {
     expect(evaluate(img, { class: 'swimming', subclass: 'swimming_pool' })).toBe('poi-sport');
     expect(evaluate(img, { class: 'town_hall', subclass: 'townhall' })).toBe('poi-culture');
     expect(evaluate(img, { class: 'lodging', subclass: 'bed_and_breakfast' })).toBe('poi-stay');
+    expect(evaluate(img, { class: 'fire_station', subclass: 'fire_station' })).toBe('poi-fire');
+    expect(evaluate(img, { class: 'information', subclass: 'information' })).toBe('poi-info');
+    expect(evaluate(img, { class: 'cemetery', subclass: 'grave_yard' })).toBe('poi-cemetery');
+    expect(evaluate(img, { class: 'cinema', subclass: 'cinema' })).toBe('poi-cinema');
+    expect(evaluate(img, { class: 'library', subclass: 'library' })).toBe('poi-library');
+    expect(evaluate(img, { class: 'toilets', subclass: 'toilets' })).toBe('poi-toilets');
   });
 
   it("tints it by its group's colour", () => {

@@ -27,6 +27,14 @@ export type PlaceKind =
   | 'post'
   | 'police'
   | 'sport'
+  | 'fire'
+  | 'info'
+  | 'cemetery'
+  | 'toilets'
+  | 'water'
+  | 'recycling'
+  | 'cinema'
+  | 'library'
   | 'town'
   | 'street'
   | 'address'
@@ -71,7 +79,7 @@ const BY_VALUE: Record<string, PlaceKind> = {
   viewpoint: 'culture',
   artwork: 'culture',
   theatre: 'culture',
-  cinema: 'culture',
+  cinema: 'cinema',
   arts_centre: 'culture',
   zoo: 'culture',
   castle: 'culture',
@@ -86,6 +94,8 @@ const BY_VALUE: Record<string, PlaceKind> = {
   park: 'park',
   garden: 'park',
   playground: 'park',
+  dog_park: 'park',
+  picnic_site: 'park',
   nature_reserve: 'park',
   hospital: 'health',
   clinic: 'health',
@@ -97,7 +107,7 @@ const BY_VALUE: Record<string, PlaceKind> = {
   kindergarten: 'school',
   university: 'school',
   college: 'school',
-  library: 'school',
+  library: 'library',
   fuel: 'fuel',
   charging_station: 'charging',
   parking: 'parking',
@@ -130,6 +140,14 @@ const BY_VALUE: Record<string, PlaceKind> = {
   swimming_pool: 'sport',
   water_park: 'sport',
   swimming_area: 'sport',
+  fire_station: 'fire',
+  information: 'info',
+  cemetery: 'cemetery',
+  grave_yard: 'cemetery',
+  toilets: 'toilets',
+  drinking_water: 'water',
+  water_point: 'water',
+  recycling: 'recycling',
   // Shops the map's tiles give a class of their own (not "shop"): a shop all the same.
   ...Object.fromEntries(
     [
@@ -263,6 +281,14 @@ export const POI_GROUP: Partial<Record<PlaceKind, PoiGroup>> = {
   post: 'other',
   police: 'other',
   sport: 'park',
+  fire: 'health',
+  info: 'other',
+  cemetery: 'park',
+  toilets: 'other',
+  water: 'other',
+  recycling: 'other',
+  cinema: 'culture',
+  library: 'other',
 };
 
 /** The `poi` subclasses of each kind with an icon, and the classes that say "shop". */
