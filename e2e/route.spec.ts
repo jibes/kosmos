@@ -613,6 +613,13 @@ test.describe('routes', () => {
     await expect(card.locator('.summary strong')).toHaveText(/min/);
     // A stop where the map is held.
     await idle(page);
+    // Clear of the card, which grows tall on a phone with three points.
+    const top = (await card.boundingBox())!.y;
+    const under = (await screenAt(page, CENTER.lng, CENTER.lat)).y - (top - 120);
+    if (under > 0) {
+      await page.evaluate((dy) => window.kosmos!.panBy([0, dy], { duration: 0 }), under);
+      await idle(page);
+    }
     const at = await screenAt(page, CENTER.lng, CENTER.lat);
     await page.mouse.click(at.x, at.y, { button: 'right' });
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();
