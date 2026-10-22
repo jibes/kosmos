@@ -26,6 +26,8 @@ describe('plus codes', () => {
     // A short code always has two characters after its "+": these are names.
     expect(plusCode('Lidl 24+')).toBeNull();
     expect(plusCode('22+ Club')).toBeNull();
+    // Four before it are a short code, however many after.
+    expect(plusCode('GCP3+', { lat: 52.5, lng: 13.4 })?.at).not.toBeNull();
     expect(plusCode('Café Einstein')).toBeNull();
   });
 });

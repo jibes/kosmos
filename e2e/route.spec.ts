@@ -654,6 +654,8 @@ test.describe('routes', () => {
     page,
     context,
   }) => {
+    // Eight route requests and a drag: near 30 s on its own, past it on a busy runner.
+    test.slow();
     await context.grantPermissions(['geolocation']);
     await context.setGeolocation({ latitude: CENTER.lat + 0.01, longitude: CENTER.lng + 0.01 });
     await page.getByRole('combobox').fill('brandenburger');
