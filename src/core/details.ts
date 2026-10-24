@@ -1,6 +1,8 @@
+import { photoRefOf, type PhotoRef } from './photo';
+
 /**
  * What OpenStreetMap knows about a place beyond its name and address: opening hours, phone,
- * website. From Nominatim (OSM Foundation), one lookup per place card, by the place's OSM id;
+ * website, where its photo is. From Nominatim (OSM Foundation), one lookup per place card, by the place's OSM id;
  * its policy allows that, at most once a second, from an app that names itself.
  */
 export const NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
@@ -10,6 +12,8 @@ export interface Details {
   hours?: string;
   phone?: string;
   website?: string;
+  /** A photo on Wikimedia Commons, by file or Wikidata item. */
+  photo?: PhotoRef;
 }
 
 /** `N123`, `W456`, `R789`: an OSM object, as Photon and Nominatim both name them. */
@@ -74,6 +78,8 @@ export function parseLookup(json: unknown): Details {
   if (hours) out.hours = hours;
   if (phone) out.phone = phone;
   if (website && /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}/i.test(website)) out.website = website;
+  const photo = photoRefOf(tags);
+  if (photo) out.photo = photo;
   return out;
 }
 

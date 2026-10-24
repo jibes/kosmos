@@ -24,6 +24,7 @@ import { favouriteOf, LABEL_MAX, titleOf, type Favourite } from '../core/favouri
 import { copy, share } from './native';
 import { Departures } from './Departures';
 import { PlaceDetails } from './PlaceDetails';
+import { PlacePhoto } from './PlacePhoto';
 import { Sheet } from './Sheet';
 import { usePlaceDetails } from './usePlaceDetails';
 
@@ -164,6 +165,7 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
           <CloseIcon size={16} />
         </button>
       </header>
+      <PlacePhoto photo={details?.photo} name={name} />
       {details && <PlaceDetails details={details} lng={place.lng} />}
       <Departures place={place} lang={lang} />
       <button type="button" className="coords" title={t.copy} onClick={onCopy}>

@@ -1,11 +1,12 @@
 import { CapacitorHttp } from '@capacitor/core';
 import { NOMINATIM_URL } from '../core/details';
+import { COMMONS_URL, WIKIDATA_URL } from '../core/photo';
 import { ROUTER_URL } from '../core/route';
 import { TRANSIT_URL } from '../core/transit';
 import { isNative } from './native';
 
-/** The volunteer services (Transitous, Nominatim, the FOSSGIS router) ask apps to name
- * themselves; a browser cannot set User-Agent (its Referer has to do), the app can. */
+/** The volunteer services (Transitous, Nominatim, the FOSSGIS router, Wikimedia) ask apps to
+ * name themselves; a browser cannot set User-Agent (its Referer has to do), the app can. */
 const USER_AGENT = `kOSMos/${__BUILD__.version} (+https://github.com/jibes/kosmos)`;
 
 /** The native request cannot be aborted; it gives up by itself after this. */
@@ -26,7 +27,12 @@ const aborted = (signal: AbortSignal) =>
  * HTTP error, a throw only when there is no answer at all.
  */
 export async function getJson(url: string, signal: AbortSignal, body?: string) {
-  if (isNative && [TRANSIT_URL, NOMINATIM_URL, ROUTER_URL].some((s) => url.startsWith(s))) {
+  if (
+    isNative &&
+    [TRANSIT_URL, NOMINATIM_URL, ROUTER_URL, COMMONS_URL, WIKIDATA_URL].some((s) =>
+      url.startsWith(s),
+    )
+  ) {
     const res = await Promise.race([
       CapacitorHttp.request({
         url,

@@ -4,6 +4,8 @@ import { CENTER } from './fixtures/scene';
 import {
   SEARCH_HIT,
   lookupRequests,
+  photoRequests,
+  placePhoto,
   offlineWorld,
   stopTimesRequests,
   tileset,
@@ -86,6 +88,45 @@ test.describe('map', () => {
     await page.getByRole('option').first().click();
     await expect(page.locator('.card .hours summary')).toBeVisible();
     expect(lookupRequests.length).toBe(asked + 1);
+  });
+
+  test('shows the place photo from Commons with its credit, asked once', async ({ page }, info) => {
+    placePhoto.tags = { wikidata: 'Q82425' };
+    try {
+      const asked = photoRequests.length;
+      await page.getByRole('combobox').fill('brandenburger');
+      await page.getByRole('option').first().click();
+      const photo = page.locator('.card .place-photo');
+      await expect(photo.locator('img')).toHaveAttribute(
+        'src',
+        /^https:\/\/upload\.wikimedia\.org\//,
+      );
+      await expect(photo).toHaveAttribute('data-shown', 'true');
+      // The licence asks for the author and the licence, with a way to the file's page.
+      const credit = photo.getByRole('link', {
+        name: /Jane Doe · CC BY-SA 4\.0 · Wikimedia Commons/,
+      });
+      await expect(credit).toHaveAttribute(
+        'href',
+        'https://commons.wikimedia.org/wiki/File:Brandenburger_Tor_abends.jpg',
+      );
+      await expect(credit).toHaveAccessibleName(/^Photo of Brandenburger Tor: /);
+      await shot(page, info, 'photo');
+      // Wikidata names the file, Commons gives its thumbnail and credit, then the image itself.
+      expect(photoRequests.slice(asked)).toEqual(['wikidata', 'commons', 'upload']);
+
+      // Again: nothing asked of Wikidata or Commons.
+      await page.locator('.card').getByRole('button', { name: /close/i }).click();
+      await page.getByRole('combobox').fill('brandenburger');
+      await page.getByRole('option').first().click();
+      await expect(page.locator('.card .place-photo img')).toBeVisible();
+      expect(photoRequests.slice(asked).filter((r) => r !== 'upload')).toEqual([
+        'wikidata',
+        'commons',
+      ]);
+    } finally {
+      placePhoto.tags = {};
+    }
   });
 
   test('pulls a card down to a strip and back', async ({ page }, info) => {

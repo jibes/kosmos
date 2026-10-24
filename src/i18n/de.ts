@@ -25,6 +25,8 @@ export const de = {
   share: 'Teilen',
   copy: 'Koordinaten kopieren',
   coordsCopied: 'Koordinaten kopiert',
+  photoOf: 'Foto von {name}',
+  commons: 'Wikimedia Commons',
   linkCopied: 'Link kopiert',
   droppedPin: 'Markierung',
   close: 'Schließen',

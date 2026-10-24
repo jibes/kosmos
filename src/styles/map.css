@@ -1,5 +1,36 @@
 /* ---------- Place card ---------- */
 
+/* The place's photo: a strip under the title, its credit below; space only once there is one. */
+.place-photo {
+  margin: 12px 0 0;
+}
+
+.place-photo img {
+  display: block;
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--hover-strong);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease);
+}
+
+.place-photo[data-shown] img {
+  opacity: 1;
+}
+
+.place-photo figcaption a {
+  display: block;
+  padding: 4px 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
 /* Hours and contacts: one quiet line each, the week one tap away. */
 .place-details {
   margin-top: 10px;

@@ -23,6 +23,8 @@ export const en = {
   share: 'Share',
   copy: 'Copy coordinates',
   coordsCopied: 'Coordinates copied',
+  photoOf: 'Photo of {name}',
+  commons: 'Wikimedia Commons',
   linkCopied: 'Link copied',
   droppedPin: 'Dropped pin',
   close: 'Close',

@@ -196,6 +196,18 @@ export const nominatimSearches: URLSearchParams[] = [];
 /** Every Nominatim lookup the app made. */
 export const lookupRequests: URLSearchParams[] = [];
 
+/** Tags a test gives the Brandenburger Tor's lookup to name its photo (and must set back). */
+export const placePhoto: { tags: Record<string, string> } = { tags: {} };
+
+/** Every Wikidata and Commons request the app made, by host. */
+export const photoRequests: string[] = [];
+
+/** A small PNG, the photo Commons "serves". */
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGOo6FkFRAwQCgAuTga5NyamLwAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 /** Every Transitous departure check the app made. */
 export const tripRequests: URLSearchParams[] = [];
 /** What the live trip says; a test may cancel the U6 (and must set it back). */
@@ -537,12 +549,67 @@ export async function offlineWorld(context: BrowserContext) {
                   opening_hours: 'Mo-Fr 09:00-18:00; Sa 10:00-14:00; Su off',
                   phone: '+49 30 1234567',
                   website: 'https://www.example.org/tor',
+                  ...placePhoto.tags,
                 },
               },
             ]
           : [],
       ),
     });
+  });
+  await context.route(/www\.wikidata\.org\/w\/api\.php/, (route) => {
+    photoRequests.push('wikidata');
+    const item = new URL(route.request().url()).searchParams.get('entity');
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        claims:
+          item === 'Q82425'
+            ? { P18: [{ mainsnak: { datavalue: { value: 'Brandenburger Tor abends.jpg' } } }] }
+            : {},
+      }),
+    });
+  });
+  await context.route(/commons\.wikimedia\.org\/w\/api\.php/, (route) => {
+    photoRequests.push('commons');
+    const title = new URL(route.request().url()).searchParams.get('titles');
+    return route.fulfill({
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        query: {
+          pages: [
+            title === 'File:Brandenburger Tor abends.jpg'
+              ? {
+                  title,
+                  imageinfo: [
+                    {
+                      thumburl:
+                        'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Tor.jpg/500px-Tor.jpg',
+                      thumbwidth: 500,
+                      thumbheight: 333,
+                      descriptionurl:
+                        'https://commons.wikimedia.org/wiki/File:Brandenburger_Tor_abends.jpg',
+                      mime: 'image/jpeg',
+                      extmetadata: {
+                        Artist: {
+                          value: '<a href="//commons.wikimedia.org/wiki/User:J">Jane Doe</a>',
+                        },
+                        LicenseShortName: { value: 'CC BY-SA 4.0' },
+                      },
+                    },
+                  ],
+                }
+              : { title, missing: true },
+          ],
+        },
+      }),
+    });
+  });
+  await context.route(/upload\.wikimedia\.org\//, (route) => {
+    photoRequests.push('upload');
+    return route.fulfill({ contentType: 'image/png', body: PNG });
   });
   await context.route(/photon\.komoot\.io\/reverse/, (route) => {
     const p = new URL(route.request().url()).searchParams;
