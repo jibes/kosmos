@@ -122,6 +122,8 @@ public class KosmosPlugin extends Plugin {
         String[] columns = {
             ContactsContract.CommonDataKinds.StructuredPostal.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.StructuredPostal.FORMATTED_ADDRESS,
+            ContactsContract.CommonDataKinds.StructuredPostal.CONTACT_ID,
+            ContactsContract.CommonDataKinds.StructuredPostal.LOOKUP_KEY,
         };
         try (
             Cursor c = getContext()
@@ -135,6 +137,10 @@ public class KosmosPlugin extends Plugin {
                 JSObject one = new JSObject();
                 one.put("name", name);
                 one.put("address", address);
+                // The contact's own link, to open it in the contacts app: its lookup key holds
+                // through syncing and merging, where the id alone may change.
+                String key = c.getString(3);
+                if (key != null) one.put("uri", ContactsContract.Contacts.getLookupUri(c.getLong(2), key).toString());
                 list.put(one);
             }
         } catch (SecurityException e) {
@@ -205,6 +211,22 @@ public class KosmosPlugin extends Plugin {
             call.resolve();
         } catch (ActivityNotFoundException e) {
             call.reject("No other app", "UNAVAILABLE");
+        }
+    }
+
+    /** A contact opened in the contacts app, to change or delete it there. */
+    @PluginMethod
+    public void openContact(PluginCall call) {
+        Uri uri = Uri.parse(call.getString("uri", ""));
+        if (!"content".equals(uri.getScheme()) || !ContactsContract.AUTHORITY.equals(uri.getAuthority())) {
+            call.reject("Not a contact", "INVALID");
+            return;
+        }
+        try {
+            getContext().startActivity(new Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            call.resolve();
+        } catch (ActivityNotFoundException e) {
+            call.reject("No contacts app", "UNAVAILABLE");
         }
     }
 

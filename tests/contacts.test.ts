@@ -66,4 +66,31 @@ describe('contacts', () => {
     expect(rereadDue(0, REREAD_AFTER_MS - 1)).toBe(false);
     expect(rereadDue(0, REREAD_AFTER_MS)).toBe(true);
   });
+
+  it("keeps each contact's link into the address book as it is now", () => {
+    const uri = 'content://com.android.contacts/contacts/lookup/0r1-ABC/7';
+    const placed = {
+      name: 'Anna Müller',
+      address: addressLine(anna.address),
+      lng: 13.39,
+      lat: 52.51,
+    };
+    // A placed contact takes its link, keeping its point; a new one comes with it.
+    const first = mergeContacts(
+      [placed],
+      [
+        { ...anna, uri },
+        { name: 'Ben', address: 'Hof 1', uri },
+      ],
+    );
+    expect(first.contacts[0]).toEqual({ ...placed, uri });
+    expect(first.todo).toEqual([{ name: 'Ben', address: 'Hof 1', uri }]);
+    // A link no longer given goes; one that is no address book's is never kept.
+    expect(mergeContacts([{ ...placed, uri }], [anna]).contacts[0]).toEqual(placed);
+    expect(mergeContacts([placed], [{ ...anna, uri: 'https://example.org' }]).contacts[0]).toEqual(
+      placed,
+    );
+    expect(parseContacts(JSON.stringify([{ ...placed, uri: 'file:///x' }]))).toEqual([placed]);
+    expect(parseContacts(JSON.stringify([{ ...placed, uri }]))).toEqual([{ ...placed, uri }]);
+  });
 });

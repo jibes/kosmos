@@ -29,6 +29,8 @@ export interface Place extends LngLat {
   osm?: string;
   /** Opened from a favourite by the user's name for it: the place's own, to know it again. */
   own?: string;
+  /** One of the user's contacts: its link into the phone's address book, to open it there. */
+  contact?: string;
 }
 
 export interface SearchBias extends LngLat {

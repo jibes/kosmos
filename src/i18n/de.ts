@@ -26,6 +26,8 @@ export const de = {
   copy: 'Koordinaten kopieren',
   coordsCopied: 'Koordinaten kopiert',
   photoOf: 'Foto von {name}',
+  openInContacts: 'In Kontakte öffnen',
+  contactNotOpened: 'Keine Kontakte-App konnte diesen Kontakt öffnen',
   commons: 'Wikimedia Commons',
   linkCopied: 'Link kopiert',
   droppedPin: 'Markierung',

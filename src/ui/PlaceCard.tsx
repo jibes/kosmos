@@ -6,6 +6,7 @@ import { focusSearch, useFocusOnMount } from './a11y';
 import {
   CloseIcon,
   CopyIcon,
+  KindIcon,
   NearbyIcon,
   PencilIcon,
   RouteIcon,
@@ -20,6 +21,7 @@ import {
   useFavourites,
 } from './useFavourites';
 import { rememberPlace } from './useRecent';
+import { contactStill, openInContacts, useContacts } from './useContacts';
 import { favouriteOf, LABEL_MAX, titleOf, type Favourite } from '../core/favourites';
 import { copy, share } from './native';
 import { Departures } from './Departures';
@@ -41,6 +43,13 @@ interface Props {
 export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby }: Props) {
   const details = usePlaceDetails(place.osm, lang);
   const heading = useFocusOnMount<HTMLHeadingElement>();
+
+  // A contact changed or deleted in the contacts app: its card goes, the map shows it as it is.
+  const contacts = useContacts();
+  const gone = !!place.contact && !contactStill(contacts, place);
+  useEffect(() => {
+    if (gone) onClose();
+  }, [gone, onClose]);
 
   const fav = favouriteOf(useFavourites(), place);
   const starred = !!fav;
@@ -167,6 +176,19 @@ export function PlaceCard({ place, loading, onClose, onToast, onRoute, onNearby 
       </header>
       <PlacePhoto photo={details?.photo} name={name} />
       {details && <PlaceDetails details={details} lng={place.lng} />}
+      {place.contact && (
+        <p className="contacts">
+          <button
+            type="button"
+            onClick={async () => {
+              if (!(await openInContacts(place.contact!))) onToast(t.contactNotOpened);
+            }}
+          >
+            <KindIcon kind="person" size={16} />
+            {t.openInContacts}
+          </button>
+        </p>
+      )}
       <Departures place={place} lang={lang} />
       <button type="button" className="coords" title={t.copy} onClick={onCopy}>
         {formatLngLat(place, 5, locale)}

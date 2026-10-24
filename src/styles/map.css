@@ -86,12 +86,19 @@
   margin: 6px 0 0;
 }
 
-.contacts a {
+.contacts a,
+.contacts button {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--accent);
+  font: inherit;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .card,

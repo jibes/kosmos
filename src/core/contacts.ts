@@ -13,7 +13,21 @@ export interface Contact {
   lat?: number;
   /** The lookup found nothing: not asked again until the address changes. */
   missed?: true;
+  /** The contact in this phone's address book (Android's lookup link), to open it there. */
+  uri?: string;
 }
+
+/** The contact with this link, or none: a link gone from the address book goes from here too. */
+export function withUri(c: Contact, uri: string | undefined): Contact {
+  const out: Contact = { ...c };
+  if (uri) out.uri = uri;
+  else delete out.uri;
+  return out;
+}
+
+/** Only a link into Android's own address book is one to open. */
+const isContactUri = (u: unknown): u is string =>
+  typeof u === 'string' && u.startsWith('content://com.android.contacts/');
 
 /** Back in the app after this long: the address book is read again (moves, new contacts). */
 export const REREAD_AFTER_MS = 10 * 60_000;
@@ -41,7 +55,7 @@ const keyOf = (c: Pick<Contact, 'name' | 'address'>) => `${c.name}|${addressLine
  */
 export function mergeContacts(
   known: Contact[],
-  read: { name: string; address: string }[],
+  read: { name: string; address: string; uri?: string }[],
 ): { contacts: Contact[]; todo: Contact[] } {
   const byKey = new Map(known.map((c) => [keyOf(c), c]));
   const seen = new Set<string>();
@@ -55,9 +69,12 @@ export function mergeContacts(
     if (seen.has(key)) continue;
     seen.add(key);
     const had = byKey.get(key);
-    if (had && (had.lng !== undefined || had.missed)) contacts.push(had);
-    else {
-      const c = { name, address };
+    // Its link as the address book gives it now: kept before this was read, or changed since.
+    const uri = isContactUri(r.uri) ? r.uri : undefined;
+    if (had && (had.lng !== undefined || had.missed)) {
+      contacts.push(had.uri === uri ? had : withUri(had, uri));
+    } else {
+      const c: Contact = { name, address, ...(uri ? { uri } : {}) };
       contacts.push(c);
       todo.push(c);
     }
@@ -99,6 +116,7 @@ export function parseContacts(raw: string | null): Contact[] {
               Math.abs(c.lng) <= 180) &&
           (c.missed === undefined || c.missed === true),
       )
+      .map((c) => (c.uri === undefined || isContactUri(c.uri) ? c : withUri(c, undefined)))
       .slice(0, CONTACTS_MAX);
   } catch {
     return [];

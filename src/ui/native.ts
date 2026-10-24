@@ -56,8 +56,9 @@ const Kosmos = isNative
       openElsewhere(o: { uri: string; title: string }): Promise<void>;
       contacts(o: { ask: boolean }): Promise<{
         allowed: boolean;
-        contacts?: { name: string; address: string }[];
+        contacts?: { name: string; address: string; uri?: string }[];
       }>;
+      openContact(o: { uri: string }): Promise<void>;
       addListener(
         event: 'shared',
         listener: (e: { text: string }) => void,
@@ -90,6 +91,15 @@ export const allowPip = Kosmos
 /** Android: a `geo:` link to the other maps apps, kOSMos left out of the chooser. */
 export const openElsewhere = Kosmos
   ? (uri: string, title: string) => Kosmos.openElsewhere({ uri, title })
+  : null;
+
+/** Android: a contact opened in the contacts app; false when no app could open it. */
+export const openContact = Kosmos
+  ? (uri: string) =>
+      Kosmos.openContact({ uri }).then(
+        () => true,
+        () => false,
+      )
   : null;
 
 /** The app's page in the system settings (Android), where location can be allowed again. */

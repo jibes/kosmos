@@ -13,6 +13,13 @@ describe('backup', () => {
     expect(backupFileName(now)).toBe('kosmos-backup-2026-10-18.json');
   });
 
+  it("leaves out the phone's own link to a contact", () => {
+    const uri = 'content://com.android.contacts/contacts/lookup/0r1-ABC/7';
+    const text = backupText({ favourites: [], contacts: [{ ...anna, uri }] }, 0);
+    expect(text).not.toContain('content://');
+    expect(parseBackup(text)?.contacts).toEqual([anna]);
+  });
+
   it('is no backup unless it says so; drops what is malformed in one', () => {
     expect(parseBackup('{"favourites":[]}')).toBeNull();
     expect(parseBackup('not json')).toBeNull();

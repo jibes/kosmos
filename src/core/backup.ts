@@ -1,4 +1,4 @@
-import { parseContacts, type Contact } from './contacts';
+import { parseContacts, withUri, type Contact } from './contacts';
 import { parseFavourites, type Favourite } from './favourites';
 
 /**
@@ -14,7 +14,13 @@ export interface Backup {
 const KIND = 'kosmos-backup';
 
 export function backupText(b: Backup, now: number): string {
-  return JSON.stringify({ kind: KIND, v: 1, at: new Date(now).toISOString(), ...b }, null, 1);
+  // A contact's link is this phone's own: on another it would open someone else, or nobody.
+  const contacts = b.contacts.map((c) => withUri(c, undefined));
+  return JSON.stringify(
+    { kind: KIND, v: 1, at: new Date(now).toISOString(), ...b, contacts },
+    null,
+    1,
+  );
 }
 
 /** A backup file read back, anything malformed in it dropped; `null` when it is none. */

@@ -11,7 +11,7 @@ import {
 import { parsePhoton, searchUrl, type Place } from '../core/search';
 import { CONTACT_ICON, CONTACT_SOURCE } from '../core/style';
 import { fill, lang, t } from '../i18n';
-import { isNative, openAppSettings, readContacts } from './native';
+import { isNative, openAppSettings, openContact, readContacts } from './native';
 import { CONTACTS_KEY, store, stored } from './prefs';
 import { logEvent } from './usageLog';
 import { forgetPeople } from './useRecent';
@@ -143,7 +143,27 @@ export const placeOfContact = (c: Contact): Place => ({
   lng: c.lng ?? 0,
   lat: c.lat ?? 0,
   kind: 'person',
+  ...(c.uri ? { contact: c.uri } : {}),
 });
+
+/** Opened in the contacts app: back here, the address book is read again at once. */
+let edited = false;
+
+/**
+ * The contact in the phone's contacts app, to change or delete it there; false when that
+ * cannot be (the browser, no contacts app).
+ */
+export async function openInContacts(uri: string): Promise<boolean> {
+  if (!openContact) return false;
+  const opened = await openContact(uri);
+  edited ||= opened;
+  logEvent('contacts.open', { opened });
+  return opened;
+}
+
+/** Is the contact this place was opened from still in the address book as it was then? */
+export const contactStill = (list: Contact[], place: Place) =>
+  list.some((c) => c.uri === place.contact && c.name === place.name && c.address === place.detail);
 
 /** A person: a head and shoulders, white on clear, tinted by the style (an SDF image). */
 function person(size = 56): ImageData {
@@ -201,7 +221,10 @@ export function useContactLayer(map: maplibregl.Map | null) {
     let hiddenAt: number | null = null;
     const onVisible = () => {
       if (document.hidden) hiddenAt = Date.now();
-      else if (rereadDue(hiddenAt, Date.now()) && list.length) void importContacts(false);
+      else if ((edited || rereadDue(hiddenAt, Date.now())) && list.length) {
+        edited = false;
+        void importContacts(false);
+      }
       if (!document.hidden) hiddenAt = null;
     };
     document.addEventListener('visibilitychange', onVisible);
