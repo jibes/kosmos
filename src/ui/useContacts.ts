@@ -17,6 +17,7 @@ import { logEvent } from './usageLog';
 import { forgetPeople } from './useRecent';
 
 let list: Contact[] = parseContacts(stored(CONTACTS_KEY));
+const NONE: Contact[] = [];
 const listeners = new Set<() => void>();
 
 function set(next: Contact[]) {
@@ -180,9 +181,14 @@ function person(size = 56): ImageData {
   return g.getImageData(0, 0, size, size);
 }
 
-/** The contacts on the map, in step with the list; refreshed from the address book on opening. */
-export function useContactLayer(map: maplibregl.Map | null) {
-  const contacts = useContacts();
+/**
+ * The contacts on the map only while their list is open in the search (`shown`), never on the
+ * map by default: whoever sees the screen should not see where the user's people live. The list
+ * is refreshed from the address book on opening.
+ */
+export function useContactLayer(map: maplibregl.Map | null, shown: boolean) {
+  const all = useContacts();
+  const contacts = shown ? all : NONE;
   useEffect(() => {
     if (!map) return;
     const ensure = () => {

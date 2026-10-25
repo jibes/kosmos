@@ -739,7 +739,7 @@ test.describe('map', () => {
     await expect(page.getByRole('option').nth(1)).toContainText('Gate');
   });
 
-  test('puts contacts on the map, found by name, and takes them off again', async ({
+  test('finds contacts by name, on the map only while their list is open', async ({
     page,
     context,
   }) => {
@@ -760,10 +760,10 @@ test.describe('map', () => {
     await page.reload();
     const input = page.getByRole('combobox');
     await input.click();
-    const row = page.getByRole('option').filter({ hasText: "Show contacts' addresses" });
+    const row = page.getByRole('option').filter({ hasText: "Find contacts' addresses" });
     await row.click();
     await expect(
-      page.getByRole('status').filter({ hasText: '1 contact on the map' }),
+      page.getByRole('status').filter({ hasText: '1 contact with an address' }),
     ).toBeVisible();
     // Found by name, before the world's places; its card at the address.
     await input.fill('anna');
@@ -774,7 +774,7 @@ test.describe('map', () => {
     const card = page.locator('.card');
     await expect(card.getByRole('heading')).toHaveText('Anna Müller');
     await card.getByRole('button', { name: 'Close' }).click();
-    // Marked on the map where the address is.
+    // Not on the map otherwise: whoever sees the screen should not see where people live.
     const onMap = () =>
       page.evaluate(
         ([lng, lat]) => {
@@ -790,18 +790,21 @@ test.describe('map', () => {
         },
         [SEARCH_HIT.lng, SEARCH_HIT.lat],
       );
-    await expect.poll(onMap).toBeGreaterThan(0);
-    // In a list of their own in the empty field, nearest first; taken off again from there.
+    await page.waitForTimeout(300);
+    expect(await onMap()).toBe(0);
+    // In a list of their own in the empty field, nearest first, and on the map while it is
+    // open; taken off again from there.
     await input.fill('');
     await input.click();
     const list = page.getByRole('option').filter({ hasText: 'Contacts' });
     await expect(list).toHaveAccessibleName('Contacts, 1, opens a list');
     await list.click();
     await expect(page.locator('.r-place')).toHaveText([/Anna Müller/]);
-    await page.getByRole('button', { name: 'Remove contacts from the map' }).click();
+    await expect.poll(onMap).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Remove contacts' }).click();
     await page.keyboard.press('Escape');
     await expect(
-      page.getByRole('option').filter({ hasText: "Show contacts' addresses" }),
+      page.getByRole('option').filter({ hasText: "Find contacts' addresses" }),
     ).toBeVisible();
     await expect.poll(onMap).toBe(0);
   });

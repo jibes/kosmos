@@ -298,7 +298,7 @@ export function App() {
   });
 
   useFavouriteLayer(map);
-  useContactLayer(map);
+  useContactLayer(map, search.folder === 'contacts');
   const contacts = useContactsRow(showToast);
   useFixCamera(map, fix, {
     me,
