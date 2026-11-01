@@ -1,18 +1,22 @@
+# Security updates come from the repo setting (Settings → Code security), not from this file.
+# Version updates: monthly, one PR per ecosystem. Majors are done by hand (apps-data STANDARD.md §9).
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
-    schedule: { interval: weekly }
-    groups:
-      minor-and-patch:
-        update-types: [minor, patch]
+    schedule: { interval: monthly }
     ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
       # typescript-eslint supports TypeScript < 6.1 only; lift when its peer range grows.
       - dependency-name: typescript
         versions: ['>=6.1.0']
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
     groups:
       actions:
         patterns: ['*']
