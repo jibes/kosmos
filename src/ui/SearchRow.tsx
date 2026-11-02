@@ -3,7 +3,7 @@ import { formatDistance } from '../core/route';
 import type { Folder, Item } from '../core/searchList';
 import { fill, t, units } from '../i18n';
 import { ChevronIcon, ClockIcon, CloseIcon, KindIcon, SearchIcon, StarIcon } from './icons';
-import { onMapText } from './useContacts';
+import { placedText } from './useContacts';
 import { forgetRecent } from './useRecent';
 
 export const labelOf = (k: Kind) => foundOf(k) ?? t[`cat_${k as Category}`];
@@ -88,7 +88,7 @@ export function SearchRow({ it, lang, placed, busy, onForgetContacts }: RowProps
         <>
           <KindIcon kind="person" />
           <span className="r-name">
-            {placed ? onMapText(placed) : busy ? t.contactsPlacing : t.contactsAdd}
+            {placed ? placedText(placed) : busy ? t.contactsPlacing : t.contactsAdd}
           </span>
           <span className="r-detail">{t.contactsHint}</span>
           {!!placed && (

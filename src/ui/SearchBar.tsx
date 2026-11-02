@@ -57,8 +57,18 @@ interface Props {
   categoryRun?: number;
   /** The search key on a category: all its places on the map, none picked. */
   onShowAll?: () => void;
-  /** The user's contacts on the map: found by name, added or removed from the empty field. */
-  contacts?: { list: Contact[]; busy: boolean; onAdd: () => void; onForget: () => void };
+  /**
+   * The user's contacts: found by name, added or removed from the empty field, their list told
+   * when it is on screen (`onShown`), as only then are they on the map.
+   */
+  contacts?: {
+    list: Contact[];
+    busy: boolean;
+    onAdd: () => void;
+    onForget: () => void;
+    shown: boolean;
+    onShown: (shown: boolean) => void;
+  };
   /** Contacts found by name only, without their list or adding them (a route's own field). */
   people?: Contact[];
   /** Where distances in the lists count from: the user in view, else the map's middle. */
@@ -594,6 +604,13 @@ export function SearchBar({
   useEffect(() => {
     listShown.current = showList;
   });
+  // The contacts list on screen, or not (blurred, a card, a route, gone with the bar).
+  const contactsShown = showList && folder === 'contacts';
+  const onShown = contacts?.onShown;
+  useEffect(() => {
+    onShown?.(contactsShown);
+    return () => onShown?.(false);
+  }, [onShown, contactsShown]);
 
   /** One row: a line of the list, or a pill in the strip of lists. */
   const option = (it: Item, i: number, Tag: 'li' | 'div') => (

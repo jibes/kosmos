@@ -182,9 +182,10 @@ function person(size = 56): ImageData {
 }
 
 /**
- * The contacts on the map only while their list is open in the search (`shown`), never on the
- * map by default: whoever sees the screen should not see where the user's people live. The list
- * is refreshed from the address book on opening.
+ * The contacts on the map only while their list is on screen in the search (`shown`, as the
+ * search bar reports it: not merely its folder chosen, which outlives a tap on the map, a card
+ * and a trip), never on the map by default: whoever sees the screen should not see where the
+ * user's people live. The list is refreshed from the address book on opening.
  */
 export function useContactLayer(map: maplibregl.Map | null, shown: boolean) {
   const all = useContacts();
@@ -238,9 +239,9 @@ export function useContactLayer(map: maplibregl.Map | null, shown: boolean) {
   }, []);
 }
 
-/** "3 contacts on the map", "1 contact on the map", or none with an address. */
-export const onMapText = (n: number) =>
-  n === 0 ? t.contactsNone : n === 1 ? t.contactOnMap : fill(t.contactsOnMap, { n });
+/** "3 contacts with an address", "1 contact with an address", or none with one. */
+export const placedText = (n: number) =>
+  n === 0 ? t.contactsNone : n === 1 ? t.contactPlaced : fill(t.contactsPlaced, { n });
 
 /**
  * The search's contacts row, where contacts can be added here at all: adding (said when done,
@@ -251,6 +252,8 @@ export function useContactsRow(
 ) {
   const contacts = useContacts();
   const [busy, setBusy] = useState(false);
+  // Whether their list is on screen right now (the search bar says): only then on the map.
+  const [shown, onShown] = useState(false);
   const onAdd = useCallback(() => {
     setBusy(true);
     void importContacts(true)
@@ -261,7 +264,7 @@ export function useContactsRow(
             t.contactsDenied,
             openAppSettings ? [{ label: t.settings, run: openAppSettings }] : undefined,
           );
-        } else if (n !== null) say(onMapText(n));
+        } else if (n !== null) say(placedText(n));
       })
       .finally(() => setBusy(false));
   }, [say]);
@@ -272,7 +275,8 @@ export function useContactsRow(
     say(t.contactsRemoved, [{ label: t.undo, run: () => list.length || set(was) }]);
   }, [say]);
   return useMemo(
-    () => (contactsAvailable() ? { list: contacts, busy, onAdd, onForget } : undefined),
-    [contacts, busy, onAdd, onForget],
+    () =>
+      contactsAvailable() ? { list: contacts, busy, onAdd, onForget, shown, onShown } : undefined,
+    [contacts, busy, onAdd, onForget, shown],
   );
 }

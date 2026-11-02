@@ -774,7 +774,8 @@ test.describe('map', () => {
     const card = page.locator('.card');
     await expect(card.getByRole('heading')).toHaveText('Anna Müller');
     await card.getByRole('button', { name: 'Close' }).click();
-    // Not on the map otherwise: whoever sees the screen should not see where people live.
+    // On the map only while their list is on screen: whoever sees the screen should not see
+    // where people live.
     const onMap = () =>
       page.evaluate(
         ([lng, lat]) => {
@@ -790,15 +791,25 @@ test.describe('map', () => {
         },
         [SEARCH_HIT.lng, SEARCH_HIT.lat],
       );
-    await page.waitForTimeout(300);
-    expect(await onMap()).toBe(0);
     // In a list of their own in the empty field, nearest first, and on the map while it is
-    // open; taken off again from there.
+    // open; off it again as the list closes, whether by Escape or a tap on the map.
     await input.fill('');
     await input.click();
     const list = page.getByRole('option').filter({ hasText: 'Contacts' });
     await expect(list).toHaveAccessibleName('Contacts, 1, opens a list');
     await list.click();
+    await expect(page.locator('.r-place')).toHaveText([/Anna Müller/]);
+    await expect.poll(onMap).toBeGreaterThan(0);
+    await page.keyboard.press('Escape');
+    await expect.poll(onMap).toBe(0);
+    await list.click();
+    await expect.poll(onMap).toBeGreaterThan(0);
+    await page.mouse.click(40, page.viewportSize()!.height / 2);
+    await expect(page.getByRole('option')).toHaveCount(0);
+    await expect.poll(onMap).toBe(0);
+    // Back in the field the list is still theirs (its choice outlives the tap), and they are
+    // on the map again; taken off for good from there.
+    await input.click();
     await expect(page.locator('.r-place')).toHaveText([/Anna Müller/]);
     await expect.poll(onMap).toBeGreaterThan(0);
     await page.getByRole('button', { name: 'Remove contacts' }).click();
