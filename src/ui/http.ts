@@ -12,7 +12,7 @@ const USER_AGENT = `kOSMos/${__BUILD__.version} (+https://github.com/jibes/kosmo
 /** The native request cannot be aborted; it gives up by itself after this. */
 const NATIVE_TIMEOUT_MS = 15_000;
 /** A browser's request gives up after this (the volunteer servers can stall under load). */
-const WEB_TIMEOUT_MS = 20_000;
+export const WEB_TIMEOUT_MS = 20_000;
 
 /** Rejects once the signal aborts: the caller stops waiting even where the request goes on. */
 const aborted = (signal: AbortSignal) =>

@@ -181,7 +181,8 @@ export async function storedFetch(url: string, keep = false, signal?: AbortSigna
 
 async function network(url: string, signal?: AbortSignal) {
   const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(String(res.status));
+  // With the status on it, as MapLibre's own loader throws: a 404 is an empty tile, no error.
+  if (!res.ok) throw Object.assign(new Error(String(res.status)), { status: res.status });
   return res.arrayBuffer();
 }
 

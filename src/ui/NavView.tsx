@@ -10,6 +10,7 @@ import {
   speedLabel,
   turnOf,
   type Mode,
+  type TravelMode,
   type Route,
 } from '../core/route';
 import { limitAt, limitIn, overLimit } from '../core/speedLimit';
@@ -264,6 +265,7 @@ interface WaitingProps {
   status: RouteStatus;
   location: LocationStatus;
   destination: string;
+  mode: TravelMode;
   muted: boolean;
   onMute: () => void;
   onRetry: () => void;
@@ -275,7 +277,7 @@ interface WaitingProps {
  * connection), and that route is still on its way, cannot come without a position, or failed.
  * End stays reachable whatever happens.
  */
-export function NavWaiting({ status, location, destination, ...on }: WaitingProps) {
+export function NavWaiting({ status, location, destination, mode, ...on }: WaitingProps) {
   const noFix = status === 'locating' && (location === 'denied' || location === 'unavailable');
   const text = noFix
     ? location === 'denied'
@@ -289,9 +291,13 @@ export function NavWaiting({ status, location, destination, ...on }: WaitingProp
           ? navigator.onLine
             ? t.routeDown
             : t.routeFailed
-          : status === 'none' || status === 'noRoad' || status === 'tooFar'
-            ? t.noRoute
-            : t.routing;
+          : status === 'none'
+            ? t[`noRoute_${mode}`]
+            : status === 'noRoad'
+              ? t[`noRoad_${mode}`]
+              : status === 'tooFar'
+                ? t.routeTooFar
+                : t.routing;
   const stuck =
     noFix ||
     status === 'busy' ||

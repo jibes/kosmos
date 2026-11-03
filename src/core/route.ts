@@ -273,7 +273,9 @@ function toRoute(trip: VTrip | undefined): Route | null {
     // Legs share their joining point; drop the duplicate.
     const offset = coords.length ? coords.length - 1 : 0;
     const shape = decodePolyline(leg.shape ?? '');
-    coords.push(...(coords.length ? shape.slice(1) : shape));
+    // Appended one by one: spreading a long shape (tens of thousands of points) overflows the
+    // call stack.
+    for (const c of coords.length ? shape.slice(1) : shape) coords.push(c);
     const ms = leg.maneuvers ?? [];
     for (const [mi, m] of ms.entries()) {
       // A leg that ends before the last ends at a stop on the way.

@@ -356,6 +356,9 @@ public class KosmosPlugin extends Plugin {
             said.put(id, call);
             if (tts.speak(text, TextToSpeech.QUEUE_ADD, null, id) == TextToSpeech.SUCCESS) return;
             said.remove(id);
+            // The engine is gone (disabled, uninstalled, its service lost): the next prompt
+            // starts whichever is the default then, rather than failing for the rest of the run.
+            ttsUp = false;
         }
         call.reject("Not spoken", "UNAVAILABLE");
     }
@@ -467,9 +470,11 @@ public class KosmosPlugin extends Plugin {
         call.resolve(result);
     }
 
-    /** A place handed over while the app runs. */
+    /** A place handed over while the app runs; the one it opened with is `takeShared`'s. */
     @Override
     protected void handleOnNewIntent(Intent intent) {
+        // Capacitor hands the launch intent here too, on creation: once is enough.
+        if (intent == getActivity().getIntent()) return;
         String text = sharedText(intent);
         if (text == null) return;
         JSObject data = new JSObject();

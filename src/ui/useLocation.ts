@@ -31,13 +31,22 @@ export function useLocation() {
     };
   }, []);
 
+  /** Android's own location service: on while guiding, `served` once it has delivered. */
+  const native = useRef<{
+    on: boolean;
+    served: boolean;
+    handle: PluginListenerHandle | null;
+    denied?: boolean;
+  }>({ on: false, served: false, handle: null });
+
   const stop = useCallback(() => {
     if (watch.current !== null) navigator.geolocation.clearWatch(watch.current);
     watch.current = null;
   }, []);
 
   const start = useCallback(() => {
-    if (watch.current !== null) return;
+    // The service has location while guiding on Android: no second stream beside it.
+    if (watch.current !== null || native.current.served) return;
     if (!('geolocation' in navigator)) {
       setStatus('unavailable');
       return;
@@ -97,10 +106,6 @@ export function useLocation() {
    * carries on until the service delivers its first fix, so a service that cannot start (no
    * permission, refused) never leaves guidance without positions while the app is open.
    */
-  const native = useRef<{ on: boolean; handle: PluginListenerHandle | null; denied?: boolean }>({
-    on: false,
-    handle: null,
-  });
   const background = useCallback(
     /** `onApproximate`: the service runs on approximate location only, which guidance can't use. */
     (on: boolean, onApproximate?: () => void) => {
@@ -116,6 +121,7 @@ export function useLocation() {
             if (!bg.on) return;
             if (first) {
               first = false;
+              bg.served = true;
               stop();
             }
             const next: Fix = {
@@ -151,6 +157,7 @@ export function useLocation() {
           });
       } else if (!on && bg.on) {
         bg.on = false;
+        bg.served = false;
         void bg.handle?.remove();
         bg.handle = null;
         void plugin.stop();
@@ -166,6 +173,7 @@ export function useLocation() {
       stop();
       if (native.current.on) {
         native.current.on = false;
+        native.current.served = false;
         void native.current.handle?.remove();
         void NavLocation?.stop();
       }

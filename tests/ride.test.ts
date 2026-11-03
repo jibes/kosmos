@@ -318,6 +318,30 @@ describe('getting off and arriving', () => {
     expect(st.phase).toBe('arrived');
   });
 
+  it('never ends a short ride of one stop at the boarding stop', () => {
+    // 250 m between the two stops, none between: a noisy fix 35 m along the line while still
+    // waiting (the vehicle late) is not getting off.
+    const short: Transit = {
+      ...transit,
+      legs: transit.legs.map((l) =>
+        l.ride
+          ? {
+              ...l,
+              via: [],
+              end: min(9.5),
+              to: { ...l.to, lng: m(250, 400)[0] },
+              coords: [s1, m(250, 400)],
+            }
+          : l,
+      ),
+    };
+    let st = initialRide(short, min(7.5), at(s1, min(7.5)));
+    st = rideStep(short, st, at(s1, min(8.5)), min(8.5));
+    st = rideStep(short, st, { ...at(m(35, 400), min(9)), accuracy: 25 }, min(9));
+    expect(st.leg).toBe(1);
+    expect(st.phase).not.toBe('walk');
+  });
+
   it('says "next stop" for a ride of one stop only once it moves', () => {
     const one: Transit = {
       ...transit,

@@ -26,6 +26,13 @@
   cursor: grab;
 }
 
+/* A 44 px target for the mouse, without the bar growing. */
+.grab::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+
 .grab span {
   width: 36px;
   height: 4px;

@@ -20,6 +20,8 @@ export function useOffline(map: maplibregl.Map | null) {
     const onError = (ev: maplibregl.ErrorEvent) => {
       const e = ev as maplibregl.ErrorEvent & { tile?: unknown; sourceId?: string };
       if (!e.tile && !e.sourceId) return;
+      // A tile the server has not got (an empty one) says nothing about the connection.
+      if ((e.error as { status?: number } | undefined)?.status === 404) return;
       const now = Date.now();
       errors = [...errors.filter((at) => now - at < WITHIN_MS), now];
       if (errors.length >= ERRORS) setOffline(true);

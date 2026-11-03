@@ -54,6 +54,10 @@ describe('Nominatim search', () => {
     expect(url.searchParams.get('q')).toBe('Pariser Platz');
     expect(url.searchParams.get('viewbox')!.split(',')).toHaveLength(4);
     expect(url.searchParams.has('bounded')).toBe(false);
+    // Near the 180th meridian or a pole, zoomed out: the box stays on the globe (Nominatim
+    // refuses one past it).
+    const far = new URL(nominatimSearchUrl('Suva', 'en', { lng: 178, lat: 85, zoom: 3 }));
+    expect(far.searchParams.get('viewbox')).toBe('158.0000,90.0000,180.0000,75.0000');
   });
 
   it('reads places with name, address, OSM id and extent', () => {

@@ -100,10 +100,13 @@ export function nominatimSearchUrl(
   });
   if (near) {
     // Prefer what is around the view, a few times its size, without excluding the rest.
+    // Kept on the globe: a box past 180° or 90° is refused as invalid.
     const d = Math.min(20, 360 / 2 ** Math.max(0, near.zoom - 1));
+    const lng = (v: number) => Math.max(-180, Math.min(180, v));
+    const lat = (v: number) => Math.max(-90, Math.min(90, v));
     q.set(
       'viewbox',
-      [near.lng - d, near.lat + d / 2, near.lng + d, near.lat - d / 2]
+      [lng(near.lng - d), lat(near.lat + d / 2), lng(near.lng + d), lat(near.lat - d / 2)]
         .map((v) => v.toFixed(4))
         .join(','),
     );

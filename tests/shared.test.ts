@@ -15,6 +15,10 @@ describe('shared links', () => {
     expect(parseShared('geo:0,0?q=Pariser+Platz+1,+Berlin')).toEqual({
       query: 'Pariser Platz 1, Berlin',
     });
+    // An address with digits either side of its comma is no point (12, 108 is in the sea).
+    expect(parseShared('geo:0,0?q=Hauptstraße 12, 10827 Berlin')).toEqual({
+      query: 'Hauptstraße 12, 10827 Berlin',
+    });
   });
 
   it('reads map links with a point in them', () => {
@@ -47,12 +51,27 @@ describe('shared links', () => {
       osm: 'N518071791',
     });
     expect(parseShared('https://www.openstreetmap.org/way/4067/history')).toEqual({ osm: 'W4067' });
+    // As the address bar has it, with the map's own position after it: still the object.
+    expect(
+      parseShared('https://www.openstreetmap.org/node/240109189#map=19/52.5163/13.3777'),
+    ).toEqual({ osm: 'N240109189' });
     expect(parseShared('https://maps.google.com/?q=52.5163,13.3777')).toEqual({
       at: { lat: 52.5163, lng: 13.3777 },
+    });
+    // A name in `q` beside the point in `ll`: the point, called by the name.
+    expect(parseShared('https://maps.google.com/?q=Brandenburger+Tor&ll=52.5163,13.3777')).toEqual({
+      at: { lat: 52.5163, lng: 13.3777 },
+      name: 'Brandenburger Tor',
+    });
+    expect(parseShared('https://maps.google.com/?q=Hauptstraße+12,+10827+Berlin')).toEqual({
+      query: 'Hauptstraße 12, 10827 Berlin',
     });
     expect(parseShared('https://maps.apple.com/?ll=52.5163,13.3777&q=Tor')).toEqual({
       at: { lat: 52.5163, lng: 13.3777 },
       name: 'Tor',
+    });
+    expect(parseShared('https://maps.apple.com/?q=Hauptstraße+12,+10827+Berlin')).toEqual({
+      query: 'Hauptstraße 12, 10827 Berlin',
     });
   });
 

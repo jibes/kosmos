@@ -83,15 +83,17 @@ export function renameStops(route: Route, names: readonly string[], words: StopW
 /**
  * How many of the trip's stops are behind: in order, so the last one reached says it. Reached
  * is at it (within `ARRIVE_M` along the route), not only past it: parked there and walking
- * about, a reroute must not send the user back to it.
+ * about, a reroute must not send the user back to it. Only a fix on the line counts (the
+ * count never goes down): one off it may be snapped anywhere along the route.
  */
 export function stopsReached(
   tr: Track,
-  st: Pick<NavState, 'next' | 'snap' | 'offRoute'>,
+  st: Pick<NavState, 'next' | 'snap' | 'offSince'>,
   before: number,
 ): number {
   let reached = before;
-  const along = st.snap && !st.offRoute ? st.snap.along : -Infinity;
+  if (!st.snap || st.offSince !== null) return reached;
+  const along = st.snap.along;
   tr.route.maneuvers.forEach((m, i) => {
     if (m.via === undefined) return;
     if (i < st.next || along >= tr.at[i] - ARRIVE_M) reached = Math.max(reached, m.via + 1);

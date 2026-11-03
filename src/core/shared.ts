@@ -31,6 +31,16 @@ function pairIn(text: string | null | undefined): LngLat | null {
 }
 
 /**
+ * A pair that is the whole of a query, apart from a label after it in brackets: an address
+ * ("Hauptstraße 12, 10827 Berlin") holds digits either side of a comma too, and is no point.
+ */
+function wholePair(text: string | null | undefined): LngLat | null {
+  if (!text) return null;
+  const bare = text.replace(/\(([^)]*)\)\s*$/, '').trim();
+  return PAIR.test(bare) && bare.replace(PAIR, '').trim() === '' ? pairIn(bare) : null;
+}
+
+/**
  * One coordinate written with degrees ("52°30'58.7\"N", "N 52° 30.978'", "52,5163° N"):
  * hemisphere letters before or after (German O for east), minutes and seconds optional.
  */
@@ -93,7 +103,7 @@ function fromGeo(uri: string): Shared | null {
   const q = params.get('q');
   const zoom = zoomOf(params.get('z'));
   const label = q ? /\(([^)]+)\)\s*$/.exec(q)?.[1] : undefined;
-  const fromQ = pairIn(q);
+  const fromQ = wholePair(q);
   const at = fromQ ?? pairIn(m[1].split(';')[0]);
   if (at) return { at, ...(zoom ? { zoom } : {}), ...(label ? { name: label } : {}) };
   return q?.trim() ? { query: q.trim() } : null;
@@ -104,13 +114,14 @@ function fromUrl(u: URL): Shared | null {
   const host = u.hostname.replace(/^www\./, '');
   const p = u.searchParams;
   if (/(^|\.)openstreetmap\.org$/.test(host) || host === 'osm.org') {
+    // A node, way or relation's own page: the object itself, looked up by its id, whatever
+    // the map's own position in the hash (the address bar always carries one).
+    const obj = /^\/(node|way|relation)\/(\d+)/.exec(u.pathname);
+    if (obj) return { osm: `${obj[1][0].toUpperCase()}${obj[2]}` };
     const at = point(Number(p.get('mlat')), Number(p.get('mlon')));
     const map = /map=(\d+(?:\.\d+)?)\/(-?[\d.]+)\/(-?[\d.]+)/.exec(u.hash);
     const there = at ?? (map ? point(Number(map[2]), Number(map[3])) : null);
-    if (there) return { at: there, ...(map ? { zoom: zoomOf(map[1]) } : {}) };
-    // A node, way or relation's own page: the object itself, looked up by its id.
-    const obj = /^\/(node|way|relation)\/(\d+)/.exec(u.pathname);
-    return obj ? { osm: `${obj[1][0].toUpperCase()}${obj[2]}` } : null;
+    return there ? { at: there, ...(map ? { zoom: zoomOf(map[1]) } : {}) } : null;
   }
   if (/(^|\.)google\.[a-z.]+$/.test(host) || host === 'maps.google.com') {
     // `/maps/place/Name/@lat,lng,17z/data=…!3dlat!4dlng`, `?q=lat,lng`, `?ll=lat,lng`. The
@@ -118,27 +129,29 @@ function fromUrl(u: URL): Shared | null {
     // place itself.
     const at = /@(-?[\d.]+),(-?[\d.]+)(?:,(\d+(?:\.\d+)?)z)?/.exec(u.pathname);
     const own = /!3d(-?[\d.]+)!4d(-?[\d.]+)/.exec(u.pathname);
-    const name = /\/place\/([^/@]+)/.exec(u.pathname)?.[1];
+    const placeName = /\/place\/([^/@]+)/.exec(u.pathname)?.[1];
+    const q = p.get('q')?.trim();
+    // A name in `q` beside a point in `ll`: the point, called by the name.
     const where = own
       ? point(Number(own[1]), Number(own[2]))
       : at
         ? point(Number(at[1]), Number(at[2]))
-        : pairIn(p.get('q') ?? p.get('ll'));
+        : (wholePair(q) ?? pairIn(p.get('ll')));
+    const name = placeName ? decodeURIComponent(placeName.replace(/\+/g, ' ')) : undefined;
     if (where) {
       return {
         at: where,
         ...(at?.[3] ? { zoom: zoomOf(at[3]) } : {}),
-        ...(name ? { name: decodeURIComponent(name.replace(/\+/g, ' ')) } : {}),
+        ...(name ? { name } : q && !wholePair(q) ? { name: q } : {}),
       };
     }
-    const q = p.get('q');
-    return q?.trim() ? { query: q.trim() } : null;
+    return q ? { query: q } : null;
   }
   if (host === 'maps.apple.com') {
-    const where = pairIn(p.get('ll') ?? p.get('q'));
-    const q = p.get('q') ?? undefined;
-    if (where) return { at: where, ...(q && !pairIn(q) ? { name: q } : {}) };
-    return q?.trim() ? { query: q.trim() } : null;
+    const q = p.get('q')?.trim();
+    const where = pairIn(p.get('ll')) ?? wholePair(q);
+    if (where) return { at: where, ...(q && !wholePair(q) ? { name: q } : {}) };
+    return q ? { query: q } : null;
   }
   if (host === 'osmand.net') {
     const where = point(Number(p.get('lat')), Number(p.get('lon')));

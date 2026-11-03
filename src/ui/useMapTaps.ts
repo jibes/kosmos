@@ -18,11 +18,13 @@ import { searchResultAt } from './useCategory';
 import type { StopAdder } from './useStops';
 import { motion } from './motion';
 import type { Trip } from './useRoute';
+import { WEB_TIMEOUT_MS } from './http';
 import { favouriteAt, placeOf } from './useFavourites';
 import { contactAt, placeOfContact } from './useContacts';
 
+/** A card's lookup; a server that never answers ends it, so the card does not load for good. */
 async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(WEB_TIMEOUT_MS) });
   if (!res.ok) throw new Error(String(res.status));
   return res.json();
 }
@@ -35,6 +37,8 @@ const RADIUS_M: Record<string, number> = {
   ...Object.fromEntries(POI_LAYERS.map((id) => [id, 150])),
   'search-names': 150,
   'search-dots': 150,
+  'along-names': 150,
+  'along-dots': 150,
   'label-peak': 1000,
   'label-water': 5000,
   'label-water-line': 5000,
@@ -161,6 +165,14 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
         setTrip((now) => (now ? { ...now, to: place } : now));
         // A new destination is the selected place too: its pin and, on closing, its card.
         if (!navRef.current) select(place, enrich);
+        // Guiding, nothing selects: its address and id still come, for the card on arrival.
+        else if (enrich)
+          void enrich()
+            .catch(() => null)
+            .then((extra) => {
+              if (extra)
+                setTrip((tr) => (tr?.to === place ? { ...tr, to: { ...place, ...extra } } : tr));
+            });
       };
       showToast(place.name, [
         ...(canStop ? [{ label: t.addStop, run: () => addStopRef.current.add(place) }] : []),

@@ -53,7 +53,8 @@ type RecentPlace = Extract<Recent, { place: unknown }>['place'];
 /**
  * A place as kept among the recent ones, or `null` for none worth finding again: the user's
  * own position, or a dropped pin with nothing but its point (`pinName` is what such a pin is
- * called); a pin whose address came is kept by it.
+ * called, `noAddress` what its card says when the lookup found none); a pin whose address
+ * came is kept by it.
  */
 export function recentPlaceOf(
   p: {
@@ -68,9 +69,11 @@ export function recentPlaceOf(
     here?: boolean;
   },
   pinName: string,
+  noAddress?: string,
 ): RecentPlace | null {
   if (p.here) return null;
   const pin = p.name === pinName;
+  if (pin && noAddress && p.detail === noAddress) return null;
   const name = pin ? p.detail : p.name;
   if (!name.trim()) return null;
   return {

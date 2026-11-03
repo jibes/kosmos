@@ -25,7 +25,7 @@ export const rememberRecent = (r: Recent extends infer R ? Omit<R, 'at'> : never
  * enough, as eight are kept and every tap would push out the searches.
  */
 export const rememberPlace = (p: Place) => {
-  const place = recentPlaceOf(p, t.droppedPin);
+  const place = recentPlaceOf(p, t.droppedPin, t.noAddress);
   if (place) rememberRecent({ place });
 };
 export const forgetRecent = (r: Recent) => set(forget(list, r));

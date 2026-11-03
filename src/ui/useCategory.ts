@@ -138,12 +138,19 @@ export function useCategory(
         return [];
       }
       if (foundOf(c) !== null) {
+        // The names found, else those shown last for the same text: the bar that found them
+        // is gone while guiding, and comes back with the text still in it.
+        const pool = given?.length
+          ? given
+          : last.current === c
+            ? (searched.current?.places ?? [])
+            : [];
         last.current = c;
         const { inView, middle } = seen(map);
         const me = meRef.current;
         const from = me && inView(me) ? me : middle;
-        const near = nearBest(given ?? []);
-        const places = nearest(given ?? [], from, Infinity).map(({ m, ...p }) => ({
+        const near = nearBest(pool);
+        const places = nearest(pool, from, Infinity).map(({ m, ...p }) => ({
           ...p,
           distance: m,
         }));

@@ -102,5 +102,15 @@ describe('navigation views', () => {
       [4, 5],
     ]);
     expect(boundsOf([])).toBeNull();
+    // Over the 180th meridian the narrow box (east past 180), not one round the world.
+    expect(
+      boundsOf([
+        [179.9, -17],
+        [-179.9, -17.5],
+      ]),
+    ).toEqual([
+      [179.9, -17.5],
+      [180.1, -17],
+    ]);
   });
 });

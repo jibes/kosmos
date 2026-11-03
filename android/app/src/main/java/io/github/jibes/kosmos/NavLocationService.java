@@ -46,6 +46,9 @@ public class NavLocationService extends Service implements LocationListener {
     static volatile Consumer<Location> sink;
     /** In the foreground, its notification showing: only then is it updated. */
     private static volatile boolean shown;
+    /** What the banner said before the service was up: shown with it, not lost. */
+    private static volatile String pendingTitle;
+    private static volatile String pendingText;
 
     private LocationManager manager;
     private long lastGps;
@@ -111,8 +114,10 @@ public class NavLocationService extends Service implements LocationListener {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String title = intent != null ? intent.getStringExtra(EXTRA_TITLE) : null;
-        String text = intent != null ? intent.getStringExtra(EXTRA_TEXT) : null;
+        String title = pendingTitle != null ? pendingTitle : intent != null ? intent.getStringExtra(EXTRA_TITLE) : null;
+        String text = pendingText != null ? pendingText : intent != null ? intent.getStringExtra(EXTRA_TEXT) : null;
+        pendingTitle = null;
+        pendingText = null;
         try {
             Notification notification = notification(
                 this,
@@ -139,7 +144,11 @@ public class NavLocationService extends Service implements LocationListener {
      * Silent: only the text changes.
      */
     static void show(Context context, String title, String text) {
-        if (!shown) return;
+        if (!shown) {
+            pendingTitle = title;
+            pendingText = text;
+            return;
+        }
         context.getSystemService(NotificationManager.class)
             .notify(NOTIFICATION_ID, notification(context, title, text));
     }
@@ -254,6 +263,8 @@ public class NavLocationService extends Service implements LocationListener {
     @Override
     public void onDestroy() {
         shown = false;
+        pendingTitle = null;
+        pendingText = null;
         main.removeCallbacks(relisten);
         main.removeCallbacks(gpsStale);
         unregisterReceiver(switched);

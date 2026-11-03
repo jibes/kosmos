@@ -1,6 +1,6 @@
 import { angleDiff } from './compass';
 import { distance, type LngLat } from './geo';
-import type { Maneuver, Mode, Route } from './route';
+import { turnOf, type Maneuver, type Mode, type Route } from './route';
 
 /**
  * Turn-by-turn guidance on the device. The route comes from the router once; from then on every
@@ -71,7 +71,7 @@ export function snap(
   tr: Track,
   fix: LngLat,
   hint = 0,
-  reach?: { from: number; ahead: number },
+  reach?: Reach,
   /** Only these shape points (segments `from` to `to`), when the caller knows where to look. */
   within?: { from: number; to: number },
 ): Snap {
@@ -96,8 +96,13 @@ export function snap(
   if (within) scan(within.from, within.to);
   else {
     // Forward window of about a kilometre of shape points first, as far as one could have got.
-    scan(hint, hint + 200, reach ? reach.from + reach.ahead : Infinity);
-    if (best.d > 50) scan(0, tr.xy.length);
+    const limit = reach ? reach.from + reach.ahead : Infinity;
+    scan(hint, hint + 200, limit);
+    // Else the whole route, still within reach while the route was being followed: one stray
+    // fix must not latch onto a later part of it (the way back on the other carriageway) and
+    // skip the turns between. Beyond reach only once the fix has stayed off it for a while
+    // (back from a long tunnel, a shortcut), or before the route was ever found.
+    if (best.d > 50) scan(0, tr.xy.length, reach?.strict ? limit : Infinity);
   }
   const [a, b] = [
     tr.route.coords[best.seg],
@@ -288,17 +293,26 @@ export const OFF_ROUTE_MS = 8_000;
  * and GPS between buildings is off by tens of metres. */
 export const ARRIVE_M = 40;
 
+/** How far along the route a fix may be; `strict` holds the whole-route fallback to it too. */
+export interface Reach {
+  from: number;
+  ahead: number;
+  strict?: boolean;
+}
+
 /**
  * How far along the route a fix may be from the last one: what the fastest plausible travel
  * since then covers, plus the GPS error. The first fix may be up to a stale start away (the
- * route is reused within 150 m of where it was asked for).
+ * route is reused within 150 m of where it was asked for). Strict (no match beyond it at all)
+ * while the route is being followed, until a fix has stayed off it for `OFF_ROUTE_MS`.
  */
-function reachOf(prev: NavState, fix: Fix): { from: number; ahead: number } {
+function reachOf(prev: NavState, fix: Fix): Reach {
   const slack = 40 + Math.min(fix.accuracy, COARSE_M) * 2;
   if (!prev.snap) return { from: 0, ahead: 150 + slack };
   const dt = Math.min(120, Math.max(1, (fix.time - prev.time) / 1000));
   const fast = Math.max(prev.speed, fix.speed ?? 0, 15) * 1.5;
-  return { from: prev.snap.along, ahead: slack + fast * dt };
+  const strict = prev.offSince === null || fix.time - prev.offSince < OFF_ROUTE_MS;
+  return { from: prev.snap.along, ahead: slack + fast * dt, strict };
 }
 
 export function step(tr: Track, prev: NavState, fix: Fix): NavState {
@@ -505,6 +519,15 @@ export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
   }
   const m: Maneuver | undefined = ms[st.next];
   if (!m) return null;
+  const done = ms[st.next - 1];
+  const sinceDone = st.snap.along - tr.at[st.next - 1];
+  // Leaving a stop on the way: the leg's own first words ("Head north on …"), which lie at the
+  // stop itself and so were passed together with arriving there, never ahead. Before the next
+  // step's alert, which may be due at once on a short leg.
+  const stopped = st.next >= 2 && ms[st.next - 2]?.via !== undefined;
+  if (stopped && sinceDone < 150 && turnOf(done.type) === 'depart' && !said(`${st.next - 1}:pre`)) {
+    return { key: `${st.next - 1}:pre`, text: done.pre ?? done.instruction };
+  }
   // The destination's own words ("You have arrived") are for arriving, not for approaching.
   const last = st.next === ms.length - 1;
   const preAt = Math.max(PRE_MIN_M[mode], st.speed * PRE_S);
@@ -524,8 +547,6 @@ export function prompt(tr: Track, st: NavState, mode: Mode): Prompt | null {
   ) {
     return { key: `${st.next}:alert`, text: m.alert, distance: st.toNext };
   }
-  const done = ms[st.next - 1];
-  const sinceDone = st.snap.along - tr.at[st.next - 1];
   // "Continue for …" only when no alert for the next maneuver is due, so the two never collide.
   const alertDue = !!m.alert && st.toNext <= alertM;
   const quiet = !alertDue && st.toNext > preAt * 2;

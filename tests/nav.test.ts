@@ -16,6 +16,7 @@ import {
   type NavState,
   headingToRoute,
   COURSE_KEEP_MS,
+  OFF_ROUTE_MS,
   courseOf,
 } from '../src/core/nav';
 import { buzzFor } from '../src/core/haptics';
@@ -142,7 +143,8 @@ describe('guidance', () => {
     expect(st.toNext).toBeCloseTo(800, -1);
     expect(st.remaining).toBeCloseTo(1300, -1);
     expect(st.eta).toBeCloseTo(130, 0);
-    st = step(tr, st, fixAt(m(100, 1000), 1000));
+    // Past the turn 100 s later (a jump of 900 m in a second would be beyond reach).
+    st = step(tr, st, fixAt(m(100, 1000), 100_000));
     expect(st.next).toBe(2);
     expect(st.eta).toBeCloseTo(40, 0);
   });
@@ -352,6 +354,57 @@ describe('a U-turn onto the other carriageway', () => {
       { type: 4, text: 'You have arrived.' },
     ],
   );
+
+  it('keeps to the carriageway being driven when a stray fix lands within reach of the other', () => {
+    // Accuracy 40 (a 60 m limit): one fix 56 m east is nearer the way back (26 m) than the
+    // road being driven, yet the way back is not within reach. Before, the whole-route fallback
+    // took it: the U-turn was skipped, and the right driving after counted as going back.
+    const r2 = routeThrough(
+      [
+        [0, 0],
+        [0, 1000],
+        [30, 1000],
+        [30, 0],
+      ],
+      [
+        { type: 1, text: 'Head north.' },
+        { type: 12, text: 'Make a U-turn.' },
+        { type: 15, text: 'Continue.' },
+        { type: 4, text: 'You have arrived.' },
+      ],
+    );
+    const t2 = track(r2);
+    let st = initialNav();
+    for (let d = 0, i = 0; d <= 600; d += 10, i++) {
+      st = step(t2, st, { ...fixAt(m(d === 300 ? 56 : 0, d), i * 1000), accuracy: 40 });
+      expect(st.next).toBe(1);
+    }
+    expect(st.snap!.along).toBeCloseTo(600, -1);
+    expect(st.offRoute).toBe(false);
+    expect(st.offSince).toBeNull();
+  });
+
+  it('finds the route again further on once off it for a while', () => {
+    // Out of a long tunnel (no fixes for 10 min), 5 km on: beyond reach, so off the route
+    // first; after OFF_ROUTE_MS the fallback looks everywhere and the route is found again.
+    const r2 = routeThrough(
+      [
+        [0, 0],
+        [0, 10_000],
+      ],
+      [
+        { type: 1, text: 'Head north.' },
+        { type: 4, text: 'You have arrived.' },
+      ],
+    );
+    const t2 = track(r2);
+    let st = step(t2, initialNav(), fixAt(m(0, 100), 0));
+    st = step(t2, st, fixAt(m(0, 5_000), 600_000));
+    expect(st.offSince).not.toBeNull();
+    st = step(t2, st, fixAt(m(0, 5_100), 600_000 + OFF_ROUTE_MS));
+    expect(st.offSince).toBeNull();
+    expect(st.snap!.along).toBeCloseTo(5_100, -1);
+  });
 
   it('keeps to the carriageway being driven when a fix strays toward the other', () => {
     const fixes: [number, number][] = [];

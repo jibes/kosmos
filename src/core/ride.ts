@@ -141,10 +141,15 @@ function legDone(legs: TransitLeg[], i: number, fix: Fix | null, time: number): 
     const on = project(l.coords, fix);
     if (on.offset < NEAR_LINE_M) {
       const stops = stopsOf(l);
-      const before = stops.length > 1 ? stopsAlong(l, stops).at(-2)! : 0;
-      // Past the stop before it and nearly there, when due: getting off (a big station's
-      // point may lie a way from its platforms). Never at the stop before, however close.
-      if (on.along > before + 30 && d < MISSED_M && time >= l.end - 60_000) return true;
+      // The stop before the one to get off at: the boarding stop on a ride of one stop.
+      const before =
+        stops.length > 1 ? stopsAlong(l, stops).at(-2)! : project(l.coords, l.from).along;
+      // Past the stop before it (and nearer the stop to get off than to it: a stop a short
+      // way back, or the boarding stop itself, is left by GPS noise alone) and nearly there,
+      // when due: getting off (a big station's point may lie a way from its platforms). Never
+      // at the stop before, however close.
+      const past = Math.max(before + 30, (before + on.total) / 2);
+      if (on.along > past && d < MISSED_M && time >= l.end - 60_000) return true;
       // At the end of the line already.
       if (on.along >= on.total - 30) return true;
       // On the line and short of the stop: riding, late or not, for up to an hour.

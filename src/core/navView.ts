@@ -1,4 +1,4 @@
-import { distance } from './geo';
+import { boundsOfLine, distance } from './geo';
 import { between, navZoom } from './nav';
 import type { Mode } from './route';
 import type { RideState } from './ride';
@@ -73,17 +73,10 @@ export function tripRest(transit: Transit, st: RideState, at: Pt | null, trip: b
   return [...(at ? [at] : []), ...here, ...rest];
 }
 
-/** West-south and east-north corners of some points. */
+/** West-south and east-north corners of some points; over the 180th meridian the narrow box. */
 export function boundsOf(points: Pt[]): [Pt, Pt] | null {
   if (!points.length) return null;
-  let [w, s] = points[0];
-  let [e, n] = points[0];
-  for (const [lng, lat] of points) {
-    w = Math.min(w, lng);
-    e = Math.max(e, lng);
-    s = Math.min(s, lat);
-    n = Math.max(n, lat);
-  }
+  const [w, s, e, n] = boundsOfLine(points);
   return [
     [w, s],
     [e, n],

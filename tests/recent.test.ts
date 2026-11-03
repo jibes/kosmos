@@ -86,6 +86,10 @@ describe('recent searches', () => {
       ...at,
     });
     expect(recentPlaceOf({ name: 'Pin', detail: '', ...at }, 'Pin')).toBeNull();
+    // Nor one whose card says there is no address: that is no name to find it by.
+    expect(
+      recentPlaceOf({ name: 'Pin', detail: 'No address here', ...at }, 'Pin', 'No address here'),
+    ).toBeNull();
     // The user's own position is no place to find again.
     expect(recentPlaceOf({ name: 'My location', detail: '', ...at, here: true }, 'Pin')).toBeNull();
     // A station stays one: its card shows departures when opened from the list.

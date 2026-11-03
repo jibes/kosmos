@@ -16,6 +16,7 @@ import {
 } from './layout';
 import type { userMarker } from './markers';
 import { motion } from './motion';
+import { isAway } from './native';
 import type { Fix } from './useLocation';
 import { useNav } from './useNav';
 import type { Voice } from './voice';
@@ -124,7 +125,11 @@ export function useGuidance(o: Options) {
   const line = useMemo(() => (o.route ? track(o.route, o.mode) : null), [o.route, o.mode]);
   const lastFix = useRef(0);
   useEffect(() => {
-    if (!o.active) glide?.reset();
+    if (!o.active) {
+      glide?.reset();
+      // The next trip's first fix may be this trip's last: news again then.
+      lastFix.current = 0;
+    }
   }, [o.active, glide]);
   useEffect(() => () => glide?.stop(), [glide]);
 
@@ -187,12 +192,19 @@ export function useGuidance(o: Options) {
             // Standing, the compass turns it (`useCompassFollow`).
             if (movingRef.current) meRef.current?.heading(heading);
           },
-          () => !touchingRef.current.size && !lookedRef.current && !overviewRef.current,
+          // A flick that ends before the next fix has let go of following too.
+          () =>
+            !touchingRef.current.size &&
+            !lookedRef.current &&
+            !overviewRef.current &&
+            followRef.current !== 'off',
           motion(1) === 0,
         );
       };
 
       if (!map || touchingRef.current.size || followRef.current === 'off') return glideTo(null);
+      // Out of sight, nothing is drawn for nobody; the next fix seen puts the camera right.
+      if (isAway()) return glideTo(null);
       if (overviewRef.current) {
         glideTo(null);
         fitNav(map, rest.current, motion(1000));

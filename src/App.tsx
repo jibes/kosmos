@@ -633,6 +633,7 @@ export function App() {
             status={route.status}
             location={status}
             destination={trip.to.name}
+            mode={trip.mode}
             muted={muted}
             onMute={toggleMute}
             onRetry={route.retry}

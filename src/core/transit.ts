@@ -283,7 +283,9 @@ function toRoute(it: MItinerary): Route | null {
   const legs = (it.legs ?? []).map(toLeg).filter((l): l is TransitLeg => !!l);
   if (!legs.length) return null;
   const coords: [number, number][] = [];
-  for (const l of legs) coords.push(...(coords.length ? l.coords.slice(1) : l.coords));
+  for (const l of legs) {
+    for (const c of coords.length ? l.coords.slice(1) : l.coords) coords.push(c);
+  }
   const [w, s, e, n] = boundsOfLine(coords);
   const start = Date.parse(it.startTime ?? '') || legs[0].start;
   const end = Date.parse(it.endTime ?? '') || legs[legs.length - 1].end;

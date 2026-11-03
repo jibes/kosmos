@@ -124,15 +124,27 @@ describe('stops on the way', () => {
     expect(said.filter((x) => x.includes('arrived'))).toEqual([
       'You have arrived at your destination.',
     ]);
+    // Leaving each stop, the leg's own first words: they lie at the stop, so they were passed
+    // together with arriving there and were never the step ahead.
+    expect(said.filter((x) => x === 'Head north.')).toHaveLength(2);
     expect(st.arrived).toBe(true);
     expect(behind).toBe(2);
+  });
+
+  it('counts no stop reached from a fix off the line', () => {
+    const tr = track(route);
+    let st = step(tr, initialNav(), fixAt(400, 0));
+    // A stray fix snapped near Anna's but off the line: not there yet.
+    st = step(tr, st, { ...fixAt(480, 1000), lng: m(70, 480)[0] });
+    expect(st.offSince).not.toBeNull();
+    expect(stopsReached(tr, st, 0)).toBe(0);
   });
 
   it('counts no stop reached off the route, nor one never got to', () => {
     const tr = track(route);
     const st = step(tr, initialNav(), fixAt(200, 0));
     expect(stopsReached(tr, st, 0)).toBe(0);
-    expect(stopsReached(tr, { ...st, offRoute: true, next: 1 }, 0)).toBe(0);
+    expect(stopsReached(tr, { ...st, offSince: 1, next: 1 }, 0)).toBe(0);
     // What was reached before a reroute stays reached.
     expect(stopsReached(tr, st, 1)).toBe(1);
   });
