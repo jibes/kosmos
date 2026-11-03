@@ -98,11 +98,13 @@ export function snap(
     // Forward window of about a kilometre of shape points first, as far as one could have got.
     const limit = reach ? reach.from + reach.ahead : Infinity;
     scan(hint, hint + 200, limit);
-    // Else the whole route, still within reach while the route was being followed: one stray
-    // fix must not latch onto a later part of it (the way back on the other carriageway) and
-    // skip the turns between. Beyond reach only once the fix has stayed off it for a while
-    // (back from a long tunnel, a shortcut), or before the route was ever found.
-    if (best.d > 50) scan(0, tr.xy.length, reach?.strict ? limit : Infinity);
+    // Else the whole route, still within reach while the route is being followed and the fix
+    // lies near the reachable stretch: one stray fix must not latch onto a later part of the
+    // route (the way back on the other carriageway) and skip the turns between. A fix far from
+    // anywhere it could have got to (back from a long tunnel, a shortcut) looks everywhere, as
+    // does one before the route was ever found, or once off the route for a while.
+    const near = reach?.strict && best.d <= STRAY_M;
+    if (best.d > 50) scan(0, tr.xy.length, near ? limit : Infinity);
   }
   const [a, b] = [
     tr.route.coords[best.seg],
@@ -292,6 +294,9 @@ export const OFF_ROUTE_MS = 8_000;
 /** Arrived this close along the route: the door is often off the road, a car parks short of it,
  * and GPS between buildings is off by tens of metres. */
 export const ARRIVE_M = 40;
+
+/** A fix this far from the reachable stretch of the route is no stray: it is elsewhere. */
+const STRAY_M = 250;
 
 /** How far along the route a fix may be; `strict` holds the whole-route fallback to it too. */
 export interface Reach {

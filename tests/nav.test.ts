@@ -384,9 +384,9 @@ describe('a U-turn onto the other carriageway', () => {
     expect(st.offSince).toBeNull();
   });
 
-  it('finds the route again further on once off it for a while', () => {
-    // Out of a long tunnel (no fixes for 10 min), 5 km on: beyond reach, so off the route
-    // first; after OFF_ROUTE_MS the fallback looks everywhere and the route is found again.
+  it('finds the route again further on, out of a long tunnel', () => {
+    // No fixes for 10 min, then one 5 km on: beyond reach, but far from anywhere the car could
+    // have got to, so the whole route is looked at and it is found at once.
     const r2 = routeThrough(
       [
         [0, 0],
@@ -400,10 +400,14 @@ describe('a U-turn onto the other carriageway', () => {
     const t2 = track(r2);
     let st = step(t2, initialNav(), fixAt(m(0, 100), 0));
     st = step(t2, st, fixAt(m(0, 5_000), 600_000));
-    expect(st.offSince).not.toBeNull();
-    st = step(t2, st, fixAt(m(0, 5_100), 600_000 + OFF_ROUTE_MS));
     expect(st.offSince).toBeNull();
-    expect(st.snap!.along).toBeCloseTo(5_100, -1);
+    expect(st.snap!.along).toBeCloseTo(5_000, -1);
+    // A stray fix beside the road still stays within reach (the carriageway test above); off
+    // the route for a while, the fallback looks everywhere again.
+    st = step(t2, st, { ...fixAt(m(200, 5_000), 601_000), accuracy: 40 });
+    expect(st.offSince).not.toBeNull();
+    st = step(t2, st, { ...fixAt(m(200, 9_000), 601_000 + OFF_ROUTE_MS), accuracy: 40 });
+    expect(st.snap!.along).toBeCloseTo(9_000, -1);
   });
 
   it('keeps to the carriageway being driven when a fix strays toward the other', () => {

@@ -26,8 +26,9 @@
   cursor: grab;
 }
 
-/* A 44 px target for the mouse, without the bar growing. */
-.grab::after {
+/* A 44 px target for the mouse, without the bar growing; not over the strip of a minimised
+   sheet, whose own button it would cover. */
+.sheet:not([data-min]) .grab::after {
   content: '';
   position: absolute;
   inset: -6px 0;
