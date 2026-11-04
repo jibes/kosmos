@@ -142,7 +142,10 @@ test.describe('guidance', () => {
       .locator('.card')
       .getByRole('button', { name: /^Route$/ })
       .click();
-    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/);
+    // The route, as `openRoute` waits for it: a busy runner can take longer than 5 s.
+    await expect(page.locator('.card.route .summary strong')).toHaveText(/min/, {
+      timeout: 15_000,
+    });
     await page.getByRole('button', { name: 'Start', exact: true }).click();
     await expect(page.locator('.nav-banner')).toContainText('Turn right onto Unter den Linden.');
     await page.route(/valhalla1\.openstreetmap\.de\/route/, (route) => route.abort());
