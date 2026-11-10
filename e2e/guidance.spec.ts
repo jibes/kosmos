@@ -230,7 +230,8 @@ test.describe('guidance', () => {
     // Tunnels come from loaded tiles; a phone sends a fix a second, this test only one inside.
     await idle(page);
     await west(150);
-    await expect.poll(theme).toBe('dark');
+    // Tunnels are read every 4 s: a busy runner needs more than the default 5 s.
+    await expect.poll(theme, { timeout: 8000 }).toBe('dark');
     expect(await page.evaluate(() => window.kosmos!.getStyle().name)).toBe('kOSMos dark');
     // Underground GPS stops: with no fix for longer than the hold, it stays dark.
     await page.waitForTimeout(TUNNEL_HOLD_MS + 1500);
