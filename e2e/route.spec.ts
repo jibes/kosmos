@@ -891,6 +891,17 @@ test.describe('routes', () => {
         )
         .toBe(true);
     await seeCafe();
+    // Its details first, under the banner, guidance going on: Back closes them first.
+    await page.mouse.click(at.x, at.y);
+    await page.locator('.toast').getByRole('button', { name: 'Details' }).click();
+    const details = page.locator('.ride-details .nav-place');
+    await expect(details.getByRole('heading')).toHaveText('Café Einstein');
+    await expect(banner).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(details).toHaveCount(0);
+    await expect(banner).toBeVisible();
+    await expect(page.getByText('again to end navigation')).toHaveCount(0);
+    await seeCafe();
     const asked = routeRequests.length;
     await page.mouse.click(at.x, at.y);
     await page.locator('.toast').getByRole('button', { name: 'Add stop' }).click();

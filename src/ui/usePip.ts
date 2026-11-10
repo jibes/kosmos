@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { allowPip, keepRunning } from './native';
 import { logEvent } from './usageLog';
 
-/** Set on `<html>` while the app is a small window over others: only the turn and the map. */
+/** Set on `<html>` while the app is a small window over others: the next step alone, no map. */
 export const PIP_ATTR = 'data-pip';
 export const inPip = () => document.documentElement.hasAttribute(PIP_ATTR);
 

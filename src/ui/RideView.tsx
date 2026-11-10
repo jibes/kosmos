@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { FRESH_MS, type RidePrompt, type RideState } from '../core/ride';
 import type { Place } from '../core/search';
 import { formatClock, formatDistance, formatDuration } from '../core/route';
@@ -24,6 +25,8 @@ interface Props {
   /** The whole connection, every stop and turn, open under the banner (Back closes it). */
   open: boolean;
   onOpen: (open: boolean) => void;
+  /** A place's details while guiding (`NavPlace`), in the trip list's place. */
+  aside?: ReactNode;
 }
 
 /**
@@ -71,7 +74,7 @@ export function rideWords(transit: Transit, p: RidePrompt, destination: string, 
 
 /** On the way by public transport: one line saying what to do now, the arrival at the bottom. */
 export function RideView(props: Props) {
-  const { transit, st, destination, lang, muted, connecting, open, ...on } = props;
+  const { transit, st, destination, lang, muted, connecting, open, aside, ...on } = props;
   const clock = (ms: number) => formatClock(new Date(ms), lang);
   const leg = transit.legs[st.leg] as TransitLeg | undefined;
   const next = transit.legs[st.leg + 1];
@@ -197,7 +200,8 @@ export function RideView(props: Props) {
             </button>
           )}
         </section>
-        {open && (
+        {aside}
+        {!aside && open && (
           <TripDetails onClose={() => on.onOpen(false)}>
             <TransitLegs
               transit={transit}

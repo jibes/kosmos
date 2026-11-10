@@ -7,7 +7,7 @@ watchPages();
 test.describe('picture-in-picture', () => {
   inWorld();
 
-  test('as a small window over another app: the next turn and the map, nothing else', async ({
+  test('as a small window over another app: the next step alone, big, no map', async ({
     page,
     context,
   }, info) => {
@@ -15,6 +15,7 @@ test.describe('picture-in-picture', () => {
     await card.getByRole('button', { name: 'Start', exact: true }).click();
     const banner = page.locator('.nav-banner');
     await expect(banner.locator('strong')).toHaveText(/km$|m$/);
+    await page.waitForTimeout(1500);
     // Android shrinks the app and says so (`MainActivity`, as Capacitor sends window events).
     const pip = (on: boolean) =>
       page.evaluate((on) => {
@@ -25,12 +26,25 @@ test.describe('picture-in-picture', () => {
     await pip(true);
     await expect(banner).toBeVisible();
     await expect(banner.locator('strong')).toBeVisible();
-    for (const hidden of ['.nav-bar', '.controls', '.nav-then', '.credit']) {
+    for (const hidden of ['.map', '.nav-bar', '.controls', '.nav-then', '.credit']) {
       await expect(page.locator(hidden)).toBeHidden();
     }
-    // The banner leaves most of the window to the map.
+    // The step fills the window: too small for a map to be read, so none is drawn.
     const b = (await banner.boundingBox())!;
-    expect(b.height).toBeLessThan(110);
+    expect(b.width).toBeGreaterThan(230);
+    expect(b.height).toBeGreaterThan(300);
+    const centre = () => page.evaluate(() => window.kosmos!.getCenter().lat);
+    const lat = await centre();
+    const distance = banner.locator('strong');
+    const was = await distance.textContent();
+    await context.setGeolocation({
+      latitude: CENTER.lat + 0.01 - 0.0027,
+      longitude: CENTER.lng + 0.01,
+      accuracy: 5,
+    });
+    await expect(distance).not.toHaveText(was!);
+    await page.waitForTimeout(800);
+    expect(await centre()).toBe(lat);
     await shot(page, info, 'pip');
     // Full size again: everything back.
     await page.setViewportSize(size);

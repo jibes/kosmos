@@ -17,6 +17,8 @@ interface Options {
   follow: Follow;
   overview: boolean;
   touchingRef: RefObject<Set<number>>;
+  /** Set while on board: the line turns the map then, not the compass (`useCompassFollow`). */
+  onBoardRef: RefObject<boolean>;
 }
 
 /**
@@ -26,11 +28,15 @@ interface Options {
  * compass, `onBoardRef`); the overview, the rest of the trip, north up.
  * Moves with each fix, and underground as the stops pass; not on the ride's ticks alone.
  */
-export function useRideCamera({ map, ride, follow, overview, touchingRef }: Options) {
+export function useRideCamera({ map, ride, follow, overview, touchingRef, onBoardRef }: Options) {
   const rideRef = useRef(ride);
   useEffect(() => {
     rideRef.current = ride;
   });
+  const onBoard = ride?.st.phase === 'ride';
+  useEffect(() => {
+    onBoardRef.current = onBoard;
+  }, [onBoard, onBoardRef]);
   // Moved by what moves it: the ride ticks every few seconds with nothing new, and each move
   // is a second of full renders.
   const transit = ride?.transit;
@@ -67,4 +73,16 @@ export function useRideCamera({ map, ride, follow, overview, touchingRef }: Opti
       } else map.easeTo({ center: at, duration: motion(800) });
     }
   }, [map, transit, fix, phase, leg, stopsLeft, follow, overview, touchingRef]);
+}
+
+/** Public transport turns the map dark after sunset too; tunnels are the driver's concern. */
+export function useRideTheme(
+  ride: { st: RideState } | null,
+  update: (fix: { lng: number; lat: number }, time: number) => void,
+) {
+  const fix = ride?.st.fix;
+  const time = ride?.st.time;
+  useEffect(() => {
+    if (fix && time) update(fix, time);
+  }, [fix, time, update]);
 }

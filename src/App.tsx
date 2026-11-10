@@ -24,7 +24,8 @@ import { useShared } from './ui/useShared';
 import { useMap } from './ui/useMap';
 import { ASKED, useCategory } from './ui/useCategory';
 import { useRide } from './ui/useRide';
-import { useRideCamera } from './ui/useRideCamera';
+import { useRideCamera, useRideTheme } from './ui/useRideCamera';
+import { NavPlace, useNavPlace } from './ui/NavPlace';
 import { useNavView } from './ui/useNavView';
 import { useNavControls } from './ui/useNavControls';
 import { useFixCamera } from './ui/useFixCamera';
@@ -204,7 +205,9 @@ export function App() {
     if (to && !to.here && selection?.place !== to) setSelection({ place: to, loading: false });
   }
 
+  const navPlace = useNavPlace(navigating);
   useMapTaps(map, {
+    showDetails: navPlace.show,
     labelLang: LABEL_LANG,
     select,
     clear,
@@ -412,17 +415,8 @@ export function App() {
     say: (tr, p) => rideWords(tr, p, trip?.to.name ?? '', locale),
   });
   const { overview } = view;
-  useRideCamera({ map, ride, follow, overview, touchingRef: touching });
-  const onBoard = riding && ride?.st.phase === 'ride';
-  useEffect(() => {
-    onBoardRef.current = onBoard;
-  }, [onBoard]);
-  // Public transport turns the map dark after sunset too; tunnels are the driver's concern.
-  const rideFix = ride?.st.fix;
-  const rideTime = ride?.st.time;
-  useEffect(() => {
-    if (rideFix && rideTime) updateRideTheme(rideFix, rideTime);
-  }, [rideFix, rideTime, updateRideTheme]);
+  useRideCamera({ map, ride, follow, overview, touchingRef: touching, onBoardRef });
+  useRideTheme(ride, updateRideTheme);
 
   const arrived = navigating && (riding ? ride?.st.phase === 'arrived' : nav.arrived);
   const arrivedRef = useRef(arrived);
@@ -559,7 +553,8 @@ export function App() {
   useBack((via) => {
     if (about) setAbout(false);
     else if (navigating) {
-      if (tripList) setTripList(false);
+      if (navPlace.shown) navPlace.close();
+      else if (tripList) setTripList(false);
       else if (Date.now() - backAt.current < BACK_TWICE_MS) endNav();
       else {
         backAt.current = Date.now();
@@ -591,6 +586,7 @@ export function App() {
   const sel = selection?.place;
   const panelRef = usePanel(map, sel && !trip && !navigating ? sel : null, selection?.loading);
 
+  const placeAside = navPlace.shown && <NavPlace {...navPlace.shown} onClose={navPlace.close} />;
   return (
     <>
       <div ref={mapEl} className="map" />
@@ -616,6 +612,7 @@ export function App() {
             onEnd={endNav}
             open={tripList}
             onOpen={setTripList}
+            aside={placeAside}
           />
         )}
         {navigating && !riding && shown[chosen] && (
@@ -628,6 +625,7 @@ export function App() {
             muted={muted}
             open={tripList}
             onOpen={setTripList}
+            aside={placeAside}
             reroute={rerouteState}
             onMute={toggleMute}
             destination={trip?.to.name ?? ''}

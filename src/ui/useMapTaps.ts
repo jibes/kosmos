@@ -86,6 +86,8 @@ interface Options {
   setTrip: Dispatch<SetStateAction<Trip | null>>;
   /** A place as a stop on the way of the open route (`useStops`). */
   addStopRef: RefObject<StopAdder>;
+  /** While guiding, a label's details under the banner (`useNavPlace`). */
+  showDetails: (place: Place, enrich?: Enrich) => void;
 }
 
 /** Zooms to where a group of marks comes apart, centred on it. */
@@ -123,7 +125,8 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
       const canStop = addStopRef.current.can;
       // A ride is guided by its timetable: its end changes on the route card, not on the way.
       const canEnd = !(navRef.current && tr.mode === 'transit');
-      if (!canStop && !canEnd) return;
+      // While guiding a place's details are always there (hours, phone, departures).
+      if (!canStop && !canEnd && !navRef.current) return;
       const layers = LABEL_LAYERS.filter((id) => map.getLayer(id));
       const [f] = map.queryRenderedFeatures(
         [
@@ -174,7 +177,9 @@ export function useMapTaps(map: maplibregl.Map | null, o: Options) {
                 setTrip((tr) => (tr?.to === place ? { ...tr, to: { ...place, ...extra } } : tr));
             });
       };
+      const { showDetails } = opts.current;
       showToast(place.name, [
+        ...(navRef.current ? [{ label: t.details, run: () => showDetails(place, enrich) }] : []),
         ...(canStop ? [{ label: t.addStop, run: () => addStopRef.current.add(place) }] : []),
         ...(canEnd ? [{ label: t.goHere, run: goHere }] : []),
       ]);

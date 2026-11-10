@@ -29,6 +29,7 @@ export const en = {
   commons: 'Wikimedia Commons',
   linkCopied: 'Link copied',
   droppedPin: 'Dropped pin',
+  details: 'Details',
   close: 'Close',
   about: 'About kOSMos',
   tagline: 'A quiet map of the world.',

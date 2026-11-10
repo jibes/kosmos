@@ -31,6 +31,7 @@ export const de = {
   commons: 'Wikimedia Commons',
   linkCopied: 'Link kopiert',
   droppedPin: 'Markierung',
+  details: 'Details',
   close: 'Schließen',
   about: 'Über kOSMos',
   tagline: 'Eine ruhige Karte der Welt.',

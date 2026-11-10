@@ -98,6 +98,25 @@
   animation: drop-in 0.25s var(--ease);
 }
 
+/* A place's details while guiding (`ui/NavPlace.tsx`), as the place card has them. */
+.nav-place {
+  padding: 12px 0 4px;
+}
+
+.nav-place header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.nav-place h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .ride-details .legs {
   margin-top: 0;
   border-top: 0;
@@ -613,9 +632,11 @@ button.via[aria-expanded='true']::after {
 }
 
 /* A small window over another app (Android's picture-in-picture, `ui/usePip.ts`): the next
-   turn and how far, the map following under it; nothing to tap, as taps open the app. */
+   step alone, filling the window, read at a glance; no map, too small to read there and drawn
+   for nobody (`isAway`); nothing to tap, as taps open the app. */
 :root[data-pip]
   :is(
+    .map,
     .nav-bar,
     .controls,
     .speed,
@@ -624,35 +645,58 @@ button.via[aria-expanded='true']::after {
     .ride-details,
     .nav-then,
     .nav-lanes,
-    .ride-toggle
+    .ride-toggle,
+    .ride-new
   ),
 :root[data-pip] .nav-banner small {
   display: none !important;
 }
 
+:root[data-pip] body {
+  background: var(--accent);
+}
+
 :root[data-pip] .nav-banner {
-  top: 6px;
-  left: 6px;
-  right: 6px;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 12px;
+  position: fixed;
+  inset: 0;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: center;
   animation: none;
 }
 
-:root[data-pip] .nav-banner svg {
-  width: 28px;
-  height: 28px;
+:root[data-pip] .nav-banner > svg {
+  width: 72px;
+  height: 72px;
+}
+
+:root[data-pip] .nav-banner > .line {
+  font-size: 26px;
+}
+
+:root[data-pip] .nav-banner > .line svg {
+  width: 26px;
+  height: 26px;
+}
+
+:root[data-pip] .nav-banner > div:first-of-type {
+  flex: none;
+  width: 100%;
 }
 
 :root[data-pip] .nav-banner strong {
-  font-size: 20px;
+  font-size: 34px;
 }
 
 :root[data-pip] .nav-banner p {
-  font-size: 14px;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
+  font-size: 17px;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 /* The trip list open on a phone: the map buttons would lie over its right edge. */

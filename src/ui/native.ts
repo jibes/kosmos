@@ -80,8 +80,14 @@ if (typeof window !== 'undefined') {
     awayNow = !!(e as Event & { away?: boolean }).away;
   });
 }
-/** Out of sight: hidden, or the app put away while its page keeps running (nothing to draw). */
-export const isAway = () => awayNow || (typeof document !== 'undefined' && document.hidden);
+/**
+ * Nothing on the map is seen: hidden, the app put away while its page keeps running, or a small
+ * window over another app, which shows the next step alone (`data-pip`). Nothing to draw.
+ */
+export const isAway = () =>
+  awayNow ||
+  (typeof document !== 'undefined' &&
+    (document.hidden || document.documentElement.hasAttribute('data-pip')));
 
 /** Android: picture-in-picture while guiding, so leaving the app keeps a small window of it. */
 export const allowPip = Kosmos

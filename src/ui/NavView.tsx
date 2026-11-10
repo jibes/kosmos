@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { laneSize, lanesNeeded, laneViews } from '../core/lanes';
 import { headingToRoute, type NavState } from '../core/nav';
 import {
@@ -43,6 +44,8 @@ interface Props {
   /** The points ahead, open under the banner (a tap on it; Back closes them). */
   open: boolean;
   onOpen: (open: boolean) => void;
+  /** A place's details while guiding (`NavPlace`), in the trip list's place. */
+  aside?: ReactNode;
   /** Places along the rest of the way, made stops from the panel. */
   along?: AlongSearch;
 }
@@ -79,7 +82,8 @@ const MAX_MS = 83;
 
 /** Turn-by-turn: the next maneuver on top, time and distance left at the bottom. */
 export function NavView(props: Props) {
-  const { route, mode, nav, lang, muted, reroute, destination, open, points, along, ...on } = props;
+  const { route, mode, nav, lang, muted, reroute, destination, open, points, along, aside, ...on } =
+    props;
   const now = useNow(15_000);
   const started = nav.snap !== null;
   const m = route.maneuvers[started ? nav.next : 0];
@@ -210,7 +214,8 @@ export function NavView(props: Props) {
           )}
         </section>
         {/* Off the route too: the stop pulling the user back can come off right there. */}
-        {open && !nav.arrived && (
+        {aside}
+        {!aside && open && !nav.arrived && (
           <TripDetails onClose={() => on.onOpen(false)}>
             <PointList {...points} />
             {along && (
