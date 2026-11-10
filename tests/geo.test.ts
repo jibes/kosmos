@@ -4,6 +4,7 @@ import {
   directionsUrl,
   distance,
   formatLngLat,
+  bearingTo,
   geoUri,
   metersPerPixel,
   osmUrl,
@@ -67,5 +68,13 @@ describe('boundsOfLine', () => {
         [13.4, 52.6],
       ]),
     ).toEqual([13.3, 52.5, 13.4, 52.6]);
+  });
+
+  it('gives the direction from one point to another', () => {
+    const a = { lng: 13.4, lat: 52.5 };
+    expect(bearingTo(a, { lng: 13.4, lat: 52.6 })).toBeCloseTo(0, 0);
+    expect(bearingTo(a, { lng: 13.5, lat: 52.5 })).toBeCloseTo(90, 0);
+    expect(bearingTo(a, { lng: 13.4, lat: 52.4 })).toBeCloseTo(180, 0);
+    expect(bearingTo(a, { lng: 13.3, lat: 52.5 })).toBeCloseTo(270, 0);
   });
 });

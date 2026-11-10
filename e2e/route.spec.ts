@@ -344,6 +344,31 @@ test.describe('routes', () => {
       );
     await expect.poll(() => inView(to.lng, stopLat)).toBe(true);
     expect(await page.evaluate(() => window.kosmos!.getPitch())).toBe(0);
+    // Heading-up on board is the line's own way (west, to the stop to get off), never the
+    // compass, which in a train swings with the carriage: it reads east here.
+    const compassReads = (heading: number) =>
+      page.evaluate((alpha) => {
+        for (let n = 0; n < 40; n++) {
+          for (const type of ['deviceorientationabsolute', 'deviceorientation']) {
+            window.dispatchEvent(
+              new DeviceOrientationEvent(type, { alpha, beta: 0, gamma: 0, absolute: true }),
+            );
+          }
+        }
+      }, 360 - heading);
+    await compassReads(90);
+    await page.getByRole('button', { name: 'Turn map with your way' }).click();
+    for (let i = 0; i < 4; i++) {
+      await compassReads(90 + (i % 2) * 60);
+      await page.waitForTimeout(250);
+    }
+    const fromWest = () =>
+      page.evaluate(() => Math.abs(((window.kosmos!.getBearing() - 270 + 540) % 360) - 180));
+    await expect.poll(fromWest).toBeLessThan(10);
+    await compassReads(150);
+    await page.waitForTimeout(500);
+    expect(await fromWest()).toBeLessThan(10);
+    await page.getByRole('button', { name: 'North up' }).click();
     // The overview takes in the rest of the trip, the destination too.
     // The location button: following, the whole trip; then the rider again.
     await page.getByRole('button', { name: 'Show the whole route' }).click();

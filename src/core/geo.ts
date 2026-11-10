@@ -66,6 +66,16 @@ export function distance(a: LngLat, b: LngLat): number {
   return 2 * 6371008.8 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+/** The direction from `a` to `b`, degrees clockwise from north. */
+export function bearingTo(a: LngLat, b: LngLat): number {
+  const rad = Math.PI / 180;
+  const y = Math.sin((b.lng - a.lng) * rad) * Math.cos(b.lat * rad);
+  const x =
+    Math.cos(a.lat * rad) * Math.sin(b.lat * rad) -
+    Math.sin(a.lat * rad) * Math.cos(b.lat * rad) * Math.cos((b.lng - a.lng) * rad);
+  return (Math.atan2(y, x) / rad + 360) % 360;
+}
+
 /**
  * The box round a line, `[west, south, east, north]`; one crossing the 180th meridian is the
  * narrow box over it (east past 180, as MapLibre takes it), not one round the whole world.

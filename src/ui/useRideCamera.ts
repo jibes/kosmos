@@ -1,6 +1,7 @@
 import { isAway } from './native';
 import type * as maplibregl from 'maplibre-gl';
 import { useEffect, useRef, type RefObject } from 'react';
+import { bearingTo } from '../core/geo';
 import { tripRest } from '../core/navView';
 import type { RideState } from '../core/ride';
 import type { Transit } from '../core/transit';
@@ -21,7 +22,8 @@ interface Options {
 /**
  * The camera on public transport, from above: walking to a stop or waiting, on the user, turned
  * as the location button says (the compass turns it itself, `useCompassFollow`); on board, the
- * rest of the line to the stop to get off at; the overview, the rest of the trip, north up.
+ * rest of the line to the stop to get off at, heading-up by the line's own direction (never the
+ * compass, `onBoardRef`); the overview, the rest of the trip, north up.
  * Moves with each fix, and underground as the stops pass; not on the ride's ticks alone.
  */
 export function useRideCamera({ map, ride, follow, overview, touchingRef }: Options) {
@@ -46,7 +48,16 @@ export function useRideCamera({ map, ride, follow, overview, touchingRef }: Opti
     const turned = !overview && follow === 'compass';
     if (overview || st.phase === 'ride') {
       const rest = tripRest(transit, st, at, overview);
-      fitNav(map, rest, motion(1000), turned ? map.getBearing() : 0);
+      // On board heading-up is the way the line goes, from here to the stop to get off: the
+      // compass in a train swings with the carriage and the steel round it (the map turned in
+      // big jumps), and each fit would end turned elsewhere.
+      const off = transit.legs[st.leg]?.to;
+      const from = at ?? rest[0];
+      const bearing =
+        turned && st.phase === 'ride' && off && from
+          ? bearingTo({ lng: from[0], lat: from[1] }, off)
+          : 0;
+      fitNav(map, rest, motion(1000), bearing);
     } else if (at) {
       // Standing still: GPS jitter would ease the map, rendering, every second.
       if (nearCentre(map, { lng: at[0], lat: at[1] })) return;

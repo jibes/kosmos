@@ -9,6 +9,9 @@ interface Refs {
   me: RefObject<ReturnType<typeof userMarker> | null>;
   /** Road guidance owns the arrow: the compass only turns it while slow or standing. */
   roadNavRef: RefObject<boolean>;
+  /** On board public transport the line's direction turns the map (`useRideCamera`), not the
+   * compass: in a train it swings with the carriage and the steel round it. */
+  onBoardRef: RefObject<boolean>;
   navMovingRef: RefObject<boolean>;
   followRef: RefObject<Follow>;
   /** Fingers on the map: the camera waits for them. */
@@ -24,7 +27,7 @@ interface Refs {
 export function useCompassFollow(
   map: maplibregl.Map | null,
   compass: ReturnType<typeof useCompass>,
-  { me, roadNavRef, navMovingRef, followRef, touching, setFollow }: Refs,
+  { me, roadNavRef, onBoardRef, navMovingRef, followRef, touching, setFollow }: Refs,
 ) {
   useEffect(() => {
     if (!map) return;
@@ -38,9 +41,9 @@ export function useCompassFollow(
         return;
       }
       me.current?.facing(h);
-      if (followRef.current !== 'compass' || frame) return;
+      if (followRef.current !== 'compass' || onBoardRef.current || frame) return;
       const turn = () => {
-        if (followRef.current !== 'compass') {
+        if (followRef.current !== 'compass' || onBoardRef.current) {
           frame = 0;
           return;
         }
@@ -72,5 +75,5 @@ export function useCompassFollow(
       cancelAnimationFrame(frame);
       map.off('rotatestart', onRotate);
     };
-  }, [map, compass, me, roadNavRef, navMovingRef, followRef, touching, setFollow]);
+  }, [map, compass, me, roadNavRef, onBoardRef, navMovingRef, followRef, touching, setFollow]);
 }

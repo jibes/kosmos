@@ -117,6 +117,8 @@ export function App() {
   /** Road navigation owns the camera and the arrow; public transport only follows the dot. */
   const riding = navigating && trip?.mode === 'transit';
   const roadNavRef = useRef(false);
+  /** On board public transport: the line, not the compass, turns the map. */
+  const onBoardRef = useRef(false);
   /** Road guidance has its route and drives the arrow and the camera itself. */
   const trackingRef = useRef(false);
   useEffect(() => {
@@ -317,6 +319,7 @@ export function App() {
   useCompassFollow(map, compass, {
     me,
     roadNavRef,
+    onBoardRef,
     navMovingRef: lastNavMoving,
     followRef,
     touching,
@@ -410,6 +413,10 @@ export function App() {
   });
   const { overview } = view;
   useRideCamera({ map, ride, follow, overview, touchingRef: touching });
+  const onBoard = riding && ride?.st.phase === 'ride';
+  useEffect(() => {
+    onBoardRef.current = onBoard;
+  }, [onBoard]);
   // Public transport turns the map dark after sunset too; tunnels are the driver's concern.
   const rideFix = ride?.st.fix;
   const rideTime = ride?.st.time;
